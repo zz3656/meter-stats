@@ -11,11 +11,11 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Sources" / "Linca" / "Resources"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Sources" / "Linclub" / "Resources"))
 
 from report import calculate_monthly_report, calculate_yearly_report  # noqa: E402
 
-# ---- fixture: 2026 年 6-8 月真实抄表数据(源自 ~/Library/Application Support/com.linca.electricity-stats/readings.json) ----
+# ---- fixture: 2026 年 6-8 月真实抄表数据(源自 ~/Library/Application Support/com.linclub.electricity-stats/readings.json) ----
 READINGS = [
     {"date": "2026-06-01", "hall": 101.1, "fire": 2332.0, "private_room": 173.8, "ac": 157.2},
     {"date": "2026-06-05", "hall": 84.6, "fire": 2135.2, "private_room": 156.0, "ac": 138.7},

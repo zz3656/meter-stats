@@ -6,8 +6,8 @@
 
 ```
 .
-├── Sources/Linca/              # macOS .app 原生应用（Swift + Python）
-│   ├── LincaApp.swift          # SwiftUI 入口
+├── Sources/Linclub/              # macOS .app 原生应用（Swift + Python）
+│   ├── LinclubApp.swift          # SwiftUI 入口
 │   ├── ServerManager.swift     # Python 子进程管理
 │   └── Resources/              # Python 后端 + 前端
 │       ├── server.py           # HTTP 服务入口
@@ -60,7 +60,7 @@ docker compose up -d
 docker compose logs -f
 
 # 进入容器调试
-docker compose exec linca bash
+docker compose exec linclub bash
 ```
 
 ## 贡献流程

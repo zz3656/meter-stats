@@ -30,22 +30,22 @@ def get_data_dir() -> Path:
     """确定数据目录。
 
     优先级:
-    1. 环境变量 LINCA_DATA_DIR(显式覆盖)
-    2. ~/Library/Application Support/com.linca.electricity-stats/(macOS 标准位置)
+    1. 环境变量 LINCLUB_DATA_DIR(显式覆盖)
+    2. ~/Library/Application Support/com.linclub.electricity-stats/(macOS 标准位置)
     3. ~/Documents/electricity-stats/data/(旧默认 — 兼容)
 
     首次启动时,自动从旧位置(~2)迁移数据到新位置(~1),并保留旧数据
     备份 30 天以便回滚。
     """
     # 1. 显式环境变量
-    env_dir = os.environ.get("LINCA_DATA_DIR")
+    env_dir = os.environ.get("LINCLUB_DATA_DIR")
     if env_dir:
         d = Path(env_dir).expanduser().resolve()
         d.mkdir(parents=True, exist_ok=True)
         return d
 
     # 2. macOS 标准位置
-    standard = Path.home() / "Library" / "Application Support" / "com.linca.electricity-stats"
+    standard = Path.home() / "Library" / "Application Support" / "com.linclub.electricity-stats"
 
     # 3. 旧默认位置(兼容)
     legacy = Path.home() / "Documents" / "electricity-stats" / "data"
@@ -57,7 +57,7 @@ def get_data_dir() -> Path:
 
     # 如果标准位置空,但旧位置有数据 -> 迁移
     if legacy.exists() and any(legacy.glob("*.json")) and not any(standard.glob("*.json")):
-        log(f"[[linca]] 首次启动 -- 从旧位置迁移数据...")
+        log(f"[[linclub]] 首次启动 -- 从旧位置迁移数据...")
         log(f"  源: {legacy}")
         log(f"  目标: {standard}")
         standard.mkdir(parents=True, exist_ok=True)

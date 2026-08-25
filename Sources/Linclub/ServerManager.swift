@@ -14,7 +14,7 @@ final class ServerManager {
         self.projectRoot = home
             .appendingPathComponent("Library")
             .appendingPathComponent("Application Support")
-            .appendingPathComponent("com.linca.electricity-stats")
+            .appendingPathComponent("com.linclub.electricity-stats")
     }
 
     private func getRuntimeDir() -> URL {
@@ -44,7 +44,7 @@ final class ServerManager {
         try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
 
         guard let bundleResources = Bundle.main.resourceURL else {
-            throw NSError(domain: "Linca", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到 bundle Resources"])
+            throw NSError(domain: "Linclub", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到 bundle Resources"])
         }
 
         if let bv = bundleVersion(), let rv = runtimeVersion(), bv == rv {

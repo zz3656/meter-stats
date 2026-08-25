@@ -65,7 +65,7 @@ def _do_api(method: str, handler: BaseHTTPRequestHandler, path: str):
                     send_json(handler, 400, {"error": f"不支持导出的模型: {model}"})
                     return
 
-                filename = f"linca_{model}_{datetime.now().strftime('%Y%m%d')}.csv"
+                filename = f"linclub_{model}_{datetime.now().strftime('%Y%m%d')}.csv"
                 cols = headers_map.get(model, [])
                 data = _get(model)
                 if cols:

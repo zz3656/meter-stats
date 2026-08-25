@@ -1,12 +1,12 @@
 # ============================================================
 # 林卡电表统计 — Docker 部署
 # ============================================================
-# 构建:  docker build -t linca/electricity-stats .
-# 运行:  docker run -d --name linca \
+# 构建:  docker build -t linclub/electricity-stats .
+# 运行:  docker run -d --name linclub \
 #           -p 8765:8765 \
-#           -v linca-data:/data \
-#           -e LINCA_INITIAL_PASS=your-secure-password \
-#           linca/electricity-stats
+#           -v linclub-data:/data \
+#           -e LINCLUB_INITIAL_PASS=your-secure-password \
+#           linclub/electricity-stats
 # ============================================================
 
 # ---- 构建阶段（无） ----
@@ -14,28 +14,28 @@
 
 FROM python:3.11-slim
 
-LABEL maintainer="linca-team"
+LABEL maintainer="linclub-team"
 LABEL description="林卡酒吧工程部电表用量统计工具 — Web 服务"
 
 # 创建非 root 用户运行应用
-RUN groupadd -r linca && useradd -r -g linca -d /data -s /sbin/nologin linca
+RUN groupadd -r linclub && useradd -r -g linclub -d /data -s /sbin/nologin linclub
 
 # 设置工作目录
 WORKDIR /app
 
 # 复制所有应用文件
-COPY --chown=linca:linca *.py .
-COPY --chown=linca:linca *.html .
-COPY --chown=linca:linca *.css .
-COPY --chown=linca:linca *.js  .
-COPY --chown=linca:linca handlers/ handlers/
-COPY --chown=linca:linca utils/  utils/
+COPY --chown=linclub:linclub *.py .
+COPY --chown=linclub:linclub *.html .
+COPY --chown=linclub:linclub *.css .
+COPY --chown=linclub:linclub *.js  .
+COPY --chown=linclub:linclub handlers/ handlers/
+COPY --chown=linclub:linclub utils/  utils/
 
 # 创建数据目录
-RUN mkdir -p /data && chown linca:linca /data
+RUN mkdir -p /data && chown linclub:linclub /data
 
 # 切换到非 root 用户
-USER linca
+USER linclub
 
 # 暴露端口
 EXPOSE 8765

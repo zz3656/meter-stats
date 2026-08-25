@@ -3,8 +3,8 @@
 
 // ===== 数据模型 =====
 // 数据存在后端 server.py,LocalStorage 只作为离线兜底(后端不可用时)
-const STORAGE_KEY_READINGS = 'linca_electricity_readings_v1';
-const STORAGE_KEY_CHARGES = 'linca_electricity_charges_v1';
+const STORAGE_KEY_READINGS = 'linclub_electricity_readings_v1';
+const STORAGE_KEY_CHARGES = 'linclub_electricity_charges_v1';
 const MULTIPLIER = { hall: 160, fire: 1, private_room: 160, ac: 160 };
 const LABELS = { hall: '大厅', fire: '消防', private_room: '包厢', ac: '空调' };
 const COLORS = {
@@ -15,7 +15,7 @@ const COLORS = {
 };
 
 // ===== 主题管理 =====
-const THEME_KEY = 'linca_theme_mode';
+const THEME_KEY = 'linclub_theme_mode';
 const THEMES = ['dark', 'light', 'auto'];
 const ICONS = { dark: '🌙', light: '☀️', auto: '💻' };
 
@@ -209,7 +209,7 @@ function showItemAlert(msg, type = 'success') {
 }
 
 // 数据管理:自动备份开关(localStorage 持久化)
-const AUTO_BACKUP_KEY = 'linca_auto_backup';
+const AUTO_BACKUP_KEY = 'linclub_auto_backup';
 function getAutoBackupEnabled() {
   return localStorage.getItem(AUTO_BACKUP_KEY) !== 'false'; // 默认开启
 }

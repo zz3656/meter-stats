@@ -4,14 +4,14 @@
 ===============================================
 
 启动方式:
-    docker run -p 8765:8765 -v linca-data:/data linca/electricity-stats
+    docker run -p 8765:8765 -v linclub-data:/data linclub/electricity-stats
 
 环境变量:
-    LINCA_PORT          端口号 (默认: 8765)
-    LINCA_DATA_DIR      数据目录 (默认: /data)
-    LINCA_BIND          绑定地址 (默认: 0.0.0.0)
-    LINCA_INITIAL_ADMIN  初始管理员用户名 (默认: admin)
-    LINCA_INITIAL_PASS   初始管理员密码 (默认: admin123)
+    LINCLUB_PORT          端口号 (默认: 8765)
+    LINCLUB_DATA_DIR      数据目录 (默认: /data)
+    LINCLUB_BIND          绑定地址 (默认: 0.0.0.0)
+    LINCLUB_INITIAL_ADMIN  初始管理员用户名 (默认: admin)
+    LINCLUB_INITIAL_PASS   初始管理员密码 (默认: admin123)
 
 访问: http://localhost:8765
 
@@ -49,9 +49,9 @@ from pathlib import Path
 from storage import get_data_dir, init_data_files, log
 
 # ====== Docker 环境变量配置 ======
-PORT = int(os.environ.get("LINCA_PORT", "8765"))
-DATA_DIR = os.environ.get("LINCA_DATA_DIR", "/data")
-BIND = os.environ.get("LINCA_BIND", "0.0.0.0")
+PORT = int(os.environ.get("LINCLUB_PORT", "8765"))
+DATA_DIR = os.environ.get("LINCLUB_DATA_DIR", "/data")
+BIND = os.environ.get("LINCLUB_BIND", "0.0.0.0")
 VERSION = "0.1.0"
 
 
@@ -80,8 +80,8 @@ def _ensure_default_admin(data_dir: Path):
     settings = get_settings()
     users = settings.get("users", [])
 
-    username = os.environ.get("LINCA_INITIAL_ADMIN", "admin")
-    password = os.environ.get("LINCA_INITIAL_PASS", "admin123")
+    username = os.environ.get("LINCLUB_INITIAL_ADMIN", "admin")
+    password = os.environ.get("LINCLUB_INITIAL_PASS", "admin123")
 
     # 检查是否已有管理员
     existing_admin = next((u for u in users if u.get("role") == ROLE_ADMIN), None)

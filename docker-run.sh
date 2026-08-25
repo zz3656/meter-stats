@@ -57,7 +57,7 @@ case "${1:-up}" in
     ;;
   exec)
     cd "$ROOT_DIR"
-    docker compose exec linca "$@"
+    docker compose exec linclub "$@"
     ;;
   *)
     echo "用法: $0 {up|down|logs|rebuild|stop|start|status|exec <cmd>}"

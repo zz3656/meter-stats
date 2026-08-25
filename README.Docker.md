@@ -83,7 +83,7 @@ docker compose up -d --build
 
 ```yaml
 environment:
-  - LINCA_INITIAL_PASS=your-secure-password
+  - LINCLUB_INITIAL_PASS=your-secure-password
 ```
 
 然后重新创建容器：
@@ -97,26 +97,26 @@ docker compose up -d --build
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `LINCA_PORT` | `8765` | 服务端口 |
-| `LINCA_DATA_DIR` | `/data` | 数据持久化目录 |
-| `LINCA_BIND` | `0.0.0.0` | 绑定地址 |
-| `LINCA_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
-| `LINCA_INITIAL_PASS` | `admin123` | 初始管理员密码 |
+| `LINCLUB_PORT` | `8765` | 服务端口 |
+| `LINCLUB_DATA_DIR` | `/data` | 数据持久化目录 |
+| `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |
+| `LINCLUB_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
+| `LINCLUB_INITIAL_PASS` | `admin123` | 初始管理员密码 |
 
 ## 数据持久化
 
-数据存储在 Docker Volume `linca-data` 中：
+数据存储在 Docker Volume `linclub-data` 中：
 
 ```bash
 # 查看数据目录内容
-docker compose exec linca ls -la /data
+docker compose exec linclub ls -la /data
 
 # 导出所有数据
-docker compose exec linca tar czf /tmp/linca-data.tar.gz -C /data .
-docker cp linca:/tmp/linca-data.tar.gz ./linca-data-backup.tar.gz
+docker compose exec linclub tar czf /tmp/linclub-data.tar.gz -C /data .
+docker cp linclub:/tmp/linclub-data.tar.gz ./linclub-data-backup.tar.gz
 
 # 备份 Volume
-docker run --rm -v linca-data:/source -v $(pwd):/backup alpine tar czf /backup/linca-backup.tar.gz -C /source .
+docker run --rm -v linclub-data:/source -v $(pwd):/backup alpine tar czf /backup/linclub-backup.tar.gz -C /source .
 ```
 
 ## 端口冲突
@@ -132,7 +132,7 @@ ports:
 
 ```yaml
 environment:
-  - LINCA_PORT=8766
+  - LINCLUB_PORT=8766
 ```
 
 ## Nginx 反向代理（可选）
@@ -142,16 +142,16 @@ environment:
 ```nginx
 server {
     listen 80;
-    server_name linca.example.com;
+    server_name linclub.example.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
-    server_name linca.example.com;
+    server_name linclub.example.com;
 
-    ssl_certificate     /etc/ssl/certs/linca.crt;
-    ssl_certificate_key /etc/ssl/private/linca.key;
+    ssl_certificate     /etc/ssl/certs/linclub.crt;
+    ssl_certificate_key /etc/ssl/private/linclub.key;
 
     location / {
         proxy_pass http://localhost:8765;
@@ -169,17 +169,17 @@ server {
 
 ```bash
 # 1. 找到 macOS 数据目录
-# ~/Library/Application Support/com.linca.electricity-stats/
+# ~/Library/Application Support/com.linclub.electricity-stats/
 
 # 2. 将数据文件复制到 Docker volume
-docker cp ~/Library/Application\ Support/com.linca.electricity-stats/readings.json linca:/data/
-docker cp ~/Library/Application\ Support/com.linca.electricity-stats/charges.json linca:/data/
-docker cp ~/Library/Application\ Support/com.linca.electricity-stats/items.json linca:/data/
-docker cp ~/Library/Application\ Support/com.linca.electricity-stats/purchases.json linca:/data/
-docker cp ~/Library/Application\ Support/com.linca.electricity-stats/settings.json linca:/data/
+docker cp ~/Library/Application\ Support/com.linclub.electricity-stats/readings.json linclub:/data/
+docker cp ~/Library/Application\ Support/com.linclub.electricity-stats/charges.json linclub:/data/
+docker cp ~/Library/Application\ Support/com.linclub.electricity-stats/items.json linclub:/data/
+docker cp ~/Library/Application\ Support/com.linclub.electricity-stats/purchases.json linclub:/data/
+docker cp ~/Library/Application\ Support/com.linclub.electricity-stats/settings.json linclub:/data/
 
 # 3. 修复文件权限
-docker compose exec linca chown linca:linca /data/*.json
+docker compose exec linclub chown linclub:linclub /data/*.json
 ```
 
 ## 故障排查
@@ -191,17 +191,17 @@ docker compose exec linca chown linca:linca /data/*.json
 docker compose logs
 
 # 进入容器调试
-docker compose exec linca bash
+docker compose exec linclub bash
 ```
 
 ### 数据目录为空
 
 ```bash
 # 检查 volume 挂载
-docker volume inspect linca_linca-data
+docker volume inspect linclub_linclub-data
 
 # 进入容器查看
-docker compose exec linca ls -la /data
+docker compose exec linclub ls -la /data
 ```
 
 ### 健康检查失败
@@ -211,7 +211,7 @@ docker compose exec linca ls -la /data
 curl http://localhost:8765/api/health
 
 # 查看容器健康状态
-docker inspect --format='{{json .State.Health}}' linca | python3 -m json.tool
+docker inspect --format='{{json .State.Health}}' linclub | python3 -m json.tool
 ```
 
 ### 完全重置（⚠️ 删除所有数据）
@@ -234,14 +234,14 @@ docker compose up -d
 ```bash
 # 构建镜像
 cd docker
-docker build -t linca/electricity-stats .
+docker build -t linclub/electricity-stats .
 
 # 运行容器
 docker run -d \
-  --name linca \
+  --name linclub \
   -p 8765:8765 \
-  -v linca-data:/data \
-  -e LINCA_INITIAL_PASS=your-password \
+  -v linclub-data:/data \
+  -e LINCLUB_INITIAL_PASS=your-password \
   --restart unless-stopped \
-  linca/electricity-stats
+  linclub/electricity-stats
 ```

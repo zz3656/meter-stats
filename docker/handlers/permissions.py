@@ -67,7 +67,7 @@ def _get_token(handler) -> str:
     cookie_header = handler.headers.get("Cookie", "")
     for part in cookie_header.split(";"):
         part = part.strip()
-        if part.startswith("linca_token="):
+        if part.startswith("linclub_token="):
             return part.split("=", 1)[1].strip()
 
     # 从 query 参数获取（API 调用时用）

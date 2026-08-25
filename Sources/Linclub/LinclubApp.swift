@@ -35,7 +35,7 @@ final class BackupDirHandler: NSObject, WKScriptMessageHandler {
 }
 
 @main
-struct LincaApp: App {
+struct LinclubApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
 
     var body: some Scene {

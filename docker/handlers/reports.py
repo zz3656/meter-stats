@@ -62,7 +62,7 @@ def handle_get_export(handler):
         if model not in DATA_FILES:
             send_json(handler, 400, {"error": f"不支持导出的模型: {model}"})
             return
-        filename = f"linca_{model}_{datetime.now().strftime('%Y%m%d')}.csv"
+        filename = f"linclub_{model}_{datetime.now().strftime('%Y%m%d')}.csv"
         cols = headers_map.get(model, [])
         lock = get_lock(model)
         with lock:

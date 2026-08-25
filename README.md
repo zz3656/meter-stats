@@ -1,4 +1,4 @@
-# 林卡电表统计 — Linca Electricity Stats
+# 林卡电表统计 — Linclub Electricity Stats
 
 > 酒吧/场所工程部电表用量统计工具。支持 macOS 原生桌面应用和 Docker Web 服务两种部署方式。
 
@@ -97,8 +97,8 @@ docker compose up -d
 
 ```
 .
-├── Sources/Linca/              # macOS 原生应用（Swift + Python）
-│   ├── LincaApp.swift          SwiftUI 入口 + WKWebView
+├── Sources/Linclub/              # macOS 原生应用（Swift + Python）
+│   ├── LinclubApp.swift          SwiftUI 入口 + WKWebView
 │   ├── ServerManager.swift     Python 子进程管理
 │   └── Resources/              Python 后端 + 前端静态文件
 │       ├── server.py           HTTP 服务入口
@@ -147,7 +147,7 @@ settings.json    系统设置（users, meter, config）
 2. 首次启动：右键 `.app` → **打开**（绕过 ad-hoc 签名警告）
 3. 日常使用：双击 `.app` → 自动启动后端 → 弹出窗口
 4. 卸载：拖到垃圾桶（数据保留在 Application Support）
-5. 数据位置：`~/Library/Application Support/com.linca.electricity-stats/`
+5. 数据位置：`~/Library/Application Support/com.linclub.electricity-stats/`
 
 ### Docker 应用部署
 
@@ -161,7 +161,7 @@ settings.json    系统设置（users, meter, config）
 - **自动备份**：每次启动时备份到 `backup/YYYYMMDD/`（同一天只备一次）
 - **手动备份**：通过 API `POST /api/backup`
 - **数据恢复**：通过 API `POST /api/restore`
-- **Docker 备份**：`docker compose exec linca tar czf /tmp/backup.tar.gz -C /data .`
+- **Docker 备份**：`docker compose exec linclub tar czf /tmp/backup.tar.gz -C /data .`
 
 ### API 参考
 
@@ -228,7 +228,7 @@ python3 -m unittest discover -s tests -v
 docker compose up -d --build
 
 # 进入容器调试
-docker compose exec linca bash
+docker compose exec linclub bash
 
 # 快捷脚本
 ./docker-run.sh up | down | logs | rebuild | status
@@ -242,7 +242,7 @@ docker compose exec linca bash
 | 首次启动无法验证开发者 | macOS 右键 `.app` → 打开 |
 | 后端启动超时 | 查看 `logs/server.log` |
 | 数据不显示 | 检查 `backup/` 目录可恢复 |
-| Docker 健康检查失败 | `docker inspect linca | grep Health` |
+| Docker 健康检查失败 | `docker inspect linclub | grep Health` |
 
 ## 🤝 贡献
 

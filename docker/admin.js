@@ -1,5 +1,5 @@
 // ===== 后台管理: 全局会话 =====
-let ADMIN_TOKEN = localStorage.getItem('linca_admin_token');
+let ADMIN_TOKEN = localStorage.getItem('linclub_admin_token');
 let ADMIN_USER = null;
 
 const ROLE_NAMES = { admin: '管理员', supervisor: '主管', employee: '员工' };
@@ -33,7 +33,7 @@ function setLoggedIn(user) {
 function clearAuth() {
   ADMIN_TOKEN = null;
   ADMIN_USER = null;
-  localStorage.removeItem('linca_admin_token');
+  localStorage.removeItem('linclub_admin_token');
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
 }

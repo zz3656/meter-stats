@@ -13,7 +13,7 @@
 停止: Ctrl+C
 
 数据文件:
-    ~/Library/Application Support/com.linca.electricity-stats/
+    ~/Library/Application Support/com.linclub.electricity-stats/
 
 API 端点:
     GET    /api/readings          抄表列表
