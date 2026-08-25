@@ -243,10 +243,33 @@ async function datamgmtBackup() {
   btn.textContent = '⏳ 备份中…';
   btn.disabled = true;
   try {
-    const targetDir = await pickBackupDir();
-    const res = await api('POST', '/api/backup', targetDir ? { target_dir: targetDir } : {});
-    btn.textContent = '✅ 已备份';
-    showAlert(`数据已备份到 ${res.backup_dir || 'backup/'} 目录`, 'success');
+    // 浏览器/Docker 环境: 从服务器获取所有数据文件,然后下载
+    showAlert('正在从服务器获取数据…', 'info');
+    const res = await api('GET', '/api/admin/data-files');
+    if (!res.ok || !res.files) {
+      showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
+      return;
+    }
+    showAlert('正在下载数据文件…', 'info');
+    const fileNames = Object.keys(res.files);
+    if (!fileNames.length) {
+      showAlert('当前没有可备份的数据文件', 'error');
+      return;
+    }
+    for (const [name, content] of Object.entries(res.files)) {
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    btn.textContent = '✅ 已下载';
+    showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
   } catch (e) {
     btn.textContent = original;
     showAlert('备份失败: ' + e.message, 'error');
@@ -257,18 +280,56 @@ async function datamgmtBackup() {
 }
 
 // 调用 Swift 原生目录选择器(WKWebView 桥) → Promise<路径|null>
-// 非 .app 环境(浏览器/测试)无桥 → resolve(null) 走默认备份目录
+// 非 .app 环境(浏览器/测试)无桥 → 显示浏览器文件选择器
 function pickBackupDir() {
   return new Promise(resolve => {
     const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
-    if (!hasBridge) { resolve(null); return; }
-    // Swift 选完目录后调用 window.__backupDirChosen(path|null) 回调
-    window.__backupDirChosen = dir => {
-      window.__backupDirChosen = null;
-      resolve(dir);
-    };
-    window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
+    if (hasBridge) {
+      // Swift 选完目录后调用 window.__backupDirChosen(path|null) 回调
+      window.__backupDirChosen = dir => {
+        window.__backupDirChosen = null;
+        resolve(dir);
+      };
+      window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
+    } else {
+      // 浏览器环境: 用文件选择器让用户选备份目录中的文件
+      showBrowserFilePicker('pick', resolve);
+    }
   });
+}
+
+// 浏览器环境下的文件选择/上传
+function showBrowserFilePicker(mode, callback) {
+  // mode: 'pick' (选文件) | 'upload' (上传文件)
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.multiple = true;
+  input.accept = '.json';
+
+  input.onchange = async () => {
+    const files = Array.from(input.files);
+    if (!files.length) {
+      callback(null);
+      return;
+    }
+
+    // 收集所有文件内容
+    const fileContents = {};
+    for (const file of files) {
+      const text = await file.text();
+      fileContents[file.name] = text;
+    }
+
+    if (mode === 'upload' || files.some(f => f.name.startsWith('readings.json'))) {
+      // 有数据文件 — 直接上传
+      callback({ files: fileContents, _browser: true });
+    } else {
+      // 只是 settings.json 或其他 — 也上传
+      callback({ files: fileContents, _browser: true });
+    }
+  };
+
+  input.click();
 }
 
 // 恢复数据(从数据管理弹窗调用)
@@ -281,29 +342,46 @@ async function datamgmtRestore() {
       showAlert('未选择目录,已取消恢复', 'info');
       return;
     }
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认恢复数据?',
-      body: `将从 <b>${dir}</b> 恢复数据。<br><br>⚠️ 当前数据会被覆盖,但恢复前系统会自动备份当前数据到 backup/ 目录,可随时回滚。`,
-      confirmText: '确认恢复',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) { showAlert('已取消恢复', 'info'); return; }
-    btn.textContent = '⏳ 恢复中…';
-    btn.disabled = true;
-    const res = await api('POST', '/api/restore', { source_dir: dir });
-    if (!res.ok) {
-      showAlert('恢复失败: ' + (res.error || '未知错误'), 'error');
-      return;
+
+    let res;
+    if (dir._browser) {
+      // 浏览器环境: 直接上传文件
+      if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+      btn.textContent = '⏳ 上传中…';
+      btn.disabled = true;
+      res = await api('POST', '/api/upload', { files: dir.files });
+      if (res.ok) {
+        showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
+        await refreshAll();
+      } else {
+        showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
+      }
+    } else {
+      // 原生环境: 用目录路径恢复
+      const ok = await showModal({
+        icon: '⚠️',
+        iconKind: 'warn',
+        title: '确认恢复数据?',
+        body: `将从 <b>${dir}</b> 恢复数据。<br><br>⚠️ 当前数据会被覆盖,但恢复前系统会自动备份当前数据到 backup/ 目录,可随时回滚。`,
+        confirmText: '确认恢复',
+        cancelText: '取消',
+        confirmKind: 'danger',
+      });
+      if (!ok) { showAlert('已取消恢复', 'info'); return; }
+      btn.textContent = '⏳ 恢复中…';
+      btn.disabled = true;
+      res = await api('POST', '/api/restore', { source_dir: dir });
+      if (!res.ok) {
+        showAlert('恢复失败: ' + (res.error || '未知错误'), 'error');
+        return;
+      }
+      showAlert(`✅ 已恢复 ${res.restored.length} 个数据文件;恢复前数据已备份到 ${res.pre_backup}`, 'success');
+      await refreshAll();
     }
-    showAlert(`✅ 已恢复 ${res.restored.length} 个数据文件;恢复前数据已备份到 ${res.pre_backup}`, 'success');
-    await refreshAll();
   } catch (e) {
+    btn.textContent = original;
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
-    btn.textContent = original;
     btn.disabled = false;
   }
 }

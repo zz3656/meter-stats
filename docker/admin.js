@@ -273,9 +273,10 @@ function loadBackupStatus() {
     }).catch(() => {});
 }
 
-// 备份/恢复 (复用 app.js 中已有的 pickBackupDir 桥 + api 函数)
+// 备份/恢复 (浏览器环境用 app.js 中的 browser file picker)
 async function adminPickBackupDir() {
   return new Promise(resolve => {
+    // 尝试 swift bridge
     const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
     if (!hasBridge) { resolve(null); return; }
     window.__backupDirChosen = dir => {
@@ -286,15 +287,117 @@ async function adminPickBackupDir() {
   });
 }
 
+// 浏览器环境: 选择文件上传
+function browserPickFiles() {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.json';
+    input.onchange = async () => {
+      const files = Array.from(input.files);
+      if (!files.length) { resolve(null); return; }
+      const fileContents = {};
+      for (const file of files) {
+        fileContents[file.name] = await file.text();
+      }
+      resolve({ files: fileContents, _browser: true });
+    };
+    input.click();
+  });
+}
+
 async function adminBackup() {
   const dir = await adminPickBackupDir();
+  if (dir && dir._browser) {
+    // 浏览器: 下载文件
+    showAlert('正在下载数据文件…', 'info');
+    for (const [name, content] of Object.entries(dir.files)) {
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      await new Promise(r => setTimeout(r, 200));
+    }
+    showAlert('✅ 数据文件已下载', 'success');
+    return;
+  }
+  if (!dir) {
+    // 浏览器/Docker 环境没有 Swift bridge: 从服务器获取所有数据并下载
+    showAlert('正在从服务器获取数据…', 'info');
+    try {
+      const res = await api('GET', '/api/admin/data-files');
+      if (!res.ok || !res.files) {
+        showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
+        return;
+      }
+      const fileNames = Object.keys(res.files);
+      if (!fileNames.length) {
+        showAlert('当前没有可备份的数据文件', 'error');
+        return;
+      }
+      showAlert('正在下载数据文件…', 'info');
+      for (const [name, content] of Object.entries(res.files)) {
+        const blob = new Blob([content], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        await new Promise(r => setTimeout(r, 200));
+      }
+      showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
+      return;
+    } catch (e) {
+      showAlert('备份失败: ' + e.message, 'error');
+      return;
+    }
+  }
   const res = await api('POST', '/api/backup', dir ? { target_dir: dir } : {});
   showAlert(`数据已备份到 ${res.backup_dir || 'backup/'} 目录`, res.ok ? 'success' : 'error');
 }
 
 async function adminRestore() {
-  const dir = await adminPickBackupDir();
-  if (!dir) { showAlert('未选择目录', 'info'); return; }
+  let dir = await adminPickBackupDir();
+  if (dir && dir._browser) {
+    // 浏览器: 上传文件
+    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？')) return;
+    const res = await api('POST', '/api/upload', { files: dir.files });
+    if (res.ok) {
+      showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
+      closeAdminPanel();
+      refreshAll && refreshAll();
+    } else {
+      showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
+    }
+    return;
+  }
+  if (!dir) {
+    // 浏览器/Docker 环境没有 Swift bridge: 提示用浏览器选择文件
+    dir = await browserPickFiles();
+    if (!dir) { showAlert('未选择文件', 'info'); return; }
+    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+  }
+  if (dir._browser) {
+    const res = await api('POST', '/api/upload', { files: dir.files });
+    if (res.ok) {
+      showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
+      closeAdminPanel();
+      refreshAll && refreshAll();
+    } else {
+      showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
+    }
+    return;
+  }
+  // 原生环境: 用目录路径恢复
   if (!confirm(`确认从 ${dir} 恢复数据? 恢复前会自动备份当前数据。`)) return;
   const res = await api('POST', '/api/restore', { source_dir: dir });
   if (!res.ok) { showAlert('恢复失败: ' + (res.error || '未知错误'), 'error'); return; }

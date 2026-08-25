@@ -5,6 +5,8 @@
 # ============================================================
 
 # ---- 方式一：通过 docker-compose.yml 部署（推荐） ----
+# 镜像: zz3656/linclub-electricity-stats:latest（支持 amd64/arm64）
+# GitHub Actions 自动构建并推送到 Docker Hub
 
 # 步骤 1：下载 compose 文件
 # 1.1 在飞牛 OS 文件管理中，创建目录（如 /docker/linclub）
@@ -32,16 +34,16 @@
 # 步骤 1：打开 Container Manager → 映像
 # 1.1 点击"创建" → "从网址拉取"
 # 1.2 填写：
-#       映像名称：linclub/electricity-stats
+#       映像名称：zz3656/linclub-electricity-stats
 #       标签：latest
 # 1.3 点击"确定"等待下载完成
-#    （如果下载失败，可在终端执行：docker pull python:3.11-slim 然后重新构建）
+#    （镜像支持 linux/amd64 和 linux/arm64，自动适配你的硬件）
 
 # 步骤 2：手动创建容器
 # 2.1 点击 Container Manager → 容器 → 创建
 # 2.2 基本设置：
 #       容器名称：linclub
-#       映像：linclub/electricity-stats:latest
+#       映像：zz3656/linclub-electricity-stats:latest
 #       勾选"启用自动重新启动"
 
 # 2.3 空间 → 端口设置：
@@ -113,11 +115,11 @@ $ docker compose logs -f
 #       - LINCLUB_BIND=0.0.0.0
 #       - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
 #     healthcheck:
-#       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')"]
+#       test: ["CMD", "python3", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)"]
 #       interval: 30s
 #       timeout: 5s
 #       retries: 3
-#       start_period: 10s
+#       start_period: 15s
 
 # ============================================================
 # 常用管理命令
@@ -185,6 +187,40 @@ $ docker exec -it linclub ls -la /data
 # ============================================================
 # 常见问题排查
 # ============================================================
+
+## Q0：容器一直自动重启
+
+**症状：** 容器状态反复在 `Up` 和 `Restarting` 之间切换，端口无法访问。
+
+**可能原因：**
+
+1. **飞牛 OS 端口被占用**
+   - 在飞牛 OS 终端执行：`docker port linclub`
+   - 如果端口映射为空，检查 Container Manager 中的端口配置
+   - 修改 docker-compose.yml 的端口，例如：`"8888:8765"`
+
+2. **数据卷挂载失败**
+   - 在飞牛 OS 文件管理器中手动创建 `/docker/linclub/data/` 目录
+   - 确保 Docker 对目录有读写权限
+
+3. **健康检查导致误判重启**
+   - 某些版本的飞牛 OS Container Manager 会把 unhealthy 容器自动重启
+   - 临时解决：编辑 docker-compose.yml，注释掉 healthcheck 部分
+   - 或设置 restart 为 `no`：`restart: "no"`
+
+4. **查看完整日志定位原因**
+   ```bash
+   docker logs linclub --tail 50
+   # 如果日志只有少量输出就停止，说明启动过程中有错误
+   # 如果日志完全为空，容器可能在几毫秒内就崩溃了
+   ```
+
+5. **禁用重启策略测试**
+   ```bash
+   docker update --restart=no linclub
+   docker compose up -d
+   docker logs -f linclub
+   ```
 
 ## Q1：容器启动后访问 404 或拒绝连接
 

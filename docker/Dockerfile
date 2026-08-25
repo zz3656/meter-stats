@@ -40,9 +40,9 @@ USER linclub
 # 暴露端口
 EXPOSE 8765
 
-# 健康检查（每 30 秒检查一次）
+# 健康检查（每 30 秒检查一次，5 秒超时）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')" || exit 1
+    CMD python3 -c "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)" || exit 1
 
 # 启动命令
 CMD ["python3", "server.py"]

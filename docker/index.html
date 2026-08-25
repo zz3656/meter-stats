@@ -556,7 +556,7 @@
         <button type="button" class="btn btn-danger btn-sm" id="datamgmt-restore-btn" onclick="datamgmtRestore()" style="width:100%;">↩️ 恢复数据</button>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.6;">
-        💡 备份数据以「日期时间」文件夹保存在所选目录;恢复前会自动备份当前数据,可随时回滚。
+        💡 浏览器环境会弹出文件选择器选择本地 JSON 文件上传恢复
       </div>
     </div>
     <div class="modal-actions">
@@ -627,15 +627,13 @@
             <div style="font-size:11px;color:var(--text-muted);">每次启动自动备份到 backup/ 目录</div>
           </div>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:12px;">
-          <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="width:auto;">💾 手动备份</button>
-          <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="width:auto;">↩️ 恢复数据</button>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;">💾 手动备份</button>
+          <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;">↩️ 恢复数据</button>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);line-height:1.6;">
-          <div>💡 备份数据以「日期时间」文件夹保存在所选目录</div>
-          <div>恢复前会自动备份当前数据,可随时回滚</div>
-          <div id="backup-count" style="margin-top:6px;"></div>
-        </div>
+        <div style="font-size:10px;color:var(--text-muted);line-height:1.6;margin-top:4px;">
+          💡 浏览器环境会弹出文件选择器，可从本地 JSON 文件恢复数据<br>
+          恢复前会自动备份当前数据,可随时回滚
       </div>
 
       <!-- roles page -->

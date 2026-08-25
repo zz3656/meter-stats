@@ -20,7 +20,7 @@ from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
     handle_get_yearly_report, handle_get_monthly_utilities,
 )
-from handlers.backup import handle_post_backup, handle_post_restore
+from handlers.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
 from handlers.admin import (
     # Auth
     handle_post_login, handle_get_logout, handle_get_me,
@@ -46,6 +46,7 @@ _GET_ROUTES = {
 _POST_PREFIX = {
     "/api/backup": handle_post_backup,
     "/api/restore": handle_post_restore,
+    "/api/upload": handle_post_upload,
     "/api/charges": handle_post_charges,
     "/api/readings": handle_post_readings,
     "/api/auth/login": handle_post_login,
@@ -80,6 +81,7 @@ _GET_ADMIN = {
     "/api/admin/meter": handle_get_meter_settings,
     "/api/admin/roles": handle_get_roles,
     "/api/admin/backup-status": handle_get_backup_status,
+    "/api/admin/data-files": handle_get_data_files,
 }
 
 def _match_prefix(paths, path_clean):

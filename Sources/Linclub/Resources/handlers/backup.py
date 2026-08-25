@@ -1,15 +1,45 @@
 """备份相关 API handler。"""
 from __future__ import annotations
 
+import json
+import os
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from utils import send_json, read_body
-from storage import backup_data
+from storage import backup_data, DATA_FILES, log
 
 
 def _get_data_paths():
     import app_handler as _h
     return _h.DATA_PATHS
+
+
+def handle_get_data_files(handler):
+    """GET /api/admin/data-files — 浏览器备份: 获取所有数据文件的当前内容。
+
+    返回 { ok: true, files: { "readings.json": "<JSON字符串>", ... } }
+    用于 Docker/浏览器环境下的备份（无需 Swift 桥接）。
+    """
+    data_dir = _get_data_paths().get("readings")
+    if not data_dir:
+        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+        return
+
+    target_dir = data_dir.parent
+    files = {}
+    data_file_names = set(DATA_FILES.values()) | {"settings.json"}
+
+    for f in target_dir.iterdir():
+        if f.is_file() and f.suffix == '.json' and f.name in data_file_names:
+            try:
+                files[f.name] = f.read_text(encoding="utf-8")
+            except OSError as e:
+                log(f"[WARN] 读取 {f.name} 失败: {e}")
+
+    send_json(handler, 200, {"ok": True, "files": files})
 
 
 def handle_post_backup(handler):
@@ -92,4 +122,87 @@ def handle_post_restore(handler):
         "restored": restored,
         "pre_backup": str(pre_backup) if pre_backup else "无",
         "source_dir": str(src),
+    })
+
+
+def handle_post_upload(handler):
+    """POST /api/upload — 浏览器直接上传 JSON 文件恢复数据
+
+    接受 multipart/form-data 或 JSON body:
+      - multipart: 上传 readings.json, charges.json, items.json, purchases.json, settings.json
+      - JSON body: { "files": { "readings.json": [...], "charges.json": [...] } }
+
+    上传后直接覆盖 /data/ 中对应的数据文件。
+    """
+    from storage import DATA_FILES, log
+    import shutil
+    import tempfile
+    import os
+
+    data_dir = _get_data_paths().get("readings")
+    if not data_dir:
+        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+        return
+
+    target_dir = data_dir.parent
+
+    content_type = handler.headers.get("Content-Type", "")
+
+    uploaded = []
+
+    if "multipart/form-data" in content_type:
+        # multipart/form-data 上传
+        # 解析表单数据 (简化版: 每个 field name 是文件名)
+        boundary = content_type.split("boundary=", 1)[1]
+        if not boundary:
+            send_json(handler, 200, {"ok": False, "error": "无法解析 multipart boundary"})
+            return
+
+        body = read_body(handler)
+        # 尝试用 multipart 解析
+        data = handler.rfile.read(int(handler.headers.get("Content-Length", "0")))
+        lines = data.split(boundary.encode())
+        for line in lines:
+            line_str = line.decode("utf-8", errors="replace")
+            # 提取文件名
+            fname_match = re.search(r'filename="([^"]+)"', line_str)
+            if not fname_match:
+                continue
+            fname = fname_match.group(1)
+            if fname not in DATA_FILES.values() and fname != "settings.json":
+                continue
+            # 提取文件内容 (在第二个 \r\n\r\n 之后)
+            parts = line.split(b"\r\n\r\n", 1)
+            if len(parts) != 2:
+                continue
+            file_content = parts[1].rstrip(b"\r\n")
+            if fname == "--":
+                continue
+            dest = target_dir / fname
+            dest.write_bytes(file_content)
+            uploaded.append(fname)
+            log(f"  上传 {fname} → {dest}")
+
+    else:
+        # JSON body: { "files": { "readings.json": [...], ... } }
+        body = read_body(handler)
+        files = (body or {}).get("files")
+        if not files:
+            send_json(handler, 200, {"ok": False, "error": "请提供 files 字段"})
+            return
+
+        for fname, content in files.items():
+            if fname not in DATA_FILES.values() and fname != "settings.json":
+                continue
+            dest = target_dir / fname
+            if isinstance(content, list) or isinstance(content, dict):
+                dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+            elif isinstance(content, str):
+                dest.write_text(content, encoding="utf-8")
+            uploaded.append(fname)
+            log(f"  上传 {fname} → {dest}")
+
+    send_json(handler, 200, {
+        "ok": True,
+        "uploaded": uploaded,
     })

@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 import json
+import os
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Any, Optional
@@ -25,21 +26,38 @@ def _get_settings_file(data_dir: Path) -> Path:
     return data_dir / _SETTINGS_FILE
 
 
-def _load() -> dict:
-    """加载 settings.json。"""
-    return json.load(open(_get_settings_file(_get_current_dir()), "r", encoding="utf-8"))
-
-
-def _get_current_dir() -> Path:
-    """从 app_handler 获取数据目录。"""
+def _get_data_dir() -> Path:
+    """从环境变量获取数据目录（优先），否则从 app_handler 获取。"""
+    data_dir = os.environ.get("LINCLUB_DATA_DIR", "/data")
+    if Path(data_dir).is_absolute():
+        return Path(data_dir)
+    # 兼容没有设置环境变量的情况
     import app_handler as _h
     return _h.DATA_PATHS.get("readings", Path.home()).parent
 
 
-def _save(data: dict):
+def _load(data_dir: Optional[Path] = None) -> dict:
+    """加载 settings.json。"""
+    if data_dir is None:
+        data_dir = _get_data_dir()
+    path = _get_settings_file(data_dir)
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _get_current_dir() -> Path:
+    """从 app_handler 获取数据目录（向后兼容）。"""
+    import app_handler as _h
+    return _h.DATA_PATHS.get("readings", Path.home()).parent
+
+
+def _save(data: dict, data_dir: Optional[Path] = None):
+    if data_dir is None:
+        data_dir = _get_data_dir()
     with _SETTINGS_LOCK:
-        path = _get_settings_file(_get_current_dir())
-        json.dump(data, open(path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
+        path = _get_settings_file(data_dir)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 def init_settings(data_dir: Path):
@@ -70,7 +88,7 @@ def init_settings(data_dir: Path):
             "water_price": 4.5,
         },
     }
-    _save(default)
+    _save(default, data_dir)
 
 
 def get_settings() -> dict:

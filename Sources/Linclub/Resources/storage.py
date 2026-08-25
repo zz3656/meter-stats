@@ -116,11 +116,13 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     返回备份目录路径(跳过时返回 None)。
     """
     parent = target_parent if target_parent is not None else (data_dir / "backup")
+    # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
+    utc_now = datetime.utcnow()
     if force:
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stamp = utc_now.strftime("%Y%m%d_%H%M%S")
         backup_dir = parent / stamp
     else:
-        today = datetime.now().strftime("%Y%m%d")
+        today = utc_now.strftime("%Y%m%d")
         backup_dir = parent / today
         if backup_dir.exists():
             return None  # 今天已备份过
@@ -134,7 +136,8 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
 
 def log(msg: str) -> None:
-    ts = datetime.now().strftime("%H:%M:%S")
+    utc_now = datetime.utcnow()
+    ts = utc_now.strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 
 

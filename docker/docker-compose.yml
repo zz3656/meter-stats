@@ -15,9 +15,14 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      # 数据持久化（重要！）
-      - linclub-data:/data
+      # 数据持久化（使用宿主机目录，可直接访问文件）
+      - ./data:/data
+      # 时区设置（同步宿主机时区）
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
+      # 时区（北京时间 UTC+8）
+      - TZ=Asia/Shanghai
       # 端口配置（默认 8765）
       - LINCLUB_PORT=8765
       # 数据目录（默认 /data）
@@ -27,12 +32,10 @@ services:
       # 初始管理员密码（请修改！默认 admin123）
       - LINCLUB_INITIAL_PASS=admin123
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
-volumes:
-  linclub-data:
-    driver: local
+# 不再需要命名卷，数据存储在 ./data 目录

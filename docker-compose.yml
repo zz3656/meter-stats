@@ -4,6 +4,8 @@
 # 镜像: zz3656/linclub-electricity-stats:latest
 # 访问: http://localhost:8765
 # 默认: admin / admin123
+# 启动: docker compose up -d
+# 停止: docker compose down
 # ============================================================
 
 services:
@@ -14,19 +16,21 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      - linclub-data:/data
+      # 数据持久化（使用宿主机目录，可直接访问文件）
+      - ./data:/data
+      # 时区设置（同步宿主机时区）
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
+      # 时区（北京时间 UTC+8）
+      - TZ=Asia/Shanghai
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
       - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)"]
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 10s
-
-volumes:
-  linclub-data:
-    driver: local
+      start_period: 15s

@@ -143,10 +143,12 @@ def main():
     app_handler._sync_data_paths()  # 初始化 settings.json
 
     server = ThreadingHTTPServer((BIND, PORT), app_handler.Handler)
+    server.timeout = 1  # 快速响应健康检查
     try:
+        print("服务启动成功！可以开始访问。", flush=True)  # 关键日志：标识启动完成
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n已停止")
+        print("\n已停止", flush=True)
         server.shutdown()
     finally:
         _remove_pid()
