@@ -313,3 +313,161 @@ tar xzf /docker/linclub-backup.tar.gz -C /docker/linclub/data/
 # 重启容器
 docker compose start
 ```
+
+# ============================================================
+# 📦 从 macOS 数据迁移到飞牛 OS（完整步骤）
+# ============================================================
+
+## 场景说明
+
+你在 macOS 上使用过「工程部管理系统.app」，数据存储在：
+```
+~/Library/Application Support/com.linca.electricity-stats/
+├── readings.json       ← 抄表记录
+├── charges.json        ← 充值记录
+├── items.json          ← 物品库存
+├── purchases.json      ← 申购记录
+└── settings.json       ← 用户和配置
+```
+
+现在要把这些数据迁移到飞牛 OS 的 Docker 容器中。
+
+---
+
+## 方法一：通过文件管理器上传（推荐，最直观）
+
+### 第 1 步：从 macOS 导出数据文件
+
+1. 打开 macOS **Finder**
+2. 按下 `Cmd + Shift + G`（前往文件夹）
+3. 输入路径：
+   ```
+   ~/Library/Application Support/com.linca.electricity-stats/
+   ```
+4. 找到以下文件，复制到桌面或其他临时位置：
+   - `readings.json`
+   - `charges.json`
+   - `items.json`
+   - `purchases.json`
+   - `settings.json`
+
+### 第 2 步：上传到飞牛 OS
+
+1. 打开飞牛 OS 桌面 → **文件管理器**
+2. 找到或创建目录：`/docker/linclub/data/`
+3. 将刚才从 macOS 复制的 5 个 `.json` 文件上传到该目录
+
+### 第 3 步：启动 Docker 容器
+
+如果还没有启动容器，按以下方式：
+
+**Container Manager → 项目 → 创建新项目：**
+- 项目名：`linclub`
+- 项目路径：`/docker/linclub/`（包含 docker-compose.yml）
+- 启动项目
+
+### 第 4 步：验证数据
+
+```bash
+# 进入飞牛 OS 终端
+docker exec -it linclub ls -la /data
+docker exec -it linclub cat /data/readings.json | head -20
+```
+
+应该能看到你的抄表记录。
+
+---
+
+## 方法二：通过 SFTP/FTP 上传
+
+1. 在飞牛 OS 中启用 **SFTP 服务**（控制面板 → 文件服务 → SFTP）
+2. 使用 FileZilla、WinSCP 或 Termius 等工具连接
+   - 主机：你的飞牛 OS IP
+   - 端口：22（默认）
+   - 用户名/密码：你的飞牛 OS 登录账号
+3. 连接后导航到 `/docker/linclub/data/`
+4. 拖拽上传 macOS 导出的 5 个 `.json` 文件
+
+---
+
+## 方法三：通过 docker cp 命令（最快捷）
+
+如果飞牛 OS 终端可以直接访问：
+
+### 第 1 步：准备数据
+
+在 macOS 上，将数据文件放到一个临时目录：
+
+```bash
+# macOS 终端
+mkdir -p ~/linca-migration
+cp ~/Library/Application\ Support/com.linca.electricity-stats/*.json ~/linca-migration/
+```
+
+### 第 2 步：上传到飞牛 OS
+
+```bash
+# macOS 终端执行（替换 NAS_IP 为你的飞牛 OS IP）
+scp ~/linca-migration/*.json admin@NAS_IP:/tmp/linca-data/
+```
+
+### 第 3 步：复制到容器内
+
+```bash
+# 飞牛 OS 终端执行
+docker cp /tmp/linca-data/readings.json linclub:/data/
+docker cp /tmp/linca-data/charges.json linclub:/data/
+docker cp /tmp/linca-data/items.json linclub:/data/
+docker cp /tmp/linca-data/purchases.json linclub:/data/
+docker cp /tmp/linca-data/settings.json linclub:/data/
+```
+
+### 第 4 步：重启容器
+
+```bash
+docker compose restart
+```
+
+---
+
+## 迁移后验证清单
+
+| 检查项 | 命令 | 应该看到 |
+|--------|------|----------|
+| 数据文件存在 | `docker exec linclub ls -la /data` | 5 个 `.json` 文件 |
+| 抄表记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/readings.json'))))"` | 你的抄表条数 |
+| 充值记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/charges.json'))))"` | 你的充值条数 |
+| 物品库存 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/items.json'))))"` | 你的物品数 |
+| 申购记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/purchases.json'))))"` | 你的申购条数 |
+| 用户配置 | `docker exec linclub cat /data/settings.json` | 你的用户信息 |
+
+---
+
+## ⚠️ 注意事项
+
+1. **settings.json 包含用户密码哈希**，迁移后会保留你的账号密码，无需重新设置
+2. **确保覆盖而非新建**，上传文件时要选择「覆盖已存在文件」
+3. **如果提示权限问题**，在飞牛 OS 终端执行：
+   ```bash
+   docker exec -it linclub chown linclub:linclub /data/*.json
+   ```
+4. **迁移完成后建议做一次备份**：
+   ```bash
+   docker exec -it linclub python3 -c "
+   import json
+   with open('/data/settings.json') as f:
+       s = json.load(f)
+   print(f'用户: {[u[\"username\"] for u in s.get(\"users\", [])]}')
+   "
+   ```
+
+---
+
+## 迁移完成后
+
+1. 打开浏览器访问：`http://NAS_IP:8765`
+2. 使用原来的账号密码登录
+3. 检查所有数据是否正常显示
+4. 确认月度报告等计算功能正常
+5. 建议登录后台修改默认密码（如果之前没改过）
+
