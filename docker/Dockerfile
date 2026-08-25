@@ -1,16 +1,13 @@
 # ============================================================
 # 林卡电表统计 — Docker 部署
 # ============================================================
-# 构建:  docker build -t linclub/electricity-stats .
+# 构建:  docker build -t zz3656/linclub-electricity-stats .
 # 运行:  docker run -d --name linclub \
 #           -p 8765:8765 \
 #           -v linclub-data:/data \
 #           -e LINCLUB_INITIAL_PASS=your-secure-password \
-#           linclub/electricity-stats
+#           zz3656/linclub-electricity-stats
 # ============================================================
-
-# ---- 构建阶段（无） ----
-# Python 标准库，无需编译步骤
 
 FROM python:3.11-slim
 
@@ -24,12 +21,15 @@ RUN groupadd -r linclub && useradd -r -g linclub -d /data -s /sbin/nologin lincl
 WORKDIR /app
 
 # 复制所有应用文件
-COPY --chown=linclub:linclub *.py .
-COPY --chown=linclub:linclub *.html .
-COPY --chown=linclub:linclub *.css .
-COPY --chown=linclub:linclub *.js  .
-COPY --chown=linclub:linclub handlers/ handlers/
-COPY --chown=linclub:linclub utils/  utils/
+COPY *.py ./
+COPY *.html ./
+COPY *.css ./
+COPY *.js ./
+COPY handlers/ handlers/
+COPY utils/ utils/
+
+# 设置所有权
+RUN chown -R linclub:linclub /app
 
 # 创建数据目录
 RUN mkdir -p /data && chown linclub:linclub /data
