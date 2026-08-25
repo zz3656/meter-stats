@@ -1,0 +1,38 @@
+# ============================================================
+# 林卡电表统计 — Docker Compose
+# ============================================================
+# 启动:  docker compose up -d
+# 停止:  docker compose down
+# 日志:  docker compose logs -f
+# 重启:  docker compose restart
+# ============================================================
+
+services:
+  linca:
+    build: .
+    container_name: linca
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      # 数据持久化（重要！）
+      - linca-data:/data
+    environment:
+      # 端口配置（默认 8765）
+      - LINCA_PORT=8765
+      # 数据目录（默认 /data）
+      - LINCA_DATA_DIR=/data
+      # 绑定地址（默认 0.0.0.0，容器内用 0.0.0.0）
+      - LINCA_BIND=0.0.0.0
+      # 初始管理员密码（请修改！默认 admin123）
+      - LINCA_INITIAL_PASS=admin123
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  linca-data:
+    driver: local

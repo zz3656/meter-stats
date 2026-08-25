@@ -1,0 +1,247 @@
+# 林卡电表统计 — Docker 部署指南
+
+## 目录结构
+
+```
+newproject/
+├── docker-compose.yml        # Docker Compose 配置（根目录）
+├── docker-run.sh             # 快捷启动脚本
+├── docker/                   # Docker 应用目录
+│   ├── Dockerfile            # Docker 镜像定义
+│   ├── docker-compose.yml    # Docker Compose 配置（Docker 目录内）
+│   ├── .dockerignore         # Docker 忽略文件
+│   ├── server.py             # 后端入口（已适配 Docker）
+│   ├── app_handler.py        # HTTP 处理层
+│   ├── storage.py            # 存储层
+│   ├── routing.py            # 路由分发
+│   ├── report.py             # 月报计算引擎
+│   ├── index.html            # 前端页面
+│   ├── style.css             # 样式
+│   ├── app.js                # 前端脚本
+│   ├── admin.js              # 管理前端脚本
+│   ├── handlers/             # 路由处理器
+│   └── utils/                # 工具函数
+└── README.Docker.md          # 本文档
+```
+
+## 快速开始
+
+### 方式一：使用快捷脚本（推荐）
+
+```bash
+# 启动
+./docker-run.sh up
+
+# 查看日志
+./docker-run.sh logs
+
+# 停止
+./docker-run.sh down
+
+# 重新构建
+./docker-run.sh rebuild
+
+# 查看状态
+./docker-run.sh status
+```
+
+### 方式二：直接使用 docker compose
+
+```bash
+# 启动
+docker compose up -d
+
+# 查看日志
+docker compose logs -f
+
+# 停止
+docker compose down
+
+# 重新构建
+docker compose up -d --build
+```
+
+## 访问地址
+
+| 用途 | URL |
+|---|---|
+| 管理界面 | http://localhost:8765 |
+| 健康检查 | http://localhost:8765/api/health |
+| CSV 导出 | http://localhost:8765/api/export?models=readings,charges |
+
+## 默认账户
+
+| 用户名 | 密码 | 角色 |
+|---|---|---|
+| admin | admin123 | 管理员 |
+
+**⚠️ 请首次登录后立即修改密码！**
+
+## 修改默认密码
+
+编辑 `docker-compose.yml`，修改环境变量：
+
+```yaml
+environment:
+  - LINCA_INITIAL_PASS=your-secure-password
+```
+
+然后重新创建容器：
+
+```bash
+docker compose down
+docker compose up -d --build
+```
+
+## 环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LINCA_PORT` | `8765` | 服务端口 |
+| `LINCA_DATA_DIR` | `/data` | 数据持久化目录 |
+| `LINCA_BIND` | `0.0.0.0` | 绑定地址 |
+| `LINCA_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
+| `LINCA_INITIAL_PASS` | `admin123` | 初始管理员密码 |
+
+## 数据持久化
+
+数据存储在 Docker Volume `linca-data` 中：
+
+```bash
+# 查看数据目录内容
+docker compose exec linca ls -la /data
+
+# 导出所有数据
+docker compose exec linca tar czf /tmp/linca-data.tar.gz -C /data .
+docker cp linca:/tmp/linca-data.tar.gz ./linca-data-backup.tar.gz
+
+# 备份 Volume
+docker run --rm -v linca-data:/source -v $(pwd):/backup alpine tar czf /backup/linca-backup.tar.gz -C /source .
+```
+
+## 端口冲突
+
+如果端口 8765 被占用，修改 `docker-compose.yml`：
+
+```yaml
+ports:
+  - "8766:8765"   # 主机 8766 → 容器 8765
+```
+
+或者通过环境变量：
+
+```yaml
+environment:
+  - LINCA_PORT=8766
+```
+
+## Nginx 反向代理（可选）
+
+如果需要 HTTPS 或反向代理，使用以下配置：
+
+```nginx
+server {
+    listen 80;
+    server_name linca.example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name linca.example.com;
+
+    ssl_certificate     /etc/ssl/certs/linca.crt;
+    ssl_certificate_key /etc/ssl/private/linca.key;
+
+    location / {
+        proxy_pass http://localhost:8765;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+## 从 macOS 应用迁移数据
+
+如果你已有 macOS 应用的本地数据，可以迁移到 Docker：
+
+```bash
+# 1. 找到 macOS 数据目录
+# ~/Library/Application Support/com.linca.electricity-stats/
+
+# 2. 将数据文件复制到 Docker volume
+docker cp ~/Library/Application\ Support/com.linca.electricity-stats/readings.json linca:/data/
+docker cp ~/Library/Application\ Support/com.linca.electricity-stats/charges.json linca:/data/
+docker cp ~/Library/Application\ Support/com.linca.electricity-stats/items.json linca:/data/
+docker cp ~/Library/Application\ Support/com.linca.electricity-stats/purchases.json linca:/data/
+docker cp ~/Library/Application\ Support/com.linca.electricity-stats/settings.json linca:/data/
+
+# 3. 修复文件权限
+docker compose exec linca chown linca:linca /data/*.json
+```
+
+## 故障排查
+
+### 容器无法启动
+
+```bash
+# 查看错误日志
+docker compose logs
+
+# 进入容器调试
+docker compose exec linca bash
+```
+
+### 数据目录为空
+
+```bash
+# 检查 volume 挂载
+docker volume inspect linca_linca-data
+
+# 进入容器查看
+docker compose exec linca ls -la /data
+```
+
+### 健康检查失败
+
+```bash
+# 手动测试健康端点
+curl http://localhost:8765/api/health
+
+# 查看容器健康状态
+docker inspect --format='{{json .State.Health}}' linca | python3 -m json.tool
+```
+
+### 完全重置（⚠️ 删除所有数据）
+
+```bash
+docker compose down -v   # 删除容器和数据卷
+docker compose up -d
+```
+
+## 生产部署建议
+
+1. **修改默认密码** — 设置强密码环境变量
+2. **使用 HTTPS** — 添加 Nginx 反向代理 + Let's Encrypt
+3. **定期备份** — 使用 cron 或 systemd timer 备份 data volume
+4. **限制访问** — 使用防火墙或 VPN 限制 IP 访问
+5. **日志管理** — 配置 Docker logging driver 限制日志大小
+
+## Docker 原生构建（不进 compose）
+
+```bash
+# 构建镜像
+cd docker
+docker build -t linca/electricity-stats .
+
+# 运行容器
+docker run -d \
+  --name linca \
+  -p 8765:8765 \
+  -v linca-data:/data \
+  -e LINCA_INITIAL_PASS=your-password \
+  --restart unless-stopped \
+  linca/electricity-stats
+```

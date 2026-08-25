@@ -1,0 +1,45 @@
+# Build artifacts
+.build/
+build/
+dist/
+*.app/
+*.dmg/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# macOS
+.DS_Store
+*.swp
+*.swo
+*~
+
+# IDE
+.idea/
+.vscode/
+*.iml
+.xcodeproj/
+*.xcworkspace/
+
+# Backup & temp
+*.bak
+*.tmp
+*.log
+*.tar.gz
+*.zip
+
+# Data files (never commit real data)
+*.json
+data/
+*.pid
+
+# Docker volumes (local)
+linca-data*
+
+# Local overrides
+.env
+.env.local
