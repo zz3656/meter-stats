@@ -1,16 +1,14 @@
 # ============================================================
-# 林卡电表统计 — Docker Compose（根目录快捷入口）
+# 林卡电表统计 — Docker Compose 配置
 # ============================================================
-# 启动:  docker compose up -d
-# 停止:  docker compose down
-# 日志:  docker compose logs -f
+# 镜像: zz3656/linclub-electricity-stats:latest
+# 访问: http://localhost:8765
+# 默认: admin / admin123
 # ============================================================
 
 services:
   linclub:
-    build:
-      context: ./docker
-      dockerfile: Dockerfile
+    image: zz3656/linclub-electricity-stats:latest
     container_name: linclub
     restart: unless-stopped
     ports:
@@ -21,8 +19,7 @@ services:
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
-      # ⚠️ 请修改默认密码！
-      - LINCLUB_INITIAL_PASS=admin123
+      - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health')"]
       interval: 30s
