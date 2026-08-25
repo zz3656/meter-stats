@@ -6,11 +6,6 @@ on:
     paths:
       - 'docker/**'
   workflow_dispatch:
-    inputs:
-      tag:
-        description: 'Docker image tag (default: latest)'
-        required: false
-        default: 'latest'
 
 permissions:
   contents: read
@@ -23,7 +18,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
+      - name: Set up QEMU (for cross-platform builds)
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
@@ -35,23 +30,14 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: zz3656/linclub-electricity-stats
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=tag
-
-      - name: Build and push
+      - name: Build and push multi-platform image
         uses: docker/build-push-action@v5
         with:
           context: ./docker
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            zz3656/linclub-electricity-stats:latest
+            zz3656/linclub-electricity-stats:v0.1.0
           cache-from: type=gha
           cache-to: type=gha,mode=max
