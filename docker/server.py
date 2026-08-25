@@ -105,6 +105,10 @@ def main():
     # 初始化数据文件
     data_paths = init_data_files(data_dir)
 
+    # 将文件映射暴露给 app_handler 模块（必须在 admin 初始化之前）
+    import app_handler
+    app_handler.DATA_PATHS = data_paths
+
     # 确保默认管理员账户
     _ensure_default_admin(data_dir)
 
@@ -136,9 +140,6 @@ def main():
     print("按 Ctrl+C 停止")
     print("=" * 50)
 
-    # 将文件映射暴露给 app_handler 模块
-    import app_handler
-    app_handler.DATA_PATHS = data_paths
     app_handler._sync_data_paths()  # 初始化 settings.json
 
     server = ThreadingHTTPServer((BIND, PORT), app_handler.Handler)
