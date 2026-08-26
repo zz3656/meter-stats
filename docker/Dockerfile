@@ -25,6 +25,8 @@ COPY *.py ./
 COPY *.html ./
 COPY *.css ./
 COPY *.js ./
+COPY *.svg ./
+COPY *.png ./
 COPY handlers/ handlers/
 COPY utils/ utils/
 
