@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from utils import send_json, read_body
-from storage import backup_data
+from storage import backup_data, DATA_FILES
 
 
 def _get_data_paths():
@@ -83,8 +83,6 @@ def handle_post_restore(handler):
     ⚠️ 安全措施:恢复前先把当前数据自动备份一份(可回滚),再复制备份文件覆盖。
     只恢复存在的 .json 数据文件,不删除任何当前数据。
     """
-    from storage import DATA_FILES, log
-
     body = read_body(handler)
     source_dir = (body or {}).get("source_dir") or ""
     src = Path(source_dir).expanduser()
@@ -134,7 +132,6 @@ def handle_post_upload(handler):
 
     上传后直接覆盖 /data/ 中对应的数据文件。
     """
-    from storage import DATA_FILES, log
     import shutil
     import tempfile
     import os
