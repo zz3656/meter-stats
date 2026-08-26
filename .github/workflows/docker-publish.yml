@@ -44,14 +44,17 @@ jobs:
       - name: Update Docker Hub repository description
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: zz3656
           DOCKERHUB_SHORT_DESC: 林卡酒吧工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。
         run: |
 
           python3 << 'PYEOF'
-          import json, os, urllib.request
+          import json, os, urllib.request, base64
 
           short_desc = os.environ.get("DOCKERHUB_SHORT_DESC", "")
           full_description = open(".github/workflows/dockerhub-readme.md", "r", encoding="utf-8").read()
+          dockerhub_username = os.environ.get("DOCKERHUB_USERNAME", "")
+          dockerhub_token = os.environ.get("DOCKERHUB_TOKEN", "")
 
           data = {
               "full_description": full_description,
@@ -60,21 +63,26 @@ jobs:
           }
 
           payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-          url = "https://hub.docker.com/v2/repositories/zz3656/linclub-electricity-stats"
-          token = os.environ["DOCKERHUB_TOKEN"]
-          auth_header = "Bearer " + token
+          url = f"https://hub.docker.com/v2/repositories/{dockerhub_username}/linclub-electricity-stats"
+          auth_str = f"{dockerhub_username}:{dockerhub_token}".encode("utf-8")
+          auth_header = base64.b64encode(auth_str).decode("utf-8")
 
           req = urllib.request.Request(
               url,
               data=payload,
-              headers={"Authorization": auth_header, "Content-Type": "application/json"},
+              headers={"Authorization": f"Basic {auth_header}", "Content-Type": "application/json"},
               method="PATCH",
           )
-          with urllib.request.urlopen(req) as resp:
-              code = resp.getcode()
-              if code == 200 or code == 201:
-                  print("✅ Docker Hub description updated!")
-                  print("   https://hub.docker.com/r/zz3656/linclub-electricity-stats")
-              else:
-                  print(f"⚠️ Unexpected status: {code}")
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  code = resp.getcode()
+                  if code == 200 or code == 201:
+                      print("✅ Docker Hub description updated!")
+                      print(f"   https://hub.docker.com/r/{dockerhub_username}/linclub-electricity-stats")
+                  else:
+                      print(f"⚠️ Unexpected status: {code}")
+          except urllib.error.HTTPError as e:
+              print(f"⚠️ HTTP Error {e.code}: {e.read().decode()}")
+          except Exception as e:
+              print(f"⚠️ Error: {e}")
           PYEOF
