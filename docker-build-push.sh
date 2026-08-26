@@ -92,7 +92,7 @@ docker buildx build \
     --push \
     --progress=plain \
     -f "${DOCKER_DIR}/Dockerfile" \
-    .
+    "${DOCKER_DIR}"
 
 if [ $? -ne 0 ]; then
     echo "❌ 构建或推送失败"
