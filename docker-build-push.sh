@@ -99,6 +99,55 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# === 更新 Docker Hub 仓库描述 ===
+echo ""
+echo "=================================================="
+echo " 更新 Docker Hub 仓库描述 (Overview / About)"
+echo "=================================================="
+echo ""
+
+if [ -n "$DOCKERHUB_TOKEN" ]; then
+  python3 - "$DOCKERHUB_TOKEN" << 'PYEOF'
+import json, sys, urllib.request, urllib.error
+
+TOKEN = sys.argv[1]
+USERNAME = "zz3656"
+REPO = "linclub-electricity-stats"
+SHORT_DESC = "林卡酒吧工程部电表统计工具 · Web服务"
+FULL_DESC = "# 林卡电表统计 — Linclub Electricity Stats\n\n> 酒吧/场所工程部电表用量统计工具。支持 macOS 桌面应用和 Docker Web 服务两种部署方式。\n\n## ✨ 功能特性\n\n| 功能 | 说明 |\n|---|---|\n| ⚡ 电表管理 | 4 块电表独立抄表读数 |\n| 💰 充值记录 | 按表充值，支持备注 |\n| 🧾 月度报告 | 逐日逐表用电计算 |\n| 📊 年度汇总 | 12 个月数据汇总 |\n| 🔧 物品管理 | 库存 CRUD |\n| 📋 申购管理 | 申购 → 入库流转 |\n| 🔐 用户权限 | 三级权限管理 |\n| 💾 自动备份 | 每日自动备份 |\n\n## 🚀 快速开始\n\n```bash\ndocker run -d \\\n  --name linclub \\\n  -p 8765:8765 \\\n  -v ./data:/data \\\n  -e LINCLUB_INITIAL_PASS=your-password \\\n  -e TZ=Asia/Shanghai \\\n  zz3656/linclub-electricity-stats:latest\n```\n\n## 默认账户\n\n| 用户名 | 密码 | 角色 |\n|---|---|---|\n| admin | admin123 | 管理员 |\n\n**⚠️ 请首次登录后立即修改密码！**\n"
+
+# Login to get JWT for hub operations
+login_url = "https://hub.docker.com/v2/users/login/"
+payload = json.dumps({"username": USERNAME, "password": TOKEN}).encode()
+req = urllib.request.Request(login_url, data=payload, headers={"Content-Type": "application/json"}, method="POST")
+
+try:
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+        jwt = data.get("token", data.get("jwt", ""))
+except urllib.error.HTTPError as e:
+    body = e.read().decode()
+    print(f"⚠️ Docker Hub 登录失败 (HTTP {e.code}): {body[:100]}")
+    sys.exit(0)
+
+# PATCH repository description
+desc_data = {"description": SHORT_DESC, "full_description": FULL_DESC}
+desc_payload = json.dumps(desc_data, ensure_ascii=False).encode()
+api_url = f"https://hub.docker.com/v2/repositories/{USERNAME}/{REPO}/"
+
+req2 = urllib.request.Request(api_url, data=desc_payload,
+    headers={"Authorization": "JWT " + jwt, "Content-Type": "application/json"}, method="PATCH")
+
+with urllib.request.urlopen(req2, timeout=30) as resp2:
+    result = json.loads(resp2.read())
+    print("✅ Docker Hub 仓库描述已更新！")
+    print(f"   访问: https://hub.docker.com/r/{USERNAME}/{result.get('name', REPO)}")
+PYEOF
+else
+  echo "⚠️  未找到 DOCKERHUB_TOKEN 环境变量，跳过描述更新。"
+  echo "   设置: export DOCKERHUB_TOKEN=dckr_pat_xxxxxxxx"
+fi
+
 echo ""
 echo "=================================================="
 echo " ✓ 构建和推送成功！"

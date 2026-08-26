@@ -40,3 +40,42 @@ jobs:
           tags: |
             zz3656/linclub-electricity-stats:latest
             zz3656/linclub-electricity-stats:v0.1.1
+
+      - name: Update Docker Hub repository description
+        run: |
+          python3 << 'PYEOF'
+          import json, os, urllib.request
+
+          short_desc = "林卡酒吧工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。"
+
+          data = {
+              "full_description": "# 林卡电表统计 — Linclub Electricity Stats\n\n> 酒吧/场所工程部电表用量统计工具。支持 macOS 原生桌面应用和 Docker Web 服务两种部署方式。\n\n## ✨ 功能特性\n\n| 功能 | 说明 |\n|---|---|\n| ⚡ 电表管理 | 4 块电表独立抄表读数 |\n| 💰 充值记录 | 按表充值，支持备注 |\n| 🧾 月度报告 | 逐日逐表用电计算 |\n| 📊 年度汇总 | 12 个月数据汇总 |\n| 🔧 物品管理 | 库存 CRUD |\n| 📋 申购管理 | 申购 → 入库流转 |\n| 🔐 用户权限 | 三级权限管理 |\n| 💾 自动备份 | 每日自动备份数据 |\n\n## 🚀 快速开始\n\n```bash\ndocker run -d \\\n  --name linclub \\\n  -p 8765:8765 \\\n  -v ./data:/data \\\n  -e LINCLUB_INITIAL_PASS=your-password \\\n  -e TZ=Asia/Shanghai \\\n  zz3656/linclub-electricity-stats:latest\n```\n",
+              "description": short_desc,
+              "short_description": short_desc
+          }
+
+          payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+          url = "https://hub.docker.com/v2/repositories/zz3656/linclub-electricity-stats"
+          token = os.environ["DOCKERHUB_TOKEN"]
+          auth_header = "Bearer " + token
+
+          req = urllib.request.Request(
+              url,
+              data=payload,
+              headers={"Authorization": auth_header, "Content-Type": "application/json"},
+              method="PATCH",
+          )
+
+          try:
+              with urllib.request.urlopen(req) as resp:
+                  code = resp.getcode()
+                  if code == 200 or code == 201:
+                      print("✅ Docker Hub description updated!")
+                      print("   https://hub.docker.com/r/zz3656/linclub-electricity-stats")
+                  else:
+                      print(f"⚠️ Unexpected status: {code}")
+          except urllib.error.HTTPError as e:
+              print(f"⚠️ Docker Hub description update failed (HTTP {e.code}): {e.read().decode()}")
+          except Exception as e:
+              print(f"⚠️ Error: {e}")
+          PYEOF
