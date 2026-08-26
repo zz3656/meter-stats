@@ -118,7 +118,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     parent = target_parent if target_parent is not None else (data_dir / "backup")
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
-    utc_now = datetime.utcnow()
+    utc_now = datetime.now()
     if force:
         stamp = utc_now.strftime("%Y%m%d_%H%M%S")
         backup_dir = parent / stamp
@@ -149,7 +149,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
 
 def log(msg: str) -> None:
-    utc_now = datetime.utcnow()
+    utc_now = datetime.now()
     ts = utc_now.strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 

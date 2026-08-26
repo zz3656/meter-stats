@@ -240,7 +240,7 @@ def handle_get_backup_status(handler):
                     "name": d.name,
                     "file_count": file_count,
                     "total_size": total_size,
-                    "created_at": datetime.utcfromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "created_at": datetime.datetime.fromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                 })
     
     send_json(handler, 200, {
