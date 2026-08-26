@@ -36,9 +36,6 @@ RUN chown -R linclub:linclub /app
 # 创建数据目录
 RUN mkdir -p /data && chown linclub:linclub /data
 
-# 切换到非 root 用户
-USER linclub
-
 # 暴露端口
 EXPOSE 8765
 
@@ -50,5 +47,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
-# 启动命令
+# 以 root 身份启动 entrypoint，由它处理权限切换
 ENTRYPOINT ["/entrypoint.sh"]
