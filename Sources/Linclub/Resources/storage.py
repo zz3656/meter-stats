@@ -116,6 +116,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     返回备份目录路径(跳过时返回 None)。
     """
     parent = target_parent if target_parent is not None else (data_dir / "backup")
+    log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
     utc_now = datetime.utcnow()
     if force:
@@ -125,13 +126,25 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         today = utc_now.strftime("%Y%m%d")
         backup_dir = parent / today
         if backup_dir.exists():
+            log(f"[BACKUP] 跳过: {backup_dir} 已存在")
             return None  # 今天已备份过
-    backup_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        log(f"[BACKUP] 无法创建目录 {backup_dir}: {e}")
+        raise
     for name in DATA_FILES.values():
         src = data_dir / name
         if src.exists():
-            shutil.copy2(src, backup_dir / name)
-    log(f"  OK 数据已备份到 {backup_dir}")
+            try:
+                shutil.copy2(src, backup_dir / name)
+                log(f"[BACKUP] 已复制 {name} → {backup_dir}")
+            except OSError as e:
+                log(f"[BACKUP] 复制 {name} 失败: {e}")
+                raise
+        else:
+            log(f"[BACKUP] 跳过 {name}: 文件不存在")
+    log(f"  OK data backed up to {backup_dir}")
     return backup_dir
 
 

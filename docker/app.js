@@ -368,7 +368,16 @@ async function datamgmtRestore() {
     let res;
     if (dir._browser) {
       // 浏览器环境: 直接上传文件
-      if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+      const ok = await showModal({
+        icon: '⚠️',
+        iconKind: 'warn',
+        title: '确认上传文件覆盖数据？',
+        body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+        confirmText: '确认上传',
+        cancelText: '取消',
+        confirmKind: 'danger',
+      });
+      if (!ok) return;
       btn.textContent = '⏳ 上传中…';
       btn.disabled = true;
       res = await api('POST', '/api/upload', { files: dir.files });

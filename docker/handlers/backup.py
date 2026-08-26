@@ -77,11 +77,17 @@ def handle_post_backup(handler):
     else:
         target = None  # 默认走数据目录/backup
 
-    result = backup_data(data_dir.parent, force=True, target_parent=target)
+    try:
+        result = backup_data(data_dir.parent, force=True, target_parent=target)
+    except Exception as e:
+        send_json(handler, 200, {"ok": False, "error": f"备份失败: {e}"})
+        return
     if result:
         send_json(handler, 200, {"ok": True, "backup_dir": str(result)})
     else:
-        send_json(handler, 200, {"ok": True, "backup_dir": str(target or (data_dir.parent / "backup"))})
+        # force=True 时 backup_data 理论上不应返回 None
+        # 如果返回 None，说明出现了未预料的错误
+        send_json(handler, 200, {"ok": False, "error": "备份失败：无法创建备份目录（可能是权限问题或磁盘空间不足）"})
 
 
 def handle_post_restore(handler):

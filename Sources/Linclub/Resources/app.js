@@ -230,6 +230,8 @@ function initAutoBackupToggle() {
 function openDataMgmtModal() {
   // 初始化自动备份开关
   initAutoBackupToggle();
+  // 加载备份目录配置
+  loadBackupConfig();
   document.getElementById('datamgmt-modal-backdrop').classList.add('show');
 }
 function closeDataMgmtModal() {
@@ -243,33 +245,14 @@ async function datamgmtBackup() {
   btn.textContent = '⏳ 备份中…';
   btn.disabled = true;
   try {
-    // 浏览器/Docker 环境: 从服务器获取所有数据文件,然后下载
-    showAlert('正在从服务器获取数据…', 'info');
-    const res = await api('GET', '/api/admin/data-files');
-    if (!res.ok || !res.files) {
-      showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
+    showAlert('正在备份数据…', 'info');
+    const res = await api('POST', '/api/backup');
+    if (!res.ok) {
+      showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
       return;
     }
-    showAlert('正在下载数据文件…', 'info');
-    const fileNames = Object.keys(res.files);
-    if (!fileNames.length) {
-      showAlert('当前没有可备份的数据文件', 'error');
-      return;
-    }
-    for (const [name, content] of Object.entries(res.files)) {
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      await new Promise(r => setTimeout(r, 200));
-    }
-    btn.textContent = '✅ 已下载';
-    showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
+    btn.textContent = '✅ 已备份';
+    showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
   } catch (e) {
     btn.textContent = original;
     showAlert('备份失败: ' + e.message, 'error');
@@ -278,23 +261,62 @@ async function datamgmtBackup() {
     setTimeout(() => { btn.textContent = original; }, 2000);
   }
 }
-
-// 调用 Swift 原生目录选择器(WKWebView 桥) → Promise<路径|null>
-// 非 .app 环境(浏览器/测试)无桥 → resolve(null) 走默认备份目录
 function pickBackupDir() {
   return new Promise(resolve => {
-    const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
-    if (hasBridge) {
-      // Swift 选完目录后调用 window.__backupDirChosen(path|null) 回调
+    const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
+    if (hasSwiftBridge) {
+      // macOS 原生 App: 调用 Swift 文件选择器
       window.__backupDirChosen = dir => {
         window.__backupDirChosen = null;
         resolve(dir);
       };
       window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
     } else {
-      // 浏览器环境: 用文件选择器让用户选备份目录中的文件
-      showBrowserFilePicker('pick', resolve);
+      // Docker / Web 浏览器环境: 用 prompt 让用户输入路径或使用文件选择器
+      showBrowserBackupPicker(resolve);
     }
+  });
+}
+
+// Docker / Web 浏览器环境下的备份目录选择
+function showBrowserBackupPicker(resolve) {
+  const html = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+      💡 Docker/浏览器环境下无法选择系统目录。请选择备份数据中的 JSON 文件上传。<br>
+      <b>提示</b>: 在 macOS 原生 App 中请使用「选择备份目录」功能。
+    </div>
+  `;
+  showModal({
+    icon: 'ℹ️',
+    iconKind: 'info',
+    title: '备份/恢复 — 浏览器环境',
+    body: html,
+    confirmText: '选择文件',
+    cancelText: '取消',
+    confirmKind: 'primary',
+  }).then(confirmed => {
+    if (!confirmed) {
+      resolve(null);
+      return;
+    }
+    // 打开文件选择器
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.json';
+    input.onchange = async () => {
+      const files = Array.from(input.files);
+      if (!files.length) {
+        resolve(null);
+        return;
+      }
+      const fileContents = {};
+      for (const file of files) {
+        fileContents[file.name] = await file.text();
+      }
+      resolve({ files: fileContents, _browser: true });
+    };
+    input.click();
   });
 }
 
@@ -346,7 +368,16 @@ async function datamgmtRestore() {
     let res;
     if (dir._browser) {
       // 浏览器环境: 直接上传文件
-      if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+      const ok = await showModal({
+        icon: '⚠️',
+        iconKind: 'warn',
+        title: '确认上传文件覆盖数据？',
+        body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+        confirmText: '确认上传',
+        cancelText: '取消',
+        confirmKind: 'danger',
+      });
+      if (!ok) return;
       btn.textContent = '⏳ 上传中…';
       btn.disabled = true;
       res = await api('POST', '/api/upload', { files: dir.files });

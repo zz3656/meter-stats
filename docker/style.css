@@ -634,6 +634,10 @@
     pointer-events: none;
     transition: opacity 0.15s;
   }
+  /* 确认弹窗(z-index最高,覆盖所有其他模态框) */
+  #modal-backdrop {
+    z-index: 2000;
+  }
   .modal-backdrop.show {
     opacity: 1;
     pointer-events: auto;

@@ -107,6 +107,8 @@ function switchAdminPage(page) {
   if (target) { target.style.display = 'block'; target.classList.add('active'); }
   const btn = document.querySelector(`#admin-modal-backdrop .tab-btn[data-page="${page}"]`);
   if (btn) btn.classList.add('active');
+  // 切换到数据页时加载备份配置
+  if (page === 'data') loadBackupConfig();
 }
 
 // ===== 用户管理 =====
@@ -262,7 +264,8 @@ function loadBackupStatus() {
     .then(r => r.json()).then(res => {
       const cb = document.getElementById('admin-auto-backup-toggle');
       if (cb) cb.checked = res.auto_backup !== false;
-      document.getElementById('backup-count').textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
+      const countEl = document.getElementById('backup-count');
+      if (countEl) countEl.textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
       if (cb) cb.addEventListener('change', e => {
         fetch('/api/admin/auto-backup' + getAuthParam(), {
           method: 'PUT',
@@ -276,6 +279,7 @@ function loadBackupStatus() {
 // 备份/恢复 (浏览器环境用 app.js 中的 browser file picker)
 async function adminPickBackupDir() {
   return new Promise(resolve => {
+    // 尝试 swift bridge
     const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
     if (!hasBridge) { resolve(null); return; }
     window.__backupDirChosen = dir => {
@@ -306,69 +310,161 @@ function browserPickFiles() {
   });
 }
 
-async function adminBackup() {
-  const dir = await adminPickBackupDir();
-  if (dir && dir._browser) {
-    // 浏览器: 下载文件
-    showAlert('正在下载数据文件…', 'info');
-    for (const [name, content] of Object.entries(dir.files)) {
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      await new Promise(r => setTimeout(r, 200));
+// ===== 备份目录设置 =====
+async function loadBackupConfig() {
+  try {
+    const res = await api('GET', '/api/admin/backup-config');
+    if (res.ok) {
+      updateBackupDirDisplay(res.backup_dir, res.backup_dir_label, res.data_dir);
     }
-    showAlert('✅ 数据文件已下载', 'success');
+  } catch (e) {
+    console.warn('加载备份目录配置失败:', e);
+  }
+}
+
+function updateBackupDirDisplay(backupDir, backupDirLabel, dataDir) {
+  // 后台管理页
+  const adminDisplay = document.getElementById('backup-dir-display');
+  if (adminDisplay) {
+    if (backupDir) {
+      adminDisplay.textContent = `当前: ${backupDirLabel || backupDir}`;
+      document.getElementById('clear-backup-dir-btn').style.display = '';
+      document.getElementById('pick-backup-dir-btn').textContent = '📁 更改备份目录';
+    } else {
+      // 显示实际数据目录路径
+      const displayText = dataDir ? `当前: 默认 (${dataDir}/backup/)` : '当前: 默认 (backup/ 目录)';
+      adminDisplay.textContent = displayText;
+      document.getElementById('clear-backup-dir-btn').style.display = 'none';
+      document.getElementById('pick-backup-dir-btn').textContent = '📁 选择备份目录';
+    }
+  }
+  // 数据管理弹窗
+  const mgmtDisplay = document.getElementById('datamgmt-backup-dir-display');
+  if (mgmtDisplay) {
+    if (backupDir) {
+      mgmtDisplay.textContent = backupDirLabel || backupDir;
+    } else {
+      const displayText = dataDir ? `当前: 默认 (${dataDir}/backup/)` : '当前: 默认 (backup/ 目录)';
+      mgmtDisplay.textContent = displayText;
+    }
+  }
+}
+
+async function pickBackupDirectory() {
+  // 尝试 Swift bridge (macOS 原生 app)
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir) {
+    return new Promise(resolve => {
+      window.__backupDirChosen = dir => {
+        window.__backupDirChosen = null;
+        if (dir && dir._browser) {
+          // 浏览器环境: 只能下载,不支持选择目录
+          showAlert('浏览器环境暂不支持选择目录备份', 'info');
+          resolve(null);
+          return;
+        }
+        if (dir && dir.path) {
+          saveBackupDirConfig(dir.path, dir.label || '');
+        }
+        resolve(dir);
+      };
+      window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
+    });
+  }
+
+  // Docker / Web 浏览器环境: 提示备份目录默认为 data_dir/backup/
+  // 用户可以选择自定义路径,或保持默认
+  const res = await api('GET', '/api/admin/backup-config');
+  const currentDataDir = res.data_dir || '';
+  const defaultPath = `${currentDataDir}/backup/`;
+
+  const html = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+      📂 Docker 环境下备份目录默认为: <code>${defaultPath}</code><br><br>
+      如需自定义备份目录,请输入路径和显示名称:
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px;display:block;margin-bottom:4px;">路径</label>
+      <input id="backup-dir-input-path" class="field-control" style="width:100%;" placeholder="/path/to/backup" value="${defaultPath}">
+    </div>
+    <div>
+      <label style="font-size:12px;display:block;margin-bottom:4px;">显示名称 (可选)</label>
+      <input id="backup-dir-input-label" class="field-control" style="width:100%;" placeholder="My Backups">
+    </div>
+  `;
+  const confirmed = await showModal({
+    icon: '📁',
+    iconKind: 'info',
+    title: '选择备份目录',
+    body: html,
+    confirmText: '确认',
+    cancelText: '取消',
+    confirmKind: 'primary',
+  });
+  if (!confirmed) return;
+
+  const path = document.getElementById('backup-dir-input-path')?.value?.trim();
+  const label = document.getElementById('backup-dir-input-label')?.value?.trim() || '';
+  if (!path) return;
+  await saveBackupDirConfig(path, label);
+}
+
+async function clearBackupDirectory() {
+  const ok = await showModal({
+    icon: '⚠️',
+    iconKind: 'warn',
+    title: '确认清除备份目录设置？',
+    body: '清除后将恢复为默认行为（备份到数据目录的 backup/ 子目录）。',
+    confirmText: '确认清除',
+    cancelText: '取消',
+    confirmKind: 'danger',
+  });
+  if (!ok) return;
+  const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
+  if (res.ok) {
+    showAlert('✅ 已清除备份目录设置', 'success');
+    updateBackupDirDisplay(null, null, res.data_dir);
+  } else {
+    showAlert('清除失败: ' + (res.error || '未知错误'), 'error');
+  }
+}
+
+async function saveBackupDirConfig(path, label) {
+  const res = await api('PUT', '/api/admin/backup-config', {
+    backup_dir: path,
+    backup_dir_label: label,
+  });
+  if (res.ok) {
+    showAlert(`✅ 备份目录已设置为: ${path}`, 'success');
+    updateBackupDirDisplay(res.backup_dir, res.backup_dir_label, res.data_dir);
+  } else {
+    showAlert('设置失败: ' + (res.error || '未知错误'), 'error');
+  }
+}
+
+async function adminBackup() {
+  showAlert('正在备份数据…', 'info');
+  const res = await api('POST', '/api/backup');
+  if (!res.ok) {
+    showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
   }
-  if (!dir) {
-    // 浏览器/Docker 环境没有 Swift bridge: 从服务器获取所有数据并下载
-    showAlert('正在从服务器获取数据…', 'info');
-    try {
-      const res = await api('GET', '/api/admin/data-files');
-      if (!res.ok || !res.files) {
-        showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
-        return;
-      }
-      const fileNames = Object.keys(res.files);
-      if (!fileNames.length) {
-        showAlert('当前没有可备份的数据文件', 'error');
-        return;
-      }
-      showAlert('正在下载数据文件…', 'info');
-      for (const [name, content] of Object.entries(res.files)) {
-        const blob = new Blob([content], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        await new Promise(r => setTimeout(r, 200));
-      }
-      showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
-      return;
-    } catch (e) {
-      showAlert('备份失败: ' + e.message, 'error');
-      return;
-    }
-  }
-  const res = await api('POST', '/api/backup', dir ? { target_dir: dir } : {});
-  showAlert(`数据已备份到 ${res.backup_dir || 'backup/'} 目录`, res.ok ? 'success' : 'error');
+  showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
 }
 
 async function adminRestore() {
   let dir = await adminPickBackupDir();
   if (dir && dir._browser) {
     // 浏览器: 上传文件
-    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？')) return;
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认上传文件覆盖数据？',
+      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+      confirmText: '确认上传',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     const res = await api('POST', '/api/upload', { files: dir.files });
     if (res.ok) {
       showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
@@ -383,7 +479,16 @@ async function adminRestore() {
     // 浏览器/Docker 环境没有 Swift bridge: 提示用浏览器选择文件
     dir = await browserPickFiles();
     if (!dir) { showAlert('未选择文件', 'info'); return; }
-    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认上传文件覆盖数据？',
+      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+      confirmText: '确认上传',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
   }
   if (dir._browser) {
     const res = await api('POST', '/api/upload', { files: dir.files });
@@ -397,7 +502,16 @@ async function adminRestore() {
     return;
   }
   // 原生环境: 用目录路径恢复
-  if (!confirm(`确认从 ${dir} 恢复数据? 恢复前会自动备份当前数据。`)) return;
+  const ok2 = await showModal({
+    icon: '⚠️',
+    iconKind: 'warn',
+    title: '确认恢复数据？',
+    body: `确认从 <b>${dir}</b> 恢复数据？<br>恢复前会自动备份当前数据。`,
+    confirmText: '确认恢复',
+    cancelText: '取消',
+    confirmKind: 'danger',
+  });
+  if (!ok2) return;
   const res = await api('POST', '/api/restore', { source_dir: dir });
   if (!res.ok) { showAlert('恢复失败: ' + (res.error || '未知错误'), 'error'); return; }
   showAlert(`✅ 已恢复 ${res.restored.length} 个文件; 已备份到 ${res.pre_backup}`, 'success');

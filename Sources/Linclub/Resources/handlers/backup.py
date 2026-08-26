@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from utils import send_json, read_body
-from storage import backup_data, DATA_FILES, log
+from storage import backup_data, DATA_FILES
 
 
 def _get_data_paths():
@@ -46,8 +46,9 @@ def handle_post_backup(handler):
     """POST /api/backup
 
     body 可选: { "target_dir": "/用户/选择的/目录" }
-    - 带 target_dir:备份到 所选目录/YYYYMMDD_HHMMSS/(用户自选备份目录)
-    - 不带:         备份到 数据目录/backup/YYYYMMDD_HHMMSS/(默认)
+    - 带 target_dir: 备份到 所选目录/YYYYMMDD_HHMMSS/(用户自选备份目录)
+    - 不带:          优先使用 settings 中的 backup_dir 配置；
+                     若未配置则备份到 数据目录/backup/YYYYMMDD_HHMMSS/(默认)
     备份目录以「日期时间」命名,与自动备份格式一致。
     """
     body = read_body(handler)
@@ -57,6 +58,14 @@ def handle_post_backup(handler):
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
+
+    # 优先使用 settings 中的 backup_dir 配置
+    if target_dir is None:
+        from handlers.settings import get_settings
+        settings = get_settings()
+        custom_dir = settings.get("backup_dir")
+        if custom_dir:
+            target_dir = custom_dir
 
     if target_dir:
         target = Path(target_dir).expanduser()
@@ -68,11 +77,17 @@ def handle_post_backup(handler):
     else:
         target = None  # 默认走数据目录/backup
 
-    result = backup_data(data_dir.parent, force=True, target_parent=target)
+    try:
+        result = backup_data(data_dir.parent, force=True, target_parent=target)
+    except Exception as e:
+        send_json(handler, 200, {"ok": False, "error": f"备份失败: {e}"})
+        return
     if result:
         send_json(handler, 200, {"ok": True, "backup_dir": str(result)})
     else:
-        send_json(handler, 200, {"ok": True, "backup_dir": str(target or (data_dir / "backup"))})
+        # force=True 时 backup_data 理论上不应返回 None
+        # 如果返回 None，说明出现了未预料的错误
+        send_json(handler, 200, {"ok": False, "error": "备份失败：无法创建备份目录（可能是权限问题或磁盘空间不足）"})
 
 
 def handle_post_restore(handler):
@@ -83,8 +98,6 @@ def handle_post_restore(handler):
     ⚠️ 安全措施:恢复前先把当前数据自动备份一份(可回滚),再复制备份文件覆盖。
     只恢复存在的 .json 数据文件,不删除任何当前数据。
     """
-    from storage import DATA_FILES, log
-
     body = read_body(handler)
     source_dir = (body or {}).get("source_dir") or ""
     src = Path(source_dir).expanduser()
@@ -134,7 +147,6 @@ def handle_post_upload(handler):
 
     上传后直接覆盖 /data/ 中对应的数据文件。
     """
-    from storage import DATA_FILES, log
     import shutil
     import tempfile
     import os

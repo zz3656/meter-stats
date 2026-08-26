@@ -264,7 +264,8 @@ function loadBackupStatus() {
     .then(r => r.json()).then(res => {
       const cb = document.getElementById('admin-auto-backup-toggle');
       if (cb) cb.checked = res.auto_backup !== false;
-      document.getElementById('backup-count').textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
+      const countEl = document.getElementById('backup-count');
+      if (countEl) countEl.textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
       if (cb) cb.addEventListener('change', e => {
         fetch('/api/admin/auto-backup' + getAuthParam(), {
           method: 'PUT',
@@ -408,7 +409,16 @@ async function pickBackupDirectory() {
 }
 
 async function clearBackupDirectory() {
-  if (!confirm('确认清除备份目录设置？清除后将恢复为默认行为。')) return;
+  const ok = await showModal({
+    icon: '⚠️',
+    iconKind: 'warn',
+    title: '确认清除备份目录设置？',
+    body: '清除后将恢复为默认行为（备份到数据目录的 backup/ 子目录）。',
+    confirmText: '确认清除',
+    cancelText: '取消',
+    confirmKind: 'danger',
+  });
+  if (!ok) return;
   const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
   if (res.ok) {
     showAlert('✅ 已清除备份目录设置', 'success');
@@ -445,7 +455,16 @@ async function adminRestore() {
   let dir = await adminPickBackupDir();
   if (dir && dir._browser) {
     // 浏览器: 上传文件
-    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？')) return;
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认上传文件覆盖数据？',
+      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+      confirmText: '确认上传',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
     const res = await api('POST', '/api/upload', { files: dir.files });
     if (res.ok) {
       showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
@@ -460,7 +479,16 @@ async function adminRestore() {
     // 浏览器/Docker 环境没有 Swift bridge: 提示用浏览器选择文件
     dir = await browserPickFiles();
     if (!dir) { showAlert('未选择文件', 'info'); return; }
-    if (!confirm('确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。')) return;
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认上传文件覆盖数据？',
+      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
+      confirmText: '确认上传',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
   }
   if (dir._browser) {
     const res = await api('POST', '/api/upload', { files: dir.files });
@@ -474,7 +502,16 @@ async function adminRestore() {
     return;
   }
   // 原生环境: 用目录路径恢复
-  if (!confirm(`确认从 ${dir} 恢复数据? 恢复前会自动备份当前数据。`)) return;
+  const ok2 = await showModal({
+    icon: '⚠️',
+    iconKind: 'warn',
+    title: '确认恢复数据？',
+    body: `确认从 <b>${dir}</b> 恢复数据？<br>恢复前会自动备份当前数据。`,
+    confirmText: '确认恢复',
+    cancelText: '取消',
+    confirmKind: 'danger',
+  });
+  if (!ok2) return;
   const res = await api('POST', '/api/restore', { source_dir: dir });
   if (!res.ok) { showAlert('恢复失败: ' + (res.error || '未知错误'), 'error'); return; }
   showAlert(`✅ 已恢复 ${res.restored.length} 个文件; 已备份到 ${res.pre_backup}`, 'success');
