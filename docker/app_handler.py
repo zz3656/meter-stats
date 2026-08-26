@@ -100,6 +100,12 @@ class Handler(BaseHTTPRequestHandler):
             mime = "application/javascript; charset=utf-8"
         elif file_path.suffix == ".json":
             mime = "application/json; charset=utf-8"
+        elif file_path.suffix == ".svg":
+            mime = "image/svg+xml; charset=utf-8"
+        elif file_path.suffix == ".png":
+            mime = "image/png"
+        elif file_path.suffix == ".ico":
+            mime = "image/x-icon"
 
         body = file_path.read_bytes()
         self.send_response(200)
