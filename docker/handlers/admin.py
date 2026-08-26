@@ -1,6 +1,7 @@
 """认证 + 后台管理 API handler。
 """
 from __future__ import annotations
+import datetime
 import os
 import secrets
 from pathlib import Path
@@ -211,14 +212,87 @@ def handle_get_roles(handler):
 # ============ 数据管理 ============
 
 def handle_get_backup_status(handler):
-    """GET /api/admin/backup-status → {auto_backup, backup_count}"""
+    """GET /api/admin/backup-status → {auto_backup, backup_count, backups: [...]}"""
+    import zipfile
+    import io
     from storage import get_data_dir
     settings = get_settings()
     auto_backup = settings.get("auto_backup", True)
     data_dir = get_data_dir()
     backup_dir = data_dir / "backup"
-    count = len([d for d in backup_dir.iterdir() if d.is_dir()]) if backup_dir.exists() else 0
-    send_json(handler, 200, {"auto_backup": auto_backup, "backup_count": count, "data_dir": str(data_dir)})
+    
+    # 列出所有备份目录（只返回 count 给旧前端兼容）
+    backup_entries = []
+    if backup_dir.exists():
+        for d in sorted(backup_dir.iterdir(), reverse=True):
+            if d.is_dir():
+                # 统计备份中的文件数量和总大小
+                file_count = 0
+                total_size = 0
+                try:
+                    for f in d.iterdir():
+                        if f.is_file():
+                            file_count += 1
+                            total_size += f.stat().st_size
+                except OSError:
+                    pass
+                backup_entries.append({
+                    "name": d.name,
+                    "file_count": file_count,
+                    "total_size": total_size,
+                    "created_at": datetime.utcfromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                })
+    
+    send_json(handler, 200, {
+        "auto_backup": auto_backup,
+        "backup_count": len(backup_entries),
+        "data_dir": str(data_dir),
+        "backups": backup_entries,
+    })
+
+
+def handle_get_backup_download(handler):
+    """GET /api/admin/backup-download?dir=YYYYMMDD_HHMMSS → 下载 .zip 文件"""
+    import zipfile
+    import io
+    from storage import get_data_dir
+    from urllib.parse import parse_qs, urlparse
+    
+    data_dir = get_data_dir()
+    backup_dir = data_dir / "backup"
+    
+    qs = parse_qs(urlparse(handler.path).query)
+    dir_name = qs.get("dir", [None])[0]
+    
+    if not dir_name:
+        send_json(handler, 400, {"error": "缺少 dir 参数"})
+        return
+    
+    src = backup_dir / dir_name
+    if not src.is_dir():
+        send_json(handler, 404, {"error": f"备份目录不存在: {dir_name}"})
+        return
+    
+    # 创建 zip 内存流
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for f in src.rglob('*'):
+            if f.is_file():
+                zf.write(f, f.name)
+    
+    zip_buffer.seek(0)
+    zip_data = zip_buffer.read()
+    
+    # 设置响应头
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/zip")
+    handler.send_header("Content-Disposition", f'attachment; filename="linclub-backup-{dir_name}.zip"')
+    handler.send_header("Content-Length", str(len(zip_data)))
+    from utils import CORS
+    for k, v in CORS.items():
+        handler.send_header(k, v)
+    handler.end_headers()
+    handler.wfile.write(zip_data)
 
 
 def handle_put_auto_backup(handler):

@@ -232,6 +232,8 @@ function openDataMgmtModal() {
   initAutoBackupToggle();
   // 加载备份目录配置
   loadBackupConfig();
+  // 加载备份列表
+  loadBackupList();
   document.getElementById('datamgmt-modal-backdrop').classList.add('show');
 }
 function closeDataMgmtModal() {
@@ -253,6 +255,8 @@ async function datamgmtBackup() {
     }
     btn.textContent = '✅ 已备份';
     showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
+    // 备份成功后刷新列表
+    setTimeout(() => loadBackupList(), 500);
   } catch (e) {
     btn.textContent = original;
     showAlert('备份失败: ' + e.message, 'error');

@@ -30,6 +30,7 @@ from handlers.admin import (
     handle_get_roles,
     handle_get_backup_status, handle_put_auto_backup,
     handle_get_backup_config, handle_put_backup_config,
+    handle_get_backup_download,
 )
 
 _GET_ROUTES = {
@@ -83,6 +84,7 @@ _GET_ADMIN = {
     "/api/admin/meter": handle_get_meter_settings,
     "/api/admin/roles": handle_get_roles,
     "/api/admin/backup-status": handle_get_backup_status,
+    "/api/admin/backup-download": handle_get_backup_download,
     "/api/admin/data-files": handle_get_data_files,
     "/api/admin/backup-config": handle_get_backup_config,
 }

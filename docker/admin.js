@@ -273,7 +273,77 @@ function loadBackupStatus() {
           body: JSON.stringify({ enabled: e.target.checked }),
         }).then(() => showAlert(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
       }, { once: true });
+      // 渲染备份列表
+      renderBackupList(res.backups || []);
     }).catch(() => {});
+}
+
+function loadBackupList() {
+  loadBackupStatus();
+}
+
+function renderBackupList(backups) {
+  // 渲染后台管理页面的备份列表
+  const adminList = document.getElementById('backup-list');
+  if (adminList) {
+    if (!backups || backups.length === 0) {
+      adminList.innerHTML = '暂无备份';
+    } else {
+      let html = '';
+      backups.forEach(b => {
+        const sizeStr = formatBytes(b.total_size || 0);
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="color:var(--text);font-weight:510;">${b.name}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+            <span style="color:var(--text-muted);margin-left:8px;font-size:10px;">${b.created_at}</span>
+          </div>
+          <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
+        </div>`;
+      });
+      adminList.innerHTML = html;
+    }
+  }
+  // 渲染数据管理弹窗的备份列表
+  const dmList = document.getElementById('datamgmt-backup-list');
+  if (dmList) {
+    if (!backups || backups.length === 0) {
+      dmList.innerHTML = '暂无备份';
+    } else {
+      let html = '';
+      backups.forEach(b => {
+        const sizeStr = formatBytes(b.total_size || 0);
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="color:var(--text);font-weight:510;">${b.name}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+          </div>
+          <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
+        </div>`;
+      });
+      dmList.innerHTML = html;
+    }
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function downloadBackup(dirName) {
+  // 下载备份 zip
+  const token = localStorage.getItem('linclub_token');
+  const url = `/api/admin/backup-download?dir=${encodeURIComponent(dirName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 // 备份/恢复 (浏览器环境用 app.js 中的 browser file picker)
@@ -449,6 +519,8 @@ async function adminBackup() {
     return;
   }
   showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
+  // 备份成功后刷新列表
+  setTimeout(() => loadBackupList(), 500);
 }
 
 async function adminRestore() {
