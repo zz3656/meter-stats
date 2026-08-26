@@ -243,33 +243,14 @@ async function datamgmtBackup() {
   btn.textContent = '⏳ 备份中…';
   btn.disabled = true;
   try {
-    // 浏览器/Docker 环境: 从服务器获取所有数据文件,然后下载
-    showAlert('正在从服务器获取数据…', 'info');
-    const res = await api('GET', '/api/admin/data-files');
-    if (!res.ok || !res.files) {
-      showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
+    showAlert('正在备份数据…', 'info');
+    const res = await api('POST', '/api/backup');
+    if (!res.ok) {
+      showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
       return;
     }
-    showAlert('正在下载数据文件…', 'info');
-    const fileNames = Object.keys(res.files);
-    if (!fileNames.length) {
-      showAlert('当前没有可备份的数据文件', 'error');
-      return;
-    }
-    for (const [name, content] of Object.entries(res.files)) {
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      await new Promise(r => setTimeout(r, 200));
-    }
-    btn.textContent = '✅ 已下载';
-    showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
+    btn.textContent = '✅ 已备份';
+    showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
   } catch (e) {
     btn.textContent = original;
     showAlert('备份失败: ' + e.message, 'error');

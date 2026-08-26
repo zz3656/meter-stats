@@ -308,61 +308,13 @@ function browserPickFiles() {
 }
 
 async function adminBackup() {
-  const dir = await adminPickBackupDir();
-  if (dir && dir._browser) {
-    // 浏览器: 下载文件
-    showAlert('正在下载数据文件…', 'info');
-    for (const [name, content] of Object.entries(dir.files)) {
-      const blob = new Blob([content], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = name;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      await new Promise(r => setTimeout(r, 200));
-    }
-    showAlert('✅ 数据文件已下载', 'success');
+  showAlert('正在备份数据…', 'info');
+  const res = await api('POST', '/api/backup');
+  if (!res.ok) {
+    showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
   }
-  if (!dir) {
-    // 浏览器/Docker 环境没有 Swift bridge: 从服务器获取所有数据并下载
-    showAlert('正在从服务器获取数据…', 'info');
-    try {
-      const res = await api('GET', '/api/admin/data-files');
-      if (!res.ok || !res.files) {
-        showAlert('备份失败: ' + (res.error || '获取数据失败'), 'error');
-        return;
-      }
-      const fileNames = Object.keys(res.files);
-      if (!fileNames.length) {
-        showAlert('当前没有可备份的数据文件', 'error');
-        return;
-      }
-      showAlert('正在下载数据文件…', 'info');
-      for (const [name, content] of Object.entries(res.files)) {
-        const blob = new Blob([content], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = name;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        await new Promise(r => setTimeout(r, 200));
-      }
-      showAlert(`✅ 已下载 ${fileNames.length} 个数据文件`, 'success');
-      return;
-    } catch (e) {
-      showAlert('备份失败: ' + e.message, 'error');
-      return;
-    }
-  }
-  const res = await api('POST', '/api/backup', dir ? { target_dir: dir } : {});
-  showAlert(`数据已备份到 ${res.backup_dir || 'backup/'} 目录`, res.ok ? 'success' : 'error');
+  showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
 }
 
 async function adminRestore() {
