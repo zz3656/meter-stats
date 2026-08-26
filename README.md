@@ -26,15 +26,50 @@
 
 ### 方式一：Docker 部署（推荐 — 跨平台，无需 macOS）
 
+**一键启动：**
+
 ```bash
-# 启动
 git clone https://github.com/linclub/linclub-electricity-stats.git
 cd linclub-electricity-stats
 docker compose up -d
-
-# 访问 http://localhost:8765
-# 默认管理员: admin / admin123（⚠️ 请登录后立即修改密码）
 ```
+
+打开浏览器访问 **http://localhost:8765**，默认管理员：`admin` / `admin123`（⚠️ 请登录后立即修改密码）
+
+**docker-compose.yml：**
+
+```yaml
+services:
+  linclub:
+    image: zz3656/linclub-electricity-stats:latest
+    container_name: linclub
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/data
+    environment:
+      - TZ=Asia/Shanghai
+      - LINCLUB_PORT=8765
+      - LINCLUB_DATA_DIR=/data
+      - LINCLUB_BIND=0.0.0.0
+      - LINCLUB_INITIAL_PASS=admin123    # ⚠️ 请修改！
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+```
+
+**环境变量说明：**
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `LINCLUB_PORT` | `8765` | 服务端口 |
+| `LINCLUB_DATA_DIR` | `/data` | 数据持久化目录 |
+| `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |
+| `LINCLUB_INITIAL_PASS` | `admin123` | 初始管理员密码 |
 
 详细文档：[README.Docker.md](README.Docker.md)
 
