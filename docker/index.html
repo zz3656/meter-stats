@@ -547,6 +547,13 @@
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">每次启动自动备份到 backup/ 目录</div>
         </div>
       </div>
+      <!-- 备份目录信息 -->
+      <div style="margin-bottom:12px;padding:10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);">
+        <div style="font-size:12px;font-weight:510;color:var(--text);margin-bottom:4px;">💾 备份目录</div>
+        <div id="datamgmt-backup-dir-display" style="font-size:11px;color:var(--text-muted);">
+          当前: 默认 (数据目录/backup/)
+        </div>
+      </div>
       <!-- 备份按钮 -->
       <div style="margin-bottom:12px;">
         <button type="button" class="btn btn-danger btn-sm" id="datamgmt-backup-btn" onclick="datamgmtBackup()" style="width:100%;">💾 手动备份</button>
@@ -556,7 +563,7 @@
         <button type="button" class="btn btn-danger btn-sm" id="datamgmt-restore-btn" onclick="datamgmtRestore()" style="width:100%;">↩️ 恢复数据</button>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.6;">
-        💡 浏览器环境会弹出文件选择器选择本地 JSON 文件上传恢复
+        💡 浏览器环境恢复数据会弹出文件选择器选择本地 JSON 文件上传
       </div>
     </div>
     <div class="modal-actions">
@@ -627,12 +634,26 @@
             <div style="font-size:11px;color:var(--text-muted);">每次启动自动备份到 backup/ 目录</div>
           </div>
         </div>
+        <!-- 备份目录设置 -->
+        <div style="margin-bottom:12px;padding:10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);">
+          <div style="font-size:12px;font-weight:510;color:var(--text);margin-bottom:6px;">💾 备份目录设置</div>
+          <div id="backup-dir-display" style="font-size:11px;color:var(--text-muted);margin-bottom:8px;">
+            当前: 默认 (数据目录/backup/)
+          </div>
+          <div style="display:flex;gap:6px;">
+            <button class="btn btn-secondary btn-sm" onclick="pickBackupDirectory()" style="flex:1;" id="pick-backup-dir-btn">📁 选择备份目录</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearBackupDirectory()" style="flex:1;display:none;" id="clear-backup-dir-btn">🗑️ 清除设置</button>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:6px;line-height:1.5;">
+            💡 设置后,自动备份和手动备份都备份到该目录;未设置时手动备份下载文件到本地
+          </div>
+        </div>
         <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
-          <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;">💾 手动备份</button>
+          <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;" id="admin-backup-btn">💾 手动备份</button>
           <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;">↩️ 恢复数据</button>
         </div>
         <div style="font-size:10px;color:var(--text-muted);line-height:1.6;margin-top:4px;">
-          💡 浏览器环境会弹出文件选择器，可从本地 JSON 文件恢复数据<br>
+          💡 浏览器环境恢复数据会弹出文件选择器，可从本地 JSON 文件恢复<br>
           恢复前会自动备份当前数据,可随时回滚
       </div>
 

@@ -107,6 +107,8 @@ function switchAdminPage(page) {
   if (target) { target.style.display = 'block'; target.classList.add('active'); }
   const btn = document.querySelector(`#admin-modal-backdrop .tab-btn[data-page="${page}"]`);
   if (btn) btn.classList.add('active');
+  // 切换到数据页时加载备份配置
+  if (page === 'data') loadBackupConfig();
 }
 
 // ===== 用户管理 =====
@@ -305,6 +307,95 @@ function browserPickFiles() {
     };
     input.click();
   });
+}
+
+// ===== 备份目录设置 =====
+async function loadBackupConfig() {
+  try {
+    const res = await api('GET', '/api/admin/backup-config');
+    if (res.ok) {
+      updateBackupDirDisplay(res.backup_dir, res.backup_dir_label);
+    }
+  } catch (e) {
+    console.warn('加载备份目录配置失败:', e);
+  }
+}
+
+function updateBackupDirDisplay(backupDir, backupDirLabel) {
+  // 后台管理页
+  const adminDisplay = document.getElementById('backup-dir-display');
+  if (adminDisplay) {
+    if (backupDir) {
+      adminDisplay.textContent = `当前: ${backupDirLabel || backupDir}`;
+      document.getElementById('clear-backup-dir-btn').style.display = '';
+      document.getElementById('pick-backup-dir-btn').textContent = '📁 更改备份目录';
+    } else {
+      adminDisplay.textContent = '当前: 默认 (数据目录/backup/)';
+      document.getElementById('clear-backup-dir-btn').style.display = 'none';
+      document.getElementById('pick-backup-dir-btn').textContent = '📁 选择备份目录';
+    }
+  }
+  // 数据管理弹窗
+  const mgmtDisplay = document.getElementById('datamgmt-backup-dir-display');
+  if (mgmtDisplay) {
+    if (backupDir) {
+      mgmtDisplay.textContent = backupDirLabel || backupDir;
+    } else {
+      mgmtDisplay.textContent = '当前: 默认 (数据目录/backup/)';
+    }
+  }
+}
+
+async function pickBackupDirectory() {
+  // 尝试 Swift bridge (macOS 原生 app)
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir) {
+    return new Promise(resolve => {
+      window.__backupDirChosen = dir => {
+        window.__backupDirChosen = null;
+        if (dir && dir._browser) {
+          // 浏览器环境: 只能下载,不支持选择目录
+          showAlert('浏览器环境暂不支持选择目录备份', 'info');
+          resolve(null);
+          return;
+        }
+        if (dir && dir.path) {
+          saveBackupDirConfig(dir.path, dir.label || '');
+        }
+        resolve(dir);
+      };
+      window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
+    });
+  }
+
+  // 浏览器环境: 用 prompt 输入路径 (Docker/飞牛)
+  const input = prompt('请输入备份目录路径 (例如 /volume1/backups):', '');
+  if (!input || !input.trim()) return;
+  const label = prompt('请输入备份目录显示名称 (可选):', '');
+  await saveBackupDirConfig(input.trim(), (label || '').trim());
+}
+
+async function clearBackupDirectory() {
+  if (!confirm('确认清除备份目录设置？清除后将恢复为默认行为。')) return;
+  const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
+  if (res.ok) {
+    showAlert('✅ 已清除备份目录设置', 'success');
+    updateBackupDirDisplay(null, null);
+  } else {
+    showAlert('清除失败: ' + (res.error || '未知错误'), 'error');
+  }
+}
+
+async function saveBackupDirConfig(path, label) {
+  const res = await api('PUT', '/api/admin/backup-config', {
+    backup_dir: path,
+    backup_dir_label: label,
+  });
+  if (res.ok) {
+    showAlert(`✅ 备份目录已设置为: ${path}`, 'success');
+    updateBackupDirDisplay(res.backup_dir, res.backup_dir_label);
+  } else {
+    showAlert('设置失败: ' + (res.error || '未知错误'), 'error');
+  }
 }
 
 async function adminBackup() {

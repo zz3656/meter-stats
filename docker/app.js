@@ -230,6 +230,8 @@ function initAutoBackupToggle() {
 function openDataMgmtModal() {
   // 初始化自动备份开关
   initAutoBackupToggle();
+  // 加载备份目录配置
+  loadBackupConfig();
   document.getElementById('datamgmt-modal-backdrop').classList.add('show');
 }
 function closeDataMgmtModal() {
@@ -259,9 +261,6 @@ async function datamgmtBackup() {
     setTimeout(() => { btn.textContent = original; }, 2000);
   }
 }
-
-// 调用 Swift 原生目录选择器(WKWebView 桥) → Promise<路径|null>
-// 非 .app 环境(浏览器/测试)无桥 → 显示浏览器文件选择器
 function pickBackupDir() {
   return new Promise(resolve => {
     const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;

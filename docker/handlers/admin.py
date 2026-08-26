@@ -229,3 +229,46 @@ def handle_put_auto_backup(handler):
     settings["auto_backup"] = bool((body or {}).get("enabled", True))
     save_settings(settings)
     send_json(handler, 200, {"ok": True, "auto_backup": settings["auto_backup"]})
+
+
+# ============ 备份目录配置 ============
+
+def handle_get_backup_config(handler):
+    """GET /api/admin/backup-config → {backup_dir: "/path" | null, backup_dir_label: "..."}"""
+    settings = get_settings()
+    backup_dir = settings.get("backup_dir")
+    backup_dir_label = settings.get("backup_dir_label")
+    send_json(handler, 200, {
+        "ok": True,
+        "backup_dir": backup_dir,
+        "backup_dir_label": backup_dir_label,
+    })
+
+
+def handle_put_backup_config(handler):
+    """PUT /api/admin/backup-config → {backup_dir: "/path" | null}
+
+    - {backup_dir: "/path", backup_dir_label: "My Backups"} → 设置备份目录
+    - {backup_dir: null} → 清除备份目录（恢复默认行为）
+    """
+    body = read_body(handler)
+    settings = get_settings()
+
+    new_dir = (body or {}).get("backup_dir")
+    if new_dir is None:
+        # 清除备份目录设置
+        settings.pop("backup_dir", None)
+        settings.pop("backup_dir_label", None)
+    elif new_dir:
+        # 设置备份目录
+        label = (body or {}).get("backup_dir_label", "")
+        settings["backup_dir"] = str(new_dir)
+        settings["backup_dir_label"] = label
+    # 如果 new_dir is None 但被显式传递（某些情况），不做任何事
+
+    save_settings(settings)
+    send_json(handler, 200, {
+        "ok": True,
+        "backup_dir": settings.get("backup_dir"),
+        "backup_dir_label": settings.get("backup_dir_label"),
+    })

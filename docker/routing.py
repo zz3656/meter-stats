@@ -29,6 +29,7 @@ from handlers.admin import (
     handle_get_meter_settings, handle_put_meter_settings,
     handle_get_roles,
     handle_get_backup_status, handle_put_auto_backup,
+    handle_get_backup_config, handle_put_backup_config,
 )
 
 _GET_ROUTES = {
@@ -63,6 +64,7 @@ _PUT_PREFIX = {
     "/api/admin/users": handle_put_users,
     "/api/admin/meter": handle_put_meter_settings,
     "/api/admin/auto-backup": handle_put_auto_backup,
+    "/api/admin/backup-config": handle_put_backup_config,
 }
 
 _DELETE_PREFIX = {
@@ -82,6 +84,7 @@ _GET_ADMIN = {
     "/api/admin/roles": handle_get_roles,
     "/api/admin/backup-status": handle_get_backup_status,
     "/api/admin/data-files": handle_get_data_files,
+    "/api/admin/backup-config": handle_get_backup_config,
 }
 
 def _match_prefix(paths, path_clean):
