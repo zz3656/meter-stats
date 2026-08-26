@@ -38,4 +38,4 @@ jobs:
           push: true
           tags: |
             zz3656/linclub-electricity-stats:latest
-            zz3656/linclub-electricity-stats:v0.1.0
+            zz3656/linclub-electricity-stats:v0.1.1
