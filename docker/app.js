@@ -263,18 +263,60 @@ async function datamgmtBackup() {
 }
 function pickBackupDir() {
   return new Promise(resolve => {
-    const hasBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
-    if (hasBridge) {
-      // Swift 选完目录后调用 window.__backupDirChosen(path|null) 回调
+    const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
+    if (hasSwiftBridge) {
+      // macOS 原生 App: 调用 Swift 文件选择器
       window.__backupDirChosen = dir => {
         window.__backupDirChosen = null;
         resolve(dir);
       };
       window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
     } else {
-      // 浏览器环境: 用文件选择器让用户选备份目录中的文件
-      showBrowserFilePicker('pick', resolve);
+      // Docker / Web 浏览器环境: 用 prompt 让用户输入路径或使用文件选择器
+      showBrowserBackupPicker(resolve);
     }
+  });
+}
+
+// Docker / Web 浏览器环境下的备份目录选择
+function showBrowserBackupPicker(resolve) {
+  const html = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+      💡 Docker/浏览器环境下无法选择系统目录。请选择备份数据中的 JSON 文件上传。<br>
+      <b>提示</b>: 在 macOS 原生 App 中请使用「选择备份目录」功能。
+    </div>
+  `;
+  showModal({
+    icon: 'ℹ️',
+    iconKind: 'info',
+    title: '备份/恢复 — 浏览器环境',
+    body: html,
+    confirmText: '选择文件',
+    cancelText: '取消',
+    confirmKind: 'primary',
+  }).then(confirmed => {
+    if (!confirmed) {
+      resolve(null);
+      return;
+    }
+    // 打开文件选择器
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.json';
+    input.onchange = async () => {
+      const files = Array.from(input.files);
+      if (!files.length) {
+        resolve(null);
+        return;
+      }
+      const fileContents = {};
+      for (const file of files) {
+        fileContents[file.name] = await file.text();
+      }
+      resolve({ files: fileContents, _browser: true });
+    };
+    input.click();
   });
 }
 

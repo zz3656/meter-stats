@@ -212,14 +212,13 @@ def handle_get_roles(handler):
 
 def handle_get_backup_status(handler):
     """GET /api/admin/backup-status → {auto_backup, backup_count}"""
+    from storage import get_data_dir
     settings = get_settings()
     auto_backup = settings.get("auto_backup", True)
-    # 统计 backup/ 目录下的备份文件夹数
-    import app_handler as _h
-    data_dir = _h.DATA_PATHS.get("readings", Path.home()).parent
+    data_dir = get_data_dir()
     backup_dir = data_dir / "backup"
     count = len([d for d in backup_dir.iterdir() if d.is_dir()]) if backup_dir.exists() else 0
-    send_json(handler, 200, {"auto_backup": auto_backup, "backup_count": count})
+    send_json(handler, 200, {"auto_backup": auto_backup, "backup_count": count, "data_dir": str(data_dir)})
 
 
 def handle_put_auto_backup(handler):
@@ -235,6 +234,9 @@ def handle_put_auto_backup(handler):
 
 def handle_get_backup_config(handler):
     """GET /api/admin/backup-config → {backup_dir: "/path" | null, backup_dir_label: "..."}"""
+    from storage import get_data_dir
+    data_dir = get_data_dir()
+
     settings = get_settings()
     backup_dir = settings.get("backup_dir")
     backup_dir_label = settings.get("backup_dir_label")
@@ -242,6 +244,7 @@ def handle_get_backup_config(handler):
         "ok": True,
         "backup_dir": backup_dir,
         "backup_dir_label": backup_dir_label,
+        "data_dir": str(data_dir),
     })
 
 
@@ -267,8 +270,12 @@ def handle_put_backup_config(handler):
     # 如果 new_dir is None 但被显式传递（某些情况），不做任何事
 
     save_settings(settings)
+    # 计算当前数据目录
+    from storage import get_data_dir
+    data_dir = str(get_data_dir())
     send_json(handler, 200, {
         "ok": True,
         "backup_dir": settings.get("backup_dir"),
         "backup_dir_label": settings.get("backup_dir_label"),
+        "data_dir": data_dir,
     })

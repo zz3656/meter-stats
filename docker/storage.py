@@ -131,7 +131,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         src = data_dir / name
         if src.exists():
             shutil.copy2(src, backup_dir / name)
-    log(f"  OK 数据已备份到 {backup_dir}")
+    log(f"  OK data backed up to {backup_dir}")
     return backup_dir
 
 

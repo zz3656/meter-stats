@@ -314,14 +314,14 @@ async function loadBackupConfig() {
   try {
     const res = await api('GET', '/api/admin/backup-config');
     if (res.ok) {
-      updateBackupDirDisplay(res.backup_dir, res.backup_dir_label);
+      updateBackupDirDisplay(res.backup_dir, res.backup_dir_label, res.data_dir);
     }
   } catch (e) {
     console.warn('加载备份目录配置失败:', e);
   }
 }
 
-function updateBackupDirDisplay(backupDir, backupDirLabel) {
+function updateBackupDirDisplay(backupDir, backupDirLabel, dataDir) {
   // 后台管理页
   const adminDisplay = document.getElementById('backup-dir-display');
   if (adminDisplay) {
@@ -330,7 +330,9 @@ function updateBackupDirDisplay(backupDir, backupDirLabel) {
       document.getElementById('clear-backup-dir-btn').style.display = '';
       document.getElementById('pick-backup-dir-btn').textContent = '📁 更改备份目录';
     } else {
-      adminDisplay.textContent = '当前: 默认 (数据目录/backup/)';
+      // 显示实际数据目录路径
+      const displayText = dataDir ? `当前: 默认 (${dataDir}/backup/)` : '当前: 默认 (backup/ 目录)';
+      adminDisplay.textContent = displayText;
       document.getElementById('clear-backup-dir-btn').style.display = 'none';
       document.getElementById('pick-backup-dir-btn').textContent = '📁 选择备份目录';
     }
@@ -341,7 +343,8 @@ function updateBackupDirDisplay(backupDir, backupDirLabel) {
     if (backupDir) {
       mgmtDisplay.textContent = backupDirLabel || backupDir;
     } else {
-      mgmtDisplay.textContent = '当前: 默认 (数据目录/backup/)';
+      const displayText = dataDir ? `当前: 默认 (${dataDir}/backup/)` : '当前: 默认 (backup/ 目录)';
+      mgmtDisplay.textContent = displayText;
     }
   }
 }
@@ -367,11 +370,41 @@ async function pickBackupDirectory() {
     });
   }
 
-  // 浏览器环境: 用 prompt 输入路径 (Docker/飞牛)
-  const input = prompt('请输入备份目录路径 (例如 /volume1/backups):', '');
-  if (!input || !input.trim()) return;
-  const label = prompt('请输入备份目录显示名称 (可选):', '');
-  await saveBackupDirConfig(input.trim(), (label || '').trim());
+  // Docker / Web 浏览器环境: 提示备份目录默认为 data_dir/backup/
+  // 用户可以选择自定义路径,或保持默认
+  const res = await api('GET', '/api/admin/backup-config');
+  const currentDataDir = res.data_dir || '';
+  const defaultPath = `${currentDataDir}/backup/`;
+
+  const html = `
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
+      📂 Docker 环境下备份目录默认为: <code>${defaultPath}</code><br><br>
+      如需自定义备份目录,请输入路径和显示名称:
+    </div>
+    <div style="margin-bottom:10px;">
+      <label style="font-size:12px;display:block;margin-bottom:4px;">路径</label>
+      <input id="backup-dir-input-path" class="field-control" style="width:100%;" placeholder="/path/to/backup" value="${defaultPath}">
+    </div>
+    <div>
+      <label style="font-size:12px;display:block;margin-bottom:4px;">显示名称 (可选)</label>
+      <input id="backup-dir-input-label" class="field-control" style="width:100%;" placeholder="My Backups">
+    </div>
+  `;
+  const confirmed = await showModal({
+    icon: '📁',
+    iconKind: 'info',
+    title: '选择备份目录',
+    body: html,
+    confirmText: '确认',
+    cancelText: '取消',
+    confirmKind: 'primary',
+  });
+  if (!confirmed) return;
+
+  const path = document.getElementById('backup-dir-input-path')?.value?.trim();
+  const label = document.getElementById('backup-dir-input-label')?.value?.trim() || '';
+  if (!path) return;
+  await saveBackupDirConfig(path, label);
 }
 
 async function clearBackupDirectory() {
@@ -379,7 +412,7 @@ async function clearBackupDirectory() {
   const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
   if (res.ok) {
     showAlert('✅ 已清除备份目录设置', 'success');
-    updateBackupDirDisplay(null, null);
+    updateBackupDirDisplay(null, null, res.data_dir);
   } else {
     showAlert('清除失败: ' + (res.error || '未知错误'), 'error');
   }
@@ -392,7 +425,7 @@ async function saveBackupDirConfig(path, label) {
   });
   if (res.ok) {
     showAlert(`✅ 备份目录已设置为: ${path}`, 'success');
-    updateBackupDirDisplay(res.backup_dir, res.backup_dir_label);
+    updateBackupDirDisplay(res.backup_dir, res.backup_dir_label, res.data_dir);
   } else {
     showAlert('设置失败: ' + (res.error || '未知错误'), 'error');
   }
