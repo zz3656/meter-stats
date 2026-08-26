@@ -43,8 +43,12 @@ USER linclub
 EXPOSE 8765
 
 # 健康检查（每 30 秒检查一次，5 秒超时）
-HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python3 -c "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)" || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()" || exit 1
+
+# 复制 entrypoint 脚本
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # 启动命令
-CMD ["python3", "server.py"]
+ENTRYPOINT ["/entrypoint.sh"]

@@ -112,7 +112,12 @@ def _ensure_default_admin(data_dir: Path):
 
 def main():
     data_dir = Path(DATA_DIR)
-    data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        data_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"FATAL: 无法创建数据目录 {data_dir}: {e}", flush=True)
+        print("请检查 LINCLUB_DATA_DIR 环境变量和挂载权限", flush=True)
+        sys.exit(1)
 
     # 初始化数据文件
     data_paths = init_data_files(data_dir)
