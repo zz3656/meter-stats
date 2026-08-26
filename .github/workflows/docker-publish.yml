@@ -44,43 +44,37 @@ jobs:
       - name: Update Docker Hub repository description
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_SHORT_DESC: 林卡酒吧工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。
         run: |
-          read -r -d '' FULL_DESC << 'READMEOF' || true
-          $(cat .github/workflows/dockerhub-readme.md)
-          READMEOF
 
-          SHORT_DESC="林卡酒吧工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。"
+          python3 << 'PYEOF'
+          import json, os, urllib.request
 
-          FULL_DESC="$(cat .github/workflows/dockerhub-readme.md)"
+          short_desc = os.environ.get("DOCKERHUB_SHORT_DESC", "")
+          full_description = open(".github/workflows/dockerhub-readme.md", "r", encoding="utf-8").read()
 
-          python3 -c "
-          import json, sys
-          short_desc = '''${SHORT_DESC}'''
-          full_description = sys.stdin.read()
-          data = json.dumps({
-              'full_description': full_description,
-              'description': short_desc,
-              'short_description': short_desc
-          }, ensure_ascii=False).encode('utf-8')
+          data = {
+              "full_description": full_description,
+              "description": short_desc,
+              "short_description": short_desc
+          }
 
-          import urllib.request
-          url = 'https://hub.docker.com/v2/repositories/zz3656/linclub-electricity-stats'
-          token = '${DOCKERHUB_TOKEN}'
-          auth_header = 'Bearer ' + token
+          payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
+          url = "https://hub.docker.com/v2/repositories/zz3656/linclub-electricity-stats"
+          token = os.environ["DOCKERHUB_TOKEN"]
+          auth_header = "Bearer " + token
 
           req = urllib.request.Request(
               url,
-              data=data,
-              headers={'Authorization': auth_header, 'Content-Type': 'application/json'},
-              method='PATCH',
+              data=payload,
+              headers={"Authorization": auth_header, "Content-Type": "application/json"},
+              method="PATCH",
           )
           with urllib.request.urlopen(req) as resp:
               code = resp.getcode()
               if code == 200 or code == 201:
-                  print('✅ Docker Hub description updated!')
-                  print('   https://hub.docker.com/r/zz3656/linclub-electricity-stats')
+                  print("✅ Docker Hub description updated!")
+                  print("   https://hub.docker.com/r/zz3656/linclub-electricity-stats")
               else:
-                  print(f'⚠️ Unexpected status: {code}')
-          " << 'PYEOF'
-          $(cat .github/workflows/dockerhub-readme.md)
+                  print(f"⚠️ Unexpected status: {code}")
           PYEOF
