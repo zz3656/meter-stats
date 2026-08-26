@@ -74,7 +74,10 @@ def _remove_pid():
 
 def _ensure_default_admin(data_dir: Path):
     """确保默认管理员账户存在（首次启动时创建）。"""
-    from handlers.settings import init_settings, get_settings, ROLE_ADMIN
+    from handlers.settings import init_settings, get_settings, ROLE_ADMIN, _get_settings_file
+
+    settings_path = _get_settings_file(data_dir)
+    is_first_run = not settings_path.exists()
 
     init_settings(data_dir)
     settings = get_settings()
@@ -86,16 +89,25 @@ def _ensure_default_admin(data_dir: Path):
     # 检查是否已有管理员
     existing_admin = next((u for u in users if u.get("role") == ROLE_ADMIN), None)
     if existing_admin:
-        log(f"  管理员账户已存在: {existing_admin['username']}")
+        if is_first_run:
+            # 首次启动且有管理员（settings.json 由 init_settings 默认创建），更新密码
+            import hashlib
+            existing_admin["password"] = "sha256:" + hashlib.sha256(password.encode()).hexdigest()
+            settings["users"] = users
+            from handlers.settings import save_settings
+            save_settings(settings)
+            log(f"  OK 默认管理员已创建: {username} (密码来自环境变量)")
+        else:
+            log(f"  管理员账户已存在: {existing_admin['username']} (跳过)")
         return
 
     # 创建默认管理员
-    from handlers.settings import add_user
+    from handlers.settings import add_user, _hash_pass
     add_user(users, username, password, "管理员", ROLE_ADMIN)
     settings["users"] = users
     from handlers.settings import save_settings
     save_settings(settings)
-    log(f"  OK 默认管理员已创建: {username}")
+    log(f"  OK 默认管理员已创建: {username} (密码来自环境变量)")
 
 
 def main():
