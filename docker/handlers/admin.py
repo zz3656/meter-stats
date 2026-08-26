@@ -353,3 +353,49 @@ def handle_put_backup_config(handler):
         "backup_dir_label": settings.get("backup_dir_label"),
         "data_dir": data_dir,
     })
+
+
+def handle_get_dir_listing(handler):
+    """GET /api/admin/dir-listing?path=/data → { ok, path, entries: [{name, is_dir, is_file, size}] }"""
+    from urllib.parse import parse_qs, urlparse
+
+    qs = parse_qs(urlparse(handler.path).query)
+    target_path = qs.get("path", [None])[0]
+
+    if not target_path:
+        send_json(handler, 400, {"error": "缺少 path 参数"})
+        return
+
+    try:
+        p = Path(target_path).resolve()
+    except Exception:
+        send_json(handler, 400, {"error": f"无效路径: {target_path}"})
+        return
+
+    if not p.exists():
+        send_json(handler, 404, {"error": f"路径不存在: {target_path}"})
+        return
+
+    if p.is_file():
+        send_json(handler, 200, {"path": str(p), "entries": []})
+        return
+
+    entries = []
+    try:
+        for item in sorted(p.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+            stat_info = item.stat()
+            entries.append({
+                "name": item.name,
+                "is_dir": item.is_dir(),
+                "is_file": item.is_file(),
+                "size": stat_info.st_size if item.is_file() else 0,
+                "modified": datetime.datetime.fromtimestamp(stat_info.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            })
+    except PermissionError:
+        send_json(handler, 403, {"error": f"没有权限读取: {target_path}"})
+        return
+    except OSError as e:
+        send_json(handler, 500, {"error": f"读取失败: {e}"})
+        return
+
+    send_json(handler, 200, {"path": target_path, "entries": entries})

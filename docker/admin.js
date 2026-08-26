@@ -424,52 +424,159 @@ function updateBackupDirDisplay(backupDir, backupDirLabel, dataDir) {
   }
 }
 
-// 点击文件夹图标 → 选择目录（macOS native 用 Swift bridge，Docker/Web 环境用 prompt）
+// 文件夹浏览器：逐层浏览容器内部目录
 function pickBackupDirectory() {
-  return new Promise(resolve => {
-    // 尝试 macOS 原生 App 的 Swift bridge
-    const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir;
-    if (hasSwiftBridge) {
-      window.__backupBackupDirChosen = dir => {
-        window.__backupBackupDirChosen = null;
-        if (dir && dir.path) {
-          resolve(dir.path);
-        } else {
-          resolve(null);
-        }
-      };
-      window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
-      return;
+  openFolderBrowser('/data');
+}
+
+let _folderBrowserEscape = null;
+
+function openFolderBrowser(path) {
+  const backdrop = document.getElementById('modal-backdrop');
+  const icon = document.getElementById('modal-icon');
+  const titleEl = document.getElementById('modal-title');
+  const body = document.getElementById('modal-body');
+  const cancelBtn = document.getElementById('modal-cancel');
+  const confirmBtn = document.getElementById('modal-confirm');
+
+  // 重置 modal 状态
+  icon.style.display = 'none';
+  titleEl.textContent = '📂 选择备份目录';
+  cancelBtn.textContent = '🔙 返回上级';
+  cancelBtn.style.display = 'none';
+  confirmBtn.style.display = 'none';
+  confirmBtn.textContent = '确认';
+
+  const renderView = (currentPath, entries) => {
+    let html = '';
+
+    // 面包屑导航
+    html += '<div style="margin-bottom:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding-bottom:8px;border-bottom:1px solid var(--border);">';
+    html += `<span class="btn btn-secondary btn-xs" onclick="_browserGoTo('/')" style="cursor:pointer;">🏠 /</span>`;
+    if (currentPath && currentPath !== '/') {
+      const parts = currentPath.split('/').filter(Boolean);
+      let buildPath = '';
+      for (const part of parts) {
+        buildPath += '/' + part;
+        html += '<span style="color:var(--text-muted);margin:0 2px;">›</span>';
+        html += `<span class="btn btn-secondary btn-xs" onclick="_browserGoTo('${buildPath.replace(/'/g, "\\'")}')" style="cursor:pointer;">${part}</span>`;
+      }
+    }
+    html += '</div>';
+
+    // 返回上级
+    if (currentPath && currentPath !== '/') {
+      const parent = currentPath.substring(0, currentPath.lastIndexOf('/')) || '/';
+      html += `<button class="btn btn-secondary btn-sm" onclick="_browserGoTo('${parent.replace(/'/g, "\\'")}')" style="width:100%;margin-bottom:10px;padding:8px;text-align:center;">⬆️ 返回上级</button>`;
     }
 
-    // Docker / Web 浏览器环境: 用 prompt 让用户输入路径
-    const resPromise = api('GET', '/api/admin/backup-config');
-    resPromise.then(res => {
-      const defaultPath = `${res.data_dir || '/data'}/backup/`;
-      const currentPath = document.getElementById('backup-dir-input-path')?.value?.trim() || '';
-      const inputPath = prompt('输入备份目录路径（默认）:', currentPath || defaultPath);
-      if (inputPath !== null && inputPath.trim()) {
-        resolve(inputPath.trim());
-      } else {
-        resolve(null);
+    // 条目列表
+    if (entries.length === 0) {
+      html += '<div style="text-align:center;color:var(--text-muted);padding:30px 0;">📭 空文件夹</div>';
+    } else {
+      const dirs = entries.filter(e => e.is_dir);
+      const files = entries.filter(e => e.is_file);
+      html += '<div style="max-height:350px;overflow-y:auto;">';
+      html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+      html += '<thead><tr style="border-bottom:1px solid var(--border);text-align:left;color:var(--text-muted);font-size:11px;">';
+      html += '<th style="padding:6px 8px;font-weight:510;">名称</th>';
+      html += '<th style="padding:6px 8px;font-weight:510;width:70px;text-align:right;">大小</th>';
+      html += '<th style="padding:6px 8px;font-weight:510;width:90px;text-align:right;">修改</th>';
+      html += '</tr></thead><tbody>';
+
+      dirs.forEach(entry => {
+        const p = (currentPath === '/' ? '' : currentPath) + '/' + entry.name;
+        html += `<tr style="cursor:pointer;border-bottom:1px solid var(--border);" 
+          onmouseover="this.style.background='var(--bg-subtle)'" 
+          onmouseout="this.style.background=''"
+          onclick="_browserGoTo('${p.replace(/'/g, "\\'")}')">
+          <td style="padding:6px 8px;">📁 <strong>${entry.name}</strong></td>
+          <td style="padding:6px 8px;color:var(--text-muted);text-align:right;">—</td>
+          <td style="padding:6px 8px;color:var(--text-muted);text-align:right;">${entry.modified || ''}</td>
+        </tr>`;
+      });
+      files.forEach(entry => {
+        const sizeStr = formatBytes(entry.size || 0);
+        html += `<tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:6px 8px;">📄 ${entry.name}</td>
+          <td style="padding:6px 8px;color:var(--text-muted);text-align:right;">${sizeStr}</td>
+          <td style="padding:6px 8px;color:var(--text-muted);text-align:right;">${entry.modified || ''}</td>
+        </tr>`;
+      });
+      html += '</tbody></table></div>';
+    }
+
+    // 底部操作栏
+    html += `<div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary btn-sm" onclick="_browserSelect('${currentPath.replace(/'/g, "\\'")}')" style="flex:1;" ${!currentPath || currentPath === '/' ? 'disabled style="opacity:0.5;cursor:not-allowed;flex:1;"' : 'style="flex:1;"'}>✅ 选择此目录</button>
+    </div>`;
+
+    body.innerHTML = html;
+  };
+
+  // 获取目录内容
+  fetch(`/api/admin/dir-listing?path=${encodeURIComponent(path)}${getAuthParam()}`)
+    .then(r => r.json())
+    .then(res => {
+      if (!res.ok) {
+        showAlert(res.error || '读取目录失败', 'error');
+        return;
       }
-    }).catch(() => {
-      // API 失败时 fallback 到简单 prompt
-      const inputPath = prompt('输入备份目录路径（例如 /data/backup）:', '/data/backup/');
-      if (inputPath !== null && inputPath.trim()) {
-        resolve(inputPath.trim());
-      } else {
-        resolve(null);
-      }
+      renderView(res.path, res.entries || []);
+    })
+    .catch(e => {
+      showAlert('网络错误: ' + e.message, 'error');
+      renderView(path, []);
     });
-  });
+
+  // 覆盖 modal 事件
+  const closeFolderBrowser = () => {
+    backdrop.classList.remove('show');
+    document.removeEventListener('keydown', _folderBrowserEscape);
+    icon.style.display = '';
+  };
+
+  // 取消 = 关闭
+  cancelBtn.onclick = () => {
+    closeFolderBrowser();
+  };
+
+  // Escape 键关闭
+  _folderBrowserEscape = (e) => {
+    if (e.key === 'Escape') closeFolderBrowser();
+  };
+  document.addEventListener('keydown', _folderBrowserEscape);
+
+  // 点击遮罩关闭
+  backdrop.onclick = (e) => {
+    if (e.target === backdrop) closeFolderBrowser();
+  };
+
+  // 关闭遮罩层点击自身不触发（已移除 addEventListener）
+
+  // 暴露给全局的点击回调
+  window._browserGoTo = (p) => {
+    openFolderBrowser(p);
+  };
+  window._browserSelect = (p) => {
+    const input = document.getElementById('backup-dir-input-path');
+    if (input) {
+      input.value = p;
+      input.focus();
+    }
+    // 调用保存
+    saveBackupDirInline();
+    closeFolderBrowser();
+  };
+
+  backdrop.classList.add('show');
 }
 
 // 保存备份目录配置（内联按钮）
 async function saveBackupDirInline() {
   const input = document.getElementById('backup-dir-input-path');
   const path = input ? input.value.trim() : '';
-  const label = prompt('显示名称（可选，留空则使用路径名）:', '');
+  const labelInput = prompt('显示名称（可选，留空则使用路径名）:', '');
 
   if (path === '') {
     // 空路径 = 清除设置，恢复默认
@@ -482,7 +589,7 @@ async function saveBackupDirInline() {
       showAlert('清除失败: ' + (res.error || '未知错误'), 'error');
     }
   } else {
-    const displayName = label && label.trim() ? label.trim() : path;
+    const displayName = labelInput && labelInput.trim() ? labelInput.trim() : path.split('/').filter(Boolean).pop();
     const res = await api('PUT', '/api/admin/backup-config', {
       backup_dir: path,
       backup_dir_label: displayName,
