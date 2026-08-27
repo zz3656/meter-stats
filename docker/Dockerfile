@@ -31,7 +31,7 @@ COPY Sources/Linclub/Resources/handlers/ handlers/
 COPY Sources/Linclub/Resources/utils/ utils/
 
 # 复制 entrypoint 脚本
-COPY docker/entrypoint.sh /entrypoint.sh
+COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # 设置所有权
@@ -41,11 +41,11 @@ RUN chown -R linclub:linclub /app
 RUN mkdir -p /data && chown -R linclub:linclub /data
 
 # 暴露端口
-EXPOSE 765
+EXPOSE 8765
 
 # 健康检查（每 30 秒检查一次，5 秒超时）
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
-    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:765/api/health', timeout=3).close()" || exit 1
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()" || exit 1
 
 # 以 root 身份启动 entrypoint，由它处理权限切换
 ENTRYPOINT ["/entrypoint.sh"]
