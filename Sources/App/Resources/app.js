@@ -270,6 +270,8 @@ async function datamgmtBackup() {
     }
     btn.textContent = '✅ 已备份';
     showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
+    // 备份成功后刷新备份列表
+    setTimeout(() => { if (typeof loadBackupList === 'function') loadBackupList(); }, 500);
   } catch (e) {
     btn.textContent = original;
     showAlert('备份失败: ' + e.message, 'error');

@@ -726,6 +726,7 @@
     pointer-events: none;
     display: flex;
     justify-content: center;
+    align-items: flex-start;
     padding-top: 60px;
   }
   .toast-content {

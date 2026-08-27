@@ -340,6 +340,7 @@ function renderBackupList(backups) {
           <div style="display:flex;gap:4px;">
             ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
             <button class="btn btn-danger btn-xs" onclick="${isZip ? `adminRestoreFromZip('${b.zip_name}')` : `datamgmtRestoreFromZip('${b.zip_name}')`}" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -365,6 +366,7 @@ function renderBackupList(backups) {
           <div style="display:flex;gap:4px;">
             ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
             <button class="btn btn-danger btn-xs" onclick="datamgmtRestoreFromZip('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -391,6 +393,36 @@ function downloadBackup(zipName) {
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+// 删除备份
+async function deleteBackup(zipName) {
+  const ok = await showModal({
+    icon: '🗑️',
+    iconKind: 'warn',
+    title: '确认删除备份？',
+    body: `将从备份目录中永久删除 <b>${zipName}</b>，此操作不可撤销。`,
+    confirmText: '确认删除',
+    cancelText: '取消',
+    confirmKind: 'danger',
+  });
+  if (!ok) return;
+
+  const token = localStorage.getItem('meter_token');
+  const url = `/api/admin/backup-delete?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+  try {
+    const res = await fetch(url, { method: 'GET' });
+    const data = await res.json();
+    if (!data.ok) {
+      showAlert('删除失败: ' + (data.error || '未知错误'), 'error');
+      return;
+    }
+    showAlert('✅ 已删除备份', 'success');
+    // 刷新备份列表
+    setTimeout(() => loadBackupList(), 300);
+  } catch (e) {
+    showAlert('删除失败: ' + e.message, 'error');
+  }
 }
 
 // 从备份列表恢复（下载 ZIP 到本地后恢复）

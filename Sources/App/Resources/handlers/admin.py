@@ -328,6 +328,34 @@ def handle_get_backup_download(handler):
     handler.wfile.write(zip_data)
 
 
+def handle_get_backup_delete(handler):
+    """GET /api/admin/backup-delete?zip_name=meter-backup-20250101_120000.zip → 删除备份"""
+    from storage import get_data_dir
+    from urllib.parse import parse_qs, urlparse
+
+    data_dir = get_data_dir()
+    backup_dir = data_dir / "backup"
+
+    qs = parse_qs(urlparse(handler.path).query)
+    zip_name = qs.get("zip_name", [None])[0]
+
+    if not zip_name:
+        send_json(handler, 400, {"ok": False, "error": "缺少 zip_name 参数"})
+        return
+
+    zip_path = backup_dir / zip_name
+    if not zip_path.is_file():
+        send_json(handler, 404, {"ok": False, "error": f"备份文件不存在: {zip_name}"})
+        return
+
+    try:
+        zip_path.unlink()
+        log(f"[BACKUP] 删除备份: {zip_name}")
+        send_json(handler, 200, {"ok": True, "message": "已删除备份"})
+    except OSError as e:
+        send_json(handler, 500, {"ok": False, "error": f"删除失败: {e}"})
+
+
 def handle_put_auto_backup(handler):
     """PUT /api/admin/auto-backup {enabled: true/false}"""
     body = read_body(handler)

@@ -90,6 +90,7 @@ _GET_ADMIN = {
     "/api/admin/roles": handle_get_roles,
     "/api/admin/backup-status": handle_get_backup_status,
     "/api/admin/backup-download": handle_get_backup_download,
+    "/api/admin/backup-delete": handle_get_backup_delete,
     "/api/admin/backup-config": handle_get_backup_config,
     "/api/admin/dir-listing": handle_get_dir_listing,
     "/api/admin/data-files": handle_get_data_files,
