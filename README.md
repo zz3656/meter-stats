@@ -18,15 +18,13 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      - linclub-data:/data
+      # ⬇️ 数据持久化目录，可自行修改路径
+      - ./data:/data
     environment:
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
       - LINCLUB_INITIAL_PASS=admin123
-volumes:
-  linclub-data:
-    driver: local
 ```
 
 ```bash
@@ -38,7 +36,8 @@ docker compose up -d
 ### Docker Run
 
 ```bash
-docker run -d --name linclub -p 8765:8765 -v linclub-data:/data \
+mkdir -p data
+docker run -d --name linclub -p 8765:8765 -v $(pwd)/data:/data \
   -e LINCLUB_INITIAL_PASS=your-password --restart unless-stopped \
   zz3656/linclub-electricity-stats:latest
 ```
@@ -56,6 +55,7 @@ docker run -d --name linclub -p 8765:8765 -v linclub-data:/data \
 | `LINCLUB_PORT` | `8765` | 服务端口 |
 | `LINCLUB_DATA_DIR` | `/data` | 数据目录 |
 | `LINCLUB_INITIAL_PASS` | `admin123` | 初始密码 |
+| `LINCLUB_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
 
 ## ✨ 功能
 

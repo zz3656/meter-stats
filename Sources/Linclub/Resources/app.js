@@ -230,8 +230,6 @@ function initAutoBackupToggle() {
 function openDataMgmtModal() {
   // 初始化自动备份开关
   initAutoBackupToggle();
-  // 加载备份目录配置
-  loadBackupConfig();
   document.getElementById('datamgmt-modal-backdrop').classList.add('show');
 }
 function closeDataMgmtModal() {

@@ -307,51 +307,41 @@ def handle_put_auto_backup(handler):
 # ============ 备份目录配置 ============
 
 def handle_get_backup_config(handler):
-    """GET /api/admin/backup-config → {backup_dir: "/path" | null, backup_dir_label: "..."}"""
+    """GET /api/admin/backup-config → {backup_dir: null | "/path", backup_dir_label: "..."}
+
+    Docker 环境下: 备份目录由 LINCLUB_BACKUP_DIR 环境变量控制，
+    不再支持通过 API 动态修改。返回 null + 当前 data_dir 提示前端显示默认路径。
+    """
     from storage import get_data_dir
     data_dir = get_data_dir()
 
-    settings = get_settings()
-    backup_dir = settings.get("backup_dir")
-    backup_dir_label = settings.get("backup_dir_label")
+    # 读取环境变量计算默认备份目录
+    backup_rel = os.environ.get("LINCLUB_BACKUP_DIR", "").strip()
+    if backup_rel:
+        effective_backup = str(data_dir / backup_rel)
+    else:
+        effective_backup = str(data_dir / "backup")
+
     send_json(handler, 200, {
         "ok": True,
-        "backup_dir": backup_dir,
-        "backup_dir_label": backup_dir_label,
+        "backup_dir": effective_backup,  # 实际路径,不可通过 UI 修改
+        "backup_dir_label": "默认备份目录",
         "data_dir": str(data_dir),
     })
 
 
 def handle_put_backup_config(handler):
-    """PUT /api/admin/backup-config → {backup_dir: "/path" | null}
+    """PUT /api/admin/backup-config → {ok: false, error: "Docker 环境下备份目录由环境变量 LINCLUB_BACKUP_DIR 控制"}
 
-    - {backup_dir: "/path", backup_dir_label: "My Backups"} → 设置备份目录
-    - {backup_dir: null} → 清除备份目录（恢复默认行为）
+    Docker 环境下备份目录由 docker-compose.yml 中的 LINCLUB_BACKUP_DIR 环境变量控制，
+    不支持通过 API 动态修改。
     """
-    body = read_body(handler)
-    settings = get_settings()
-
-    new_dir = (body or {}).get("backup_dir")
-    if new_dir is None:
-        # 清除备份目录设置
-        settings.pop("backup_dir", None)
-        settings.pop("backup_dir_label", None)
-    elif new_dir:
-        # 设置备份目录
-        label = (body or {}).get("backup_dir_label", "")
-        settings["backup_dir"] = str(new_dir)
-        settings["backup_dir_label"] = label
-    # 如果 new_dir is None 但被显式传递（某些情况），不做任何事
-
-    save_settings(settings)
-    # 计算当前数据目录
-    from storage import get_data_dir
-    data_dir = str(get_data_dir())
     send_json(handler, 200, {
-        "ok": True,
-        "backup_dir": settings.get("backup_dir"),
-        "backup_dir_label": settings.get("backup_dir_label"),
-        "data_dir": data_dir,
+        "ok": False,
+        "error": "Docker 环境下备份目录由环境变量 LINCLUB_BACKUP_DIR 控制",
+        "backup_dir": None,
+        "backup_dir_label": None,
+        "data_dir": str(Path(os.environ.get("LINCLUB_DATA_DIR", "/data"))),
     })
 
 

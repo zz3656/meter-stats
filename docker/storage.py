@@ -107,7 +107,9 @@ def init_data_files(data_dir: Path) -> dict:
 def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Path]" = None):
     """备份数据文件。
 
-    - target_parent=None: 备份到 data_dir/backup/(默认)
+    - target_parent=None: 优先使用 LINCLUB_BACKUP_DIR 环境变量指定的备份目录
+                          （值为相对路径，如 "backup" → /data/backup/）；
+                          若环境变量未设置则备份到 data_dir/backup/(默认)
     - target_parent=Path: 备份到该目录(用户自选备份目录)
     - force=False: 每日一次(YYYYMMDD 目录,当天已存在则跳过)
     - force=True:  手动备份(YYYYMMDD_HHMMSS 目录,每次独立,不覆盖自动备份)
@@ -115,7 +117,15 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     只加不删,用户可随时手动清理 backup/ 旧目录。
     返回备份目录路径(跳过时返回 None)。
     """
-    parent = target_parent if target_parent is not None else (data_dir / "backup")
+    if target_parent is not None:
+        parent = target_parent
+    else:
+        # 环境变量 LINCLUB_BACKUP_DIR: 相对路径（相对于 data_dir）
+        backup_rel = os.environ.get("LINCLUB_BACKUP_DIR", "").strip()
+        if backup_rel:
+            parent = data_dir / backup_rel
+        else:
+            parent = data_dir / "backup"
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
     utc_now = datetime.now()

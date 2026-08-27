@@ -32,6 +32,8 @@ services:
       - LINCLUB_BIND=0.0.0.0
       # 初始管理员密码（请修改！默认 admin123）
       - LINCLUB_INITIAL_PASS=admin123
+      # 备份目录（相对于 /data 的相对路径，留空则使用 /data/backup）
+      # - LINCLUB_BACKUP_DIR=backup
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)"]
       interval: 30s

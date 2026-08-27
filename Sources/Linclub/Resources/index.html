@@ -547,7 +547,7 @@
         <input type="checkbox" id="auto-backup-toggle" checked style="width:18px;height:18px;cursor:pointer;">
         <div>
           <div style="font-size:13px;font-weight:510;color:var(--text);">自动备份</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">每次启动自动备份到 backup/ 目录</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">每次启动自动备份到备份目录（由 LINCLUB_BACKUP_DIR 控制）</div>
         </div>
       </div>
       <!-- 备份按钮 -->
@@ -559,7 +559,8 @@
         <button type="button" class="btn btn-danger btn-sm" id="datamgmt-restore-btn" onclick="datamgmtRestore()" style="width:100%;">↩️ 恢复数据</button>
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:12px;line-height:1.6;">
-        💡 备份数据以「日期时间」文件夹保存在所选目录;恢复前会自动备份当前数据,可随时回滚。
+        💡 备份数据以「日期时间」文件夹保存在容器内备份目录;恢复前会自动备份当前数据,可随时回滚。
+        <span style="opacity:0.7;">（备份目录由环境变量 LINCLUB_BACKUP_DIR 控制，默认 /data/backup）</span>
       </div>
     </div>
     <div class="modal-actions">
@@ -627,7 +628,7 @@
           <input type="checkbox" id="admin-auto-backup-toggle" checked style="width:18px;height:18px;cursor:pointer;">
           <div>
             <div style="font-size:13px;font-weight:510;color:var(--text);">自动备份</div>
-            <div style="font-size:11px;color:var(--text-muted);">每次启动自动备份到 backup/ 目录</div>
+            <div style="font-size:11px;color:var(--text-muted);">每次启动自动备份到备份目录（由 LINCLUB_BACKUP_DIR 控制）</div>
           </div>
         </div>
         <div style="display:flex;gap:8px;margin-bottom:12px;">
@@ -635,8 +636,9 @@
           <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="width:auto;">↩️ 恢复数据</button>
         </div>
         <div style="font-size:11px;color:var(--text-muted);line-height:1.6;">
-          <div>💡 备份数据以「日期时间」文件夹保存在所选目录</div>
+          <div>💡 备份数据以「日期时间」文件夹保存在容器内备份目录</div>
           <div>恢复前会自动备份当前数据,可随时回滚</div>
+          <div>（备份目录由环境变量 LINCLUB_BACKUP_DIR 控制，默认 /data/backup）</div>
           <div id="backup-count" style="margin-top:6px;"></div>
         </div>
       </div>

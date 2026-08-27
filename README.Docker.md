@@ -34,10 +34,14 @@
 ```bash
 docker pull zz3656/linclub-electricity-stats:latest
 
+# 1. 先创建数据目录
+mkdir -p data
+
+# 2. 启动容器（数据存放在当前目录下的 data/）
 docker run -d \
   --name linclub \
   -p 8765:8765 \
-  -v linclub-data:/data \
+  -v $(pwd)/data:/data \
   -e LINCLUB_INITIAL_PASS=your-secure-password \
   --restart unless-stopped \
   zz3656/linclub-electricity-stats:latest
@@ -54,15 +58,13 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      - linclub-data:/data
+      # ⬇️ 数据持久化目录，可自行修改路径
+      - ./data:/data
     environment:
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
       - LINCLUB_INITIAL_PASS=admin123
-volumes:
-  linclub-data:
-    driver: local
 ```
 
 保存为 `docker-compose.yml` 后运行：
@@ -84,6 +86,7 @@ docker compose up -d
 | `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |
 | `LINCLUB_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
 | `LINCLUB_INITIAL_PASS` | `admin123` | 初始管理员密码 |
+| `LINCLUB_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
 
 ---
 

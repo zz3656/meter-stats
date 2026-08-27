@@ -47,8 +47,9 @@ def handle_post_backup(handler):
 
     body 可选: { "target_dir": "/用户/选择的/目录" }
     - 带 target_dir: 备份到 所选目录/YYYYMMDD_HHMMSS/(用户自选备份目录)
-    - 不带:          优先使用 settings 中的 backup_dir 配置；
-                     若未配置则备份到 数据目录/backup/YYYYMMDD_HHMMSS/(默认)
+    - 不带:          优先使用 LINCLUB_BACKUP_DIR 环境变量（相对路径，
+                      如 "backup" → /data/backup/）；
+                      若环境变量未设置则备份到 数据目录/backup/YYYYMMDD_HHMMSS/(默认)
     备份目录以「日期时间」命名,与自动备份格式一致。
     """
     body = read_body(handler)
@@ -59,14 +60,6 @@ def handle_post_backup(handler):
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
 
-    # 优先使用 settings 中的 backup_dir 配置
-    if target_dir is None:
-        from handlers.settings import get_settings
-        settings = get_settings()
-        custom_dir = settings.get("backup_dir")
-        if custom_dir:
-            target_dir = custom_dir
-
     if target_dir:
         target = Path(target_dir).expanduser()
         try:
@@ -75,7 +68,7 @@ def handle_post_backup(handler):
             send_json(handler, 200, {"ok": False, "error": f"无法创建备份目录: {e}"})
             return
     else:
-        target = None  # 默认走数据目录/backup
+        target = None  # backup_data 内部读取 LINCLUB_BACKUP_DIR 环境变量
 
     try:
         result = backup_data(data_dir.parent, force=True, target_parent=target)
