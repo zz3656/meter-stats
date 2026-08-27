@@ -31,7 +31,7 @@ COPY Sources/Linclub/Resources/handlers/ handlers/
 COPY Sources/Linclub/Resources/utils/ utils/
 
 # 复制 entrypoint 脚本
-COPY entrypoint.sh /entrypoint.sh
+COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # 设置所有权
