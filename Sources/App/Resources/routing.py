@@ -31,7 +31,7 @@ from handlers.admin import (
     handle_get_backup_status, handle_put_auto_backup,
     handle_put_backup_retention,
     handle_get_backup_config, handle_put_backup_config,
-    handle_get_backup_download,
+    handle_get_backup_download, handle_get_backup_delete,
     handle_post_restore_upload,
     handle_get_dir_listing,
 )
