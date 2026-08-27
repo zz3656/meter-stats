@@ -192,20 +192,35 @@ Chart.defaults.font.size = 11;
 let trendChart = null;
 let pieChart = null;
 
-function showAlert(msg, type = 'success') {
-  const el = document.getElementById('alert');
-  el.className = `alert alert-${type} show`;
-  el.textContent = msg;
-  setTimeout(() => el.classList.remove('show'), 4000);
+// ===== 全局 Toast 提示覆盖层 =====
+let _toastTimer = null;
+function showToast(msg, type = 'success') {
+  const overlay = document.getElementById('toast-overlay');
+  const box = document.getElementById('toast-content');
+  if (!box) { console.warn('toast-content not found'); return; }
+  clearTimeout(_toastTimer);
+  overlay.style.display = 'flex';
+  box.className = `toast-content ${type}`;
+  box.textContent = msg;
+  // 强制重排以触发过渡动画
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      box.classList.add('show');
+    });
+  });
+  _toastTimer = setTimeout(() => {
+    box.classList.remove('show');
+    setTimeout(() => { overlay.style.display = 'none'; }, 250);
+  }, 3000);
 }
 
-// 物品卡提示条(物品管理页有自己的 alert 元素)
+function showAlert(msg, type = 'success') {
+  showToast(msg, type);
+}
+
+// 物品卡提示条(已改为全局 Toast)
 function showItemAlert(msg, type = 'success') {
-  const el = document.getElementById('item-alert');
-  if (!el) { showAlert(msg, type); return; }
-  el.className = `alert alert-${type} show`;
-  el.textContent = msg;
-  setTimeout(() => el.classList.remove('show'), 4000);
+  showToast(msg, type);
 }
 
 // 数据管理:自动备份开关(localStorage 持久化)
@@ -217,12 +232,12 @@ function saveAutoBackup(enabled) {
   localStorage.setItem(AUTO_BACKUP_KEY, enabled ? 'true' : 'false');
 }
 function initAutoBackupToggle() {
-  const cb = document.getElementById('auto-backup-toggle');
+  const cb = document.getElementById('datamgmt-auto-backup-toggle') || document.getElementById('auto-backup-toggle');
   if (!cb) return;
   cb.checked = getAutoBackupEnabled();
   cb.addEventListener('change', e => {
     saveAutoBackup(e.target.checked);
-    showAlert(e.target.checked ? '已开启自动备份' : '已关闭自动备份', 'info');
+    showToast(e.target.checked ? '已开启自动备份' : '已关闭自动备份', 'info');
   });
 }
 
@@ -2495,10 +2510,7 @@ function copyYearlyTSV(data) {
     lines.push([m.month, m.by_meter.hall, m.by_meter.fire, m.by_meter.private_room, m.by_meter.ac, m.total_kwh, m.total_cost].join('\t'));
   });
   lines.push(['年度合计', '', '', '', '', data.year_total_kwh, data.year_total_cost].join('\t'));
-  navigator.clipboard.writeText(lines.join('\n')).then(
-    () => showAlert('✓ 年度汇总已复制,可粘贴到 Excel', 'success'),
-    () => showAlert('复制失败,请手动选择复制', 'error')
-  );
+  copyTextWithFallback(lines.join('\n'), '✓ 年度汇总已复制,可粘贴到 Excel');
 }
 
 // 月度报告复制 TSV(粘贴到 Excel 自动成表):每日明细 + 每表总用电 + 合计 + 电费
