@@ -18,9 +18,9 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      # ⬇️ 数据持久化目录，可自行修改路径
       - ./data:/data
     environment:
+      - LINCLUB_TZ=Asia/Shanghai
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
@@ -36,9 +36,13 @@ docker compose up -d
 ### Docker Run
 
 ```bash
-mkdir -p data
-docker run -d --name linclub -p 8765:8765 -v $(pwd)/data:/data \
-  -e LINCLUB_INITIAL_PASS=your-password --restart unless-stopped \
+docker run -d --name linclub \
+  -p 8765:8765 -v $(pwd)/data:/data \
+  -e LINCLUB_TZ=Asia/Shanghai \
+  -e LINCLUB_BIND=0.0.0.0 \
+  -e LINCLUB_PORT=8765 \
+  -e LINCLUB_INITIAL_PASS=your-password \
+  --restart unless-stopped \
   zz3656/linclub-electricity-stats:latest
 ```
 
@@ -52,6 +56,7 @@ docker run -d --name linclub -p 8765:8765 -v $(pwd)/data:/data \
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
+| `LINCLUB_TZ` | `Asia/Shanghai` | 时区（支持所有 tzdata 时区名） |
 | `LINCLUB_PORT` | `8765` | 服务端口 |
 | `LINCLUB_DATA_DIR` | `/data` | 数据目录 |
 | `LINCLUB_INITIAL_PASS` | `admin123` | 初始密码 |

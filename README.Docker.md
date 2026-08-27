@@ -34,7 +34,7 @@
 ```bash
 docker pull zz3656/linclub-electricity-stats:latest
 
-# 1. 先创建数据目录
+# 1. 创建数据目录
 mkdir -p data
 
 # 2. 启动容器（数据存放在当前目录下的 data/）
@@ -42,6 +42,8 @@ docker run -d \
   --name linclub \
   -p 8765:8765 \
   -v $(pwd)/data:/data \
+  -e LINCLUB_TZ=Asia/Shanghai \
+  -e LINCLUB_BIND=0.0.0.0 \
   -e LINCLUB_INITIAL_PASS=your-secure-password \
   --restart unless-stopped \
   zz3656/linclub-electricity-stats:latest
@@ -58,9 +60,9 @@ services:
     ports:
       - "8765:8765"
     volumes:
-      # ⬇️ 数据持久化目录，可自行修改路径
       - ./data:/data
     environment:
+      - LINCLUB_TZ=Asia/Shanghai
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
@@ -81,6 +83,7 @@ docker compose up -d
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
+| `LINCLUB_TZ` | `Asia/Shanghai` | 时区（支持所有 tzdata 时区名） |
 | `LINCLUB_PORT` | `8765` | 服务端口 |
 | `LINCLUB_DATA_DIR` | `/data` | 数据持久化目录 |
 | `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |

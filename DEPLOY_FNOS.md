@@ -62,9 +62,9 @@
 #       名称：LINCLUB_INITIAL_PASS
 #       值：修改为你想要的密码（如 MyStrongPass123!）
 #
-#       可选添加：
-#       名称：LINCLUB_PORT
-#       值：8765（默认端口）
+#       绑定地址（默认 0.0.0.0，通常不需要设置）
+#       名称：LINCLUB_BIND
+#       值：0.0.0.0
 
 # 2.6 网络 → 网络设置：
 #       网络模式：bridge（默认）
@@ -98,28 +98,27 @@ $ docker compose logs -f
 # ============================================================
 # docker-compose.yml 内容（方式三需要手动创建）
 # ============================================================
-# services:
-#   linclub:
-#     build:
-#       context: ./docker
-#       dockerfile: Dockerfile
-#     container_name: linclub
-#     restart: unless-stopped
-#     ports:
-#       - "8765:8765"
-#     volumes:
-#       - ./data:/data
-#     environment:
-#       - LINCLUB_PORT=8765
-#       - LINCLUB_DATA_DIR=/data
-#       - LINCLUB_BIND=0.0.0.0
-#       - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
-#     healthcheck:
-#       test: ["CMD", "python3", "-c", "import urllib.request, sys; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3) or exit(0)"]
-#       interval: 30s
-#       timeout: 5s
-#       retries: 3
-#       start_period: 15s
+services:
+  linclub:
+    image: zz3656/linclub-electricity-stats:latest
+    container_name: linclub
+    restart: unless-stopped
+    ports:
+      - "8765:8765"
+    volumes:
+      - ./data:/data
+    environment:
+      - LINCLUB_TZ=Asia/Shanghai
+      - LINCLUB_PORT=8765
+      - LINCLUB_DATA_DIR=/data
+      - LINCLUB_BIND=0.0.0.0
+      - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
 # ============================================================
 # 常用管理命令

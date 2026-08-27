@@ -114,7 +114,7 @@ TOKEN = sys.argv[1]
 USERNAME = "zz3656"
 REPO = "linclub-electricity-stats"
 SHORT_DESC = "林卡酒吧工程部电表统计工具 · Web服务"
-FULL_DESC = "# 林卡电表统计 — Linclub Electricity Stats\n\n> 酒吧/场所工程部电表用量统计工具。支持 macOS 桌面应用和 Docker Web 服务两种部署方式。\n\n## ✨ 功能特性\n\n| 功能 | 说明 |\n|---|---|\n| ⚡ 电表管理 | 4 块电表独立抄表读数 |\n| 💰 充值记录 | 按表充值，支持备注 |\n| 🧾 月度报告 | 逐日逐表用电计算 |\n| 📊 年度汇总 | 12 个月数据汇总 |\n| 🔧 物品管理 | 库存 CRUD |\n| 📋 申购管理 | 申购 → 入库流转 |\n| 🔐 用户权限 | 三级权限管理 |\n| 💾 自动备份 | 每日自动备份 |\n\n## 🚀 快速开始\n\n```bash\ndocker run -d \\\n  --name linclub \\\n  -p 8765:8765 \\\n  -v ./data:/data \\\n  -e LINCLUB_INITIAL_PASS=your-password \\\n  -e TZ=Asia/Shanghai \\\n  zz3656/linclub-electricity-stats:latest\n```\n\n## 默认账户\n\n| 用户名 | 密码 | 角色 |\n|---|---|---|\n| admin | admin123 | 管理员 |\n\n**⚠️ 请首次登录后立即修改密码！**\n"
+FULL_DESC = "# 林卡电表统计 — Linclub Electricity Stats\n\n> 酒吧/场所工程部电表用量统计工具。支持 macOS 桌面应用和 Docker Web 服务两种部署方式。\n\n## ✨ 功能特性\n\n| 功能 | 说明 |\n|---|---|\n| ⚡ 电表管理 | 4 块电表独立抄表读数 |\n| 💰 充值记录 | 按表充值，支持备注 |\n| 🧾 月度报告 | 逐日逐表用电计算 |\n| 📊 年度汇总 | 12 个月数据汇总 |\n| 🔧 物品管理 | 库存 CRUD |\n| 📋 申购管理 | 申购 → 入库流转 |\n| 🔐 用户权限 | 三级权限管理 |\n| 💾 自动备份 | 每日自动备份 |\n\n## 🚀 快速开始\n\n```bash\ndocker run -d \\\n  --name linclub \\\n  -p 8765:8765 \\\n  -v ./data:/data \\\n  -e LINCLUB_INITIAL_PASS=your-password \\\n  -e LINCLUB_TZ=Asia/Shanghai \\\n  zz3656/linclub-electricity-stats:latest\n```\n\n## 默认账户\n\n| 用户名 | 密码 | 角色 |\n|---|---|---|\n| admin | admin123 | 管理员 |\n\n**⚠️ 请首次登录后立即修改密码！**\n"
 
 # Login to get JWT for hub operations
 login_url = "https://hub.docker.com/v2/users/login/"
@@ -166,7 +166,7 @@ echo "     --name linclub \\"
 echo "     -p 8765:8765 \\"
 echo "     -v ./data:/data \\"
 echo "     -e LINCLUB_INITIAL_PASS=your-password \\"
-echo "     -e TZ=Asia/Shanghai \\"
+echo "     -e LINCLUB_TZ=Asia/Shanghai \\"
 echo "     ${IMAGE_NAME}:${TAG}"
 echo ""
 echo "   # 或使用 docker-compose.yml（推荐）:"

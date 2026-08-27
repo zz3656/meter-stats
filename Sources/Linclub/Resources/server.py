@@ -48,7 +48,7 @@ from pathlib import Path
 
 from storage import get_data_dir, init_data_files, log
 
-PORT = 8765
+PORT = int(os.environ.get("LINCLUB_PORT", "8765"))
 VERSION = "0.1.0"
 
 
@@ -108,7 +108,8 @@ def main():
     app_handler.DATA_PATHS = data_paths
     app_handler._sync_data_paths()  # 初始化 settings.json
 
-    server = ThreadingHTTPServer(("127.0.0.1", PORT), app_handler.Handler)
+    bind_host = os.environ.get("LINCLUB_BIND", "0.0.0.0")
+    server = ThreadingHTTPServer((bind_host, PORT), app_handler.Handler)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

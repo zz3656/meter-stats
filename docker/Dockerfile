@@ -47,5 +47,5 @@ EXPOSE 8765
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python3 -c "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()" || exit 1
 
-# 以 root 身份启动 entrypoint，由它处理权限切换
+# 以 root 身份启动 entrypoint，由它处理权限切换后运行服务
 ENTRYPOINT ["/entrypoint.sh"]
