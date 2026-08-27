@@ -29,6 +29,11 @@ from handlers.admin import (
     handle_get_meter_settings, handle_put_meter_settings,
     handle_get_roles,
     handle_get_backup_status, handle_put_auto_backup,
+    handle_put_backup_retention,
+    handle_get_backup_config, handle_put_backup_config,
+    handle_get_backup_download,
+    handle_post_restore_upload,
+    handle_get_dir_listing,
 )
 
 _GET_ROUTES = {
@@ -47,6 +52,7 @@ _POST_PREFIX = {
     "/api/backup": handle_post_backup,
     "/api/restore": handle_post_restore,
     "/api/upload": handle_post_upload,
+    "/api/admin/restore-upload": handle_post_restore_upload,
     "/api/charges": handle_post_charges,
     "/api/readings": handle_post_readings,
     "/api/auth/login": handle_post_login,
@@ -63,6 +69,8 @@ _PUT_PREFIX = {
     "/api/admin/users": handle_put_users,
     "/api/admin/meter": handle_put_meter_settings,
     "/api/admin/auto-backup": handle_put_auto_backup,
+    "/api/admin/backup-retention": handle_put_backup_retention,
+    "/api/admin/backup-config": handle_put_backup_config,
 }
 
 _DELETE_PREFIX = {
@@ -81,6 +89,9 @@ _GET_ADMIN = {
     "/api/admin/meter": handle_get_meter_settings,
     "/api/admin/roles": handle_get_roles,
     "/api/admin/backup-status": handle_get_backup_status,
+    "/api/admin/backup-download": handle_get_backup_download,
+    "/api/admin/backup-config": handle_get_backup_config,
+    "/api/admin/dir-listing": handle_get_dir_listing,
     "/api/admin/data-files": handle_get_data_files,
 }
 

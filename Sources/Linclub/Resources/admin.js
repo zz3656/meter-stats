@@ -273,7 +273,225 @@ function loadBackupStatus() {
           body: JSON.stringify({ enabled: e.target.checked }),
         }).then(() => showAlert(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
       }, { once: true });
+      // 填充保留数量输入框
+      const retention = res.retention_count || 5;
+      const adminRet = document.getElementById('admin-backup-retention');
+      if (adminRet) adminRet.value = retention;
+      const dmRet = document.getElementById('datamgmt-backup-retention');
+      if (dmRet) dmRet.value = retention;
+      // 渲染备份列表
+      renderBackupList(res.backups || []);
     }).catch(() => {});
+}
+
+function loadBackupList() {
+  loadBackupStatus();
+}
+
+// 保存备份保留数量
+function saveBackupRetention() {
+  const val = parseInt(document.getElementById('admin-backup-retention').value || document.getElementById('datamgmt-backup-retention').value, 10);
+  if (!val || val < 1) {
+    showAlert('保留数量必须 ≥ 1', 'error');
+    return;
+  }
+  fetch('/api/admin/backup-retention' + getAuthParam(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ retention_count: val }),
+  }).then(r => r.json()).then(res => {
+    if (!res.ok) {
+      showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
+      return;
+    }
+    showAlert('已保存: 保留最新 ' + val + ' 个备份', 'success');
+    // 同步更新两个输入框
+    const adminRet = document.getElementById('admin-backup-retention');
+    if (adminRet) adminRet.value = val;
+    const dmRet = document.getElementById('datamgmt-backup-retention');
+    if (dmRet) dmRet.value = val;
+  }).catch(e => showAlert('保存失败: ' + e.message, 'error'));
+}
+
+function renderBackupList(backups) {
+  // 渲染后台管理页面的备份列表
+  const adminList = document.getElementById('backup-list');
+  if (adminList) {
+    if (!backups || backups.length === 0) {
+      adminList.innerHTML = '暂无备份';
+    } else {
+      let html = '';
+      backups.forEach(b => {
+        const sizeStr = formatBytes(b.total_size || 0);
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="color:var(--text);font-weight:510;">${b.name}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+            <span style="color:var(--text-muted);margin-left:8px;font-size:10px;">${b.created_at}</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
+            <button class="btn btn-danger btn-xs" onclick="adminRestoreFromZip('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+          </div>
+        </div>`;
+      });
+      adminList.innerHTML = html;
+    }
+  }
+  // 渲染数据管理弹窗的备份列表
+  const dmList = document.getElementById('datamgmt-backup-list');
+  if (dmList) {
+    if (!backups || backups.length === 0) {
+      dmList.innerHTML = '暂无备份';
+    } else {
+      let html = '';
+      backups.forEach(b => {
+        const sizeStr = formatBytes(b.total_size || 0);
+        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+          <div>
+            <span style="color:var(--text);font-weight:510;">${b.name}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+          </div>
+          <div style="display:flex;gap:4px;">
+            <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
+            <button class="btn btn-danger btn-xs" onclick="datamgmtRestoreFromZip('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+          </div>
+        </div>`;
+      });
+      dmList.innerHTML = html;
+    }
+  }
+}
+
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function downloadBackup(zipName) {
+  // 下载备份 zip（使用 zip_name 参数）
+  const token = localStorage.getItem('linclub_token');
+  const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.style.display = 'none';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// 从备份列表恢复（下载 ZIP 到本地后恢复）
+async function adminRestoreFromZip(zipName) {
+  // 先下载到本地
+  showAlert('正在下载备份文件…', 'info');
+  const token = localStorage.getItem('linclub_token');
+  const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      showAlert('下载失败', 'error');
+      return;
+    }
+    const blob = await response.blob();
+    const file = new File([blob], zipName, { type: 'application/zip' });
+
+    // 确认恢复
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认恢复数据？',
+      body: `将从 <b>${zipName}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
+      confirmText: '确认恢复',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
+
+    const btn = document.querySelector('#admin-page-data button[onclick^="adminRestore"]');
+    const original = btn ? btn.textContent : '恢复数据';
+    if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
+
+    // 上传并恢复
+    const formData = new FormData();
+    formData.append('zip_file', file);
+
+    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+      return;
+    }
+
+    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+    closeAdminPanel();
+    refreshAll && refreshAll();
+  } catch (e) {
+    showAlert('恢复失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.textContent = original; btn.disabled = false; }
+  }
+}
+
+// 数据管理弹窗中从备份列表恢复
+async function datamgmtRestoreFromZip(zipName) {
+  showAlert('正在下载备份文件…', 'info');
+  const token = localStorage.getItem('linclub_token');
+  const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
+
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      showAlert('下载失败', 'error');
+      return;
+    }
+    const blob = await response.blob();
+    const file = new File([blob], zipName, { type: 'application/zip' });
+
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '确认恢复数据？',
+      body: `将从 <b>${zipName}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
+      confirmText: '确认恢复',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) return;
+
+    const btn = document.getElementById('datamgmt-restore-btn');
+    const original = btn ? btn.textContent : '恢复数据';
+    if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
+
+    const formData = new FormData();
+    formData.append('zip_file', file);
+
+    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+      return;
+    }
+
+    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+    closeAdminPanel();
+    refreshAll && refreshAll();
+  } catch (e) {
+    showAlert('恢复失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.textContent = original; btn.disabled = false; }
+  }
 }
 
 // 备份/恢复 (浏览器环境用 app.js 中的 browser file picker)
@@ -310,28 +528,6 @@ function browserPickFiles() {
   });
 }
 
-// ===== 备份状态加载 =====
-async function loadBackupStatus() {
-  try {
-    const res = await api('GET', '/api/admin/backup-status');
-    const cb = document.getElementById('admin-auto-backup-toggle');
-    if (cb) cb.checked = res.auto_backup !== false;
-    const countEl = document.getElementById('backup-count');
-    if (countEl) countEl.textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
-    if (cb) {
-      cb.addEventListener('change', () => {
-        fetch('/api/admin/auto-backup' + getAuthParam(), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: e.target.checked }),
-        }).then(() => showAlert(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
-      });
-    }
-  } catch (e) {
-    console.warn('加载备份状态失败:', e);
-  }
-}
-
 async function adminBackup() {
   showAlert('正在备份数据…', 'info');
   const res = await api('POST', '/api/backup');
@@ -339,75 +535,72 @@ async function adminBackup() {
     showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
   }
-  showAlert('✅ 数据已备份到 ' + (res.backup_dir || 'backup/'), 'success');
+  showAlert('✅ 数据已打包备份: ' + (res.backup_name || '成功'), 'success');
+  // 备份成功后刷新列表
+  setTimeout(() => loadBackupList(), 500);
 }
 
 async function adminRestore() {
-  let dir = await adminPickBackupDir();
-  if (dir && dir._browser) {
-    // 浏览器: 上传文件
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认上传文件覆盖数据？',
-      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
-      confirmText: '确认上传',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) return;
-    const res = await api('POST', '/api/upload', { files: dir.files });
-    if (res.ok) {
-      showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
-      closeAdminPanel();
-      refreshAll && refreshAll();
-    } else {
-      showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
-    }
+  // 弹出文件选择器，选择本地 ZIP 备份文件
+  const zipFile = await pickZipFile();
+  if (!zipFile) {
+    showAlert('未选择文件', 'info');
     return;
   }
-  if (!dir) {
-    // 浏览器/Docker 环境没有 Swift bridge: 提示用浏览器选择文件
-    dir = await browserPickFiles();
-    if (!dir) { showAlert('未选择文件', 'info'); return; }
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认上传文件覆盖数据？',
-      body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
-      confirmText: '确认上传',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) return;
-  }
-  if (dir._browser) {
-    const res = await api('POST', '/api/upload', { files: dir.files });
-    if (res.ok) {
-      showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
-      closeAdminPanel();
-      refreshAll && refreshAll();
-    } else {
-      showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
-    }
-    return;
-  }
-  // 原生环境: 用目录路径恢复
-  const ok2 = await showModal({
+
+  // 确认恢复
+  const ok = await showModal({
     icon: '⚠️',
     iconKind: 'warn',
     title: '确认恢复数据？',
-    body: `确认从 <b>${dir}</b> 恢复数据？<br>恢复前会自动备份当前数据。`,
+    body: `将从 <b>${zipFile.name}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
     confirmText: '确认恢复',
     cancelText: '取消',
     confirmKind: 'danger',
   });
-  if (!ok2) return;
-  const res = await api('POST', '/api/restore', { source_dir: dir });
-  if (!res.ok) { showAlert('恢复失败: ' + (res.error || '未知错误'), 'error'); return; }
-  showAlert(`✅ 已恢复 ${res.restored.length} 个文件; 已备份到 ${res.pre_backup}`, 'success');
-  closeAdminPanel();
-  refreshAll && refreshAll();
+  if (!ok) return;
+
+  const btn = document.querySelector('#admin-page-data button[onclick="adminRestore()"]');
+  const original = btn ? btn.textContent : '恢复数据';
+  if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
+
+  try {
+    const formData = new FormData();
+    formData.append('zip_file', zipFile);
+
+    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+
+    if (!data.ok) {
+      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+      return;
+    }
+
+    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+    closeAdminPanel();
+    refreshAll && refreshAll();
+  } catch (e) {
+    showAlert('恢复失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.textContent = original; btn.disabled = false; }
+  }
+}
+
+// 选择 ZIP 文件
+function pickZipFile() {
+  return new Promise(resolve => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.zip';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      resolve(file || null);
+    };
+    input.click();
+  });
 }
 
 // ===== 权限管理 =====

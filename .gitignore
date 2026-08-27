@@ -32,13 +32,19 @@ __pycache__/
 *.tar.gz
 *.zip
 
-# Data files (never commit real data)
-*.json
-data/
-*.pid
+# Node.js (should not be needed for this project)
+node_modules/
+package.json
+package-lock.json
+pnpm-lock.yaml
+.pnpm-store/
 
 # Docker volumes (local)
 linca-data*
+
+# Data files (never commit real data)
+data/
+*.pid
 
 # Local overrides
 .env

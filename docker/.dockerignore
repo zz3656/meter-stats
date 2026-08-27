@@ -11,9 +11,8 @@ build
 *.bak
 *.log
 *.swp
-.sass-cache
-.idea
-.vscode
 *.tar.gz
 *.zip
-
+node_modules/
+.pnpm-store/
+*.json

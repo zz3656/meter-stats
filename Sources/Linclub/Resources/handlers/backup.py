@@ -6,6 +6,7 @@ import os
 import re
 import shutil
 import tempfile
+import zipfile
 from pathlib import Path
 
 from utils import send_json, read_body
@@ -42,93 +43,169 @@ def handle_get_data_files(handler):
     send_json(handler, 200, {"ok": True, "files": files})
 
 
+def _get_backup_retention_count():
+    """从 settings.json 读取备份保留数量，默认 5。"""
+    try:
+        from handlers.settings import get_settings
+        settings = get_settings()
+        count = settings.get("backup_retention_count", 5)
+        if isinstance(count, int) and count >= 1:
+            return count
+    except Exception:
+        pass
+    return 5
+
+
+def _cleanup_old_backups(backup_parent, max_count):
+    """清理多余的旧备份，只保留最新的 max_count 个 ZIP 文件。"""
+    if max_count < 1:
+        return
+    backups = sorted(backup_parent.rglob("*.zip"), reverse=True)
+    if len(backups) <= max_count:
+        return
+    for old_backup in backups[max_count:]:
+        try:
+            old_backup.unlink()
+            log(f"[BACKUP] 清理旧备份: {old_backup.name}")
+        except OSError as e:
+            log(f"[WARN] 清理旧备份失败 {old_backup.name}: {e}")
+
+
 def handle_post_backup(handler):
     """POST /api/backup
 
-    body 可选: { "target_dir": "/用户/选择的/目录" }
-    - 带 target_dir: 备份到 所选目录/YYYYMMDD_HHMMSS/(用户自选备份目录)
-    - 不带:          优先使用 LINCLUB_BACKUP_DIR 环境变量（相对路径，
-                      如 "backup" → /data/backup/）；
-                      若环境变量未设置则备份到 数据目录/backup/YYYYMMDD_HHMMSS/(默认)
-    备份目录以「日期时间」命名,与自动备份格式一致。
+    手动备份: 创建数据快照 → 打包为 ZIP 压缩包 → 保存到备份目录。
+
+    备份目录由 LINCLUB_BACKUP_DIR 环境变量控制（相对路径，
+    如 "backup" → /data/backup/）；若未设置则默认 /data/backup/。
+
+    备份数量由 settings.json 中的 backup_retention_count 控制，默认保留 5 个。
+
+    返回 { ok: true, zip_path: "/data/backup/20250101_120000/linclub-backup-20250101_120000.zip", backup_name: "20250101_120000" }
     """
-    body = read_body(handler)
-    target_dir = (body or {}).get("target_dir") or None
+    import datetime
 
     data_dir = _get_data_paths().get("readings")
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
 
-    if target_dir:
-        target = Path(target_dir).expanduser()
-        try:
-            target.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            send_json(handler, 200, {"ok": False, "error": f"无法创建备份目录: {e}"})
-            return
+    source_dir = data_dir.parent
+
+    # 确定备份父目录
+    backup_rel = os.environ.get("LINCLUB_BACKUP_DIR", "").strip()
+    if backup_rel:
+        backup_parent = source_dir / backup_rel
     else:
-        target = None  # backup_data 内部读取 LINCLUB_BACKUP_DIR 环境变量
+        backup_parent = source_dir / "backup"
+
+    backup_parent.mkdir(parents=True, exist_ok=True)
+
+    # 生成带时间戳的备份目录名和文件名
+    now = datetime.datetime.now()
+    stamp = now.strftime("%Y%m%d_%H%M%S")
+    backup_dir = backup_parent / stamp
+    zip_filename = f"linclub-backup-{stamp}.zip"
 
     try:
-        result = backup_data(data_dir.parent, force=True, target_parent=target)
+        # 1. 先创建数据目录（复制所有数据文件）
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        settings_src = source_dir / "settings.json"
+        for name in DATA_FILES.values():
+            src = source_dir / name
+            if src.exists():
+                shutil.copy2(src, backup_dir / name)
+        if settings_src.exists():
+            shutil.copy2(settings_src, backup_dir / "settings.json")
+
+        # 2. 打包为 ZIP
+        zip_path = backup_dir / zip_filename
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for f in backup_dir.rglob('*'):
+                if f.is_file():
+                    zf.write(f, f.name)
+
+        # 3. 清理临时目录（只保留 zip）
+        shutil.rmtree(backup_dir, ignore_errors=True)
+
+        # 4. 清理多余旧备份，只保留最新的 N 个
+        retention = _get_backup_retention_count()
+        _cleanup_old_backups(backup_parent, retention)
+
+        send_json(handler, 200, {
+            "ok": True,
+            "zip_path": str(zip_path),
+            "backup_name": stamp,
+            "backup_dir": str(backup_parent),
+            "retention_count": retention,
+        })
     except Exception as e:
+        # 出错时清理残留
+        if backup_dir.exists():
+            shutil.rmtree(backup_dir, ignore_errors=True)
         send_json(handler, 200, {"ok": False, "error": f"备份失败: {e}"})
-        return
-    if result:
-        send_json(handler, 200, {"ok": True, "backup_dir": str(result)})
-    else:
-        # force=True 时 backup_data 理论上不应返回 None
-        # 如果返回 None，说明出现了未预料的错误
-        send_json(handler, 200, {"ok": False, "error": "备份失败：无法创建备份目录（可能是权限问题或磁盘空间不足）"})
 
 
 def handle_post_restore(handler):
     """POST /api/restore
 
-    body: { "source_dir": "/用户选择的/备份文件夹" }
-    从所选备份文件夹恢复数据到数据目录。
-    ⚠️ 安全措施:恢复前先把当前数据自动备份一份(可回滚),再复制备份文件覆盖。
-    只恢复存在的 .json 数据文件,不删除任何当前数据。
+    body: { "zip_path": "/data/backup/20250101_120000/linclub-backup-20250101_120000.zip" }
+    从 ZIP 压缩包恢复数据到数据目录。
+    ⚠️ 安全措施: 恢复前先把当前数据自动备份一份(可回滚),再解压覆盖。
     """
+    import datetime
+    import zipfile
+
     body = read_body(handler)
-    source_dir = (body or {}).get("source_dir") or ""
-    src = Path(source_dir).expanduser()
+    zip_path = (body or {}).get("zip_path") or ""
+    zip_file = Path(zip_path)
 
-    if not src.is_dir():
-        send_json(handler, 200, {"ok": False, "error": f"目录不存在: {source_dir}"})
+    if not zip_file.is_file():
+        send_json(handler, 200, {"ok": False, "error": f"ZIP 文件不存在: {zip_path}"})
         return
 
-    # 校验:必须是备份文件夹(含 readings.json)
-    if not (src / "readings.json").exists():
-        send_json(handler, 200, {"ok": False, "error": "所选目录不是备份文件夹(未找到 readings.json)"})
-        return
+    # 恢复前自动备份当前数据(可回滚)
+    pre_backup = backup_data(data_dir.parent, force=True) if (data_dir := _get_data_paths().get("readings")) else None
 
-    data_dir = _get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
-        return
+    try:
+        # 解压到临时目录
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with zipfile.ZipFile(zip_file, 'r') as zf:
+                zf.extractall(tmp_dir)
 
-    # 1. 恢复前自动备份当前数据(可回滚)
-    pre_backup = backup_data(data_dir.parent, force=True)
-    # 2. 复制备份文件 → 数据目录(只覆盖存在的文件,不删除)
-    #    ⚠️ data_dir 是 readings.json 文件路径,目标目录是它的 parent
-    restored = []
-    target_dir = data_dir.parent
-    for name in DATA_FILES.values():
-        src_file = src / name
-        if src_file.exists():
-            import shutil
-            shutil.copy2(src_file, target_dir / name)
-            restored.append(name)
-            log(f"  恢复 {name} <- {src_file}")
+            target_dir = (data_dir.parent if data_dir else Path("/data"))
 
-    send_json(handler, 200, {
-        "ok": True,
-        "restored": restored,
-        "pre_backup": str(pre_backup) if pre_backup else "无",
-        "source_dir": str(src),
-    })
+            # 找到解压出的数据目录（可能是 YYYYMMDD_HHMMSS/ 子目录或根目录）
+            extract_dir = Path(tmp_dir)
+            children = list(extract_dir.iterdir())
+            if len(children) == 1 and children[0].is_dir():
+                extract_dir = children[0]
+
+            # 恢复数据文件
+            restored = []
+            for name in DATA_FILES.values():
+                src_file = extract_dir / name
+                if src_file.exists():
+                    shutil.copy2(src_file, target_dir / name)
+                    restored.append(name)
+                    log(f"  恢复 {name} <- {src_file}")
+
+            # 恢复 settings.json
+            settings_src = extract_dir / "settings.json"
+            if settings_src.exists():
+                shutil.copy2(settings_src, target_dir / "settings.json")
+                restored.append("settings.json")
+
+        send_json(handler, 200, {
+            "ok": True,
+            "restored": restored,
+            "pre_backup": str(pre_backup) if pre_backup else "无",
+            "source_zip": str(zip_file),
+        })
+    except zipfile.BadZipFile:
+        send_json(handler, 200, {"ok": False, "error": "ZIP 文件格式错误"})
+    except Exception as e:
+        send_json(handler, 200, {"ok": False, "error": f"恢复失败: {e}"})
 
 
 def handle_post_upload(handler):
