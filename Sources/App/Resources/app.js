@@ -234,11 +234,15 @@ function saveAutoBackup(enabled) {
 function initAutoBackupToggle() {
   const cb = document.getElementById('datamgmt-auto-backup-toggle') || document.getElementById('auto-backup-toggle');
   if (!cb) return;
+  // 避免重复绑定事件
+  if (!cb._backupToggleBound) {
+    cb._backupToggleBound = true;
+    cb.addEventListener('change', e => {
+      saveAutoBackup(e.target.checked);
+      showToast(e.target.checked ? '已开启自动备份' : '已关闭自动备份', 'info');
+    });
+  }
   cb.checked = getAutoBackupEnabled();
-  cb.addEventListener('change', e => {
-    saveAutoBackup(e.target.checked);
-    showToast(e.target.checked ? '已开启自动备份' : '已关闭自动备份', 'info');
-  });
 }
 
 // 数据管理弹窗

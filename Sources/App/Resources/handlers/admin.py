@@ -231,7 +231,7 @@ def handle_get_backup_status(handler):
 
     backup_entries = []
     if backup_dir.exists():
-        # 只列出 .zip 文件（新的备份格式）
+        # 先列出 .zip 文件（新的备份格式）
         for f in sorted(backup_dir.rglob("*.zip"), reverse=True):
             if f.is_file():
                 # 从文件名提取备份时间戳
@@ -259,7 +259,27 @@ def handle_get_backup_status(handler):
                     "file_count": file_count,
                     "total_size": total_size,
                     "created_at": datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "format": "zip",
                 })
+
+        # 再列出旧格式的备份目录（非 .zip 目录，排除带 _ 的时间戳目录，因为已被 ZIP 覆盖）
+        for d in sorted(backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+            if d.is_dir() and not d.name.endswith('.zip'):
+                # 只列出没有对应 .zip 的旧目录
+                zip_name = f"meter-backup-{d.name}.zip"
+                if not (backup_dir / zip_name).exists():
+                    # 统计目录内文件
+                    file_count = sum(1 for _ in d.rglob('*') if _.is_file())
+                    total_size = sum(f.stat().st_size for f in d.rglob('*') if f.is_file())
+                    backup_entries.append({
+                        "name": d.name,
+                        "zip_path": str(d),
+                        "zip_name": None,
+                        "file_count": file_count,
+                        "total_size": total_size,
+                        "created_at": datetime.datetime.fromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                        "format": "dir",
+                    })
 
     send_json(handler, 200, {
         "auto_backup": auto_backup,

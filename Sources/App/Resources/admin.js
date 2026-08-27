@@ -263,16 +263,22 @@ function loadBackupStatus() {
   fetch('/api/admin/backup-status' + getAuthParam())
     .then(r => r.json()).then(res => {
       const cb = document.getElementById('admin-auto-backup-toggle');
-      if (cb) cb.checked = res.auto_backup !== false;
+      if (cb) {
+        cb.checked = res.auto_backup !== false;
+        // 避免重复绑定事件
+        if (!cb._backupToggleBound) {
+          cb._backupToggleBound = true;
+          cb.addEventListener('change', e => {
+            fetch('/api/admin/auto-backup' + getAuthParam(), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: e.target.checked }),
+            }).then(() => showToast(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
+          });
+        }
+      }
       const countEl = document.getElementById('backup-count');
       if (countEl) countEl.textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
-      if (cb) cb.addEventListener('change', e => {
-        fetch('/api/admin/auto-backup' + getAuthParam(), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ enabled: e.target.checked }),
-        }).then(() => showAlert(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
-      }, { once: true });
       // 填充保留数量输入框
       const retention = res.retention_count || 5;
       const adminRet = document.getElementById('admin-backup-retention');
@@ -323,15 +329,17 @@ function renderBackupList(backups) {
       let html = '';
       backups.forEach(b => {
         const sizeStr = formatBytes(b.total_size || 0);
+        const isZip = b.format === 'zip' || b.zip_name;
+        const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
         html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
           <div>
             <span style="color:var(--text);font-weight:510;">${b.name}</span>
-            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
             <span style="color:var(--text-muted);margin-left:8px;font-size:10px;">${b.created_at}</span>
           </div>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
-            <button class="btn btn-danger btn-xs" onclick="adminRestoreFromZip('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="${isZip ? `adminRestoreFromZip('${b.zip_name}')` : `datamgmtRestoreFromZip('${b.zip_name}')`}" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
           </div>
         </div>`;
       });
@@ -347,14 +355,16 @@ function renderBackupList(backups) {
       let html = '';
       backups.forEach(b => {
         const sizeStr = formatBytes(b.total_size || 0);
+        const isZip = b.format === 'zip' || b.zip_name;
+        const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
         html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
           <div>
             <span style="color:var(--text);font-weight:510;">${b.name}</span>
-            <span style="color:var(--text-muted);margin-left:8px;">${b.file_count} 文件 · ${sizeStr}</span>
+            <span style="color:var(--text-muted);margin-left:8px;">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
           <div style="display:flex;gap:4px;">
-            <button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>
-            <button class="btn btn-danger btn-xs" onclick="datamgmtRestoreFromZip('${b.zip_name || b.name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="datamgmtRestoreFromZip('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
           </div>
         </div>`;
       });
