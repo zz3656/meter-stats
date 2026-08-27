@@ -1,15 +1,15 @@
 # ============================================================
-# 林卡电表统计 — 飞牛 OS (fnOS) 部署指南
+# 电表统计 — 飞牛 OS (fnOS) 部署指南
 # ============================================================
 # 此文件提供飞牛 OS 图形化界面部署的完整步骤
 # ============================================================
 
 # ---- 方式一：通过 docker-compose.yml 部署（推荐） ----
-# 镜像: zz3656/linclub-electricity-stats:latest（支持 amd64/arm64）
+# 镜像: zz3656/meter-stats:latest（支持 amd64/arm64）
 # GitHub Actions 自动构建并推送到 Docker Hub
 
 # 步骤 1：下载 compose 文件
-# 1.1 在飞牛 OS 文件管理中，创建目录（如 /docker/linclub）
+# 1.1 在飞牛 OS 文件管理中，创建目录（如 /docker/meter-stats）
 # 1.2 将 docker-compose.yml 上传到该目录
 
 # 步骤 2：修改配置（可选）
@@ -21,8 +21,8 @@
 # 步骤 3：通过飞牛 OS 部署
 # 3.1 打开飞牛 OS 桌面 → 打开"Container Manager"（容器管理）
 # 3.2 点击左侧"项目" → 点击"新建"
-# 3.3 填写项目名：linclub
-# 3.4 项目路径：选择刚才上传 docker-compose.yml 的目录（如 /docker/linclub）
+# 3.3 填写项目名：meter-stats
+# 3.4 项目路径：选择刚才上传 docker-compose.yml 的目录（如 /docker/meter-stats）
 # 3.5 点击"创建" → "启动"
 
 # 步骤 4：访问应用
@@ -34,7 +34,7 @@
 # 步骤 1：打开 Container Manager → 映像
 # 1.1 点击"创建" → "从网址拉取"
 # 1.2 填写：
-#       映像名称：zz3656/linclub-electricity-stats
+#       映像名称：zz3656/meter-stats
 #       标签：latest
 # 1.3 点击"确定"等待下载完成
 #    （镜像支持 linux/amd64 和 linux/arm64，自动适配你的硬件）
@@ -42,8 +42,8 @@
 # 步骤 2：手动创建容器
 # 2.1 点击 Container Manager → 容器 → 创建
 # 2.2 基本设置：
-#       容器名称：linclub
-#       映像：zz3656/linclub-electricity-stats:latest
+#       容器名称：meter-stats
+#       映像：zz3656/meter-stats:latest
 #       勾选"启用自动重新启动"
 
 # 2.3 空间 → 端口设置：
@@ -53,24 +53,24 @@
 
 # 2.4 空间 → 卷设置（重要！数据持久化）：
 #       添加挂载点：
-#       本地路径：/docker/linclub/data（提前在文件管理中创建）
+#       本地路径：/docker/meter-stats/data（提前在文件管理中创建）
 #       容器路径：/data
 #       模式：读写
 
 # 2.5 环境 → 环境变量：
 #       添加变量：
-#       名称：LINCLUB_INITIAL_PASS
+#       名称：METER_INITIAL_PASS
 #       值：修改为你想要的密码（如 MyStrongPass123!）
 #
 #       绑定地址（默认 0.0.0.0，通常不需要设置）
-#       名称：LINCLUB_BIND
+#       名称：METER_BIND
 #       值：0.0.0.0
 
 # 2.6 网络 → 网络设置：
 #       网络模式：bridge（默认）
 
 # 步骤 3：启动容器
-# 点击"完成" → 容器列表中找到 linclub → 点击"启动"
+# 点击"完成" → 容器列表中找到 meter-stats → 点击"启动"
 
 # ---- 方式三：终端命令行部署（适合熟练用户） ----
 
@@ -78,14 +78,14 @@
 $ docker --version
 
 # 步骤 1：创建数据目录
-$ mkdir -p /docker/linclub/data
+$ mkdir -p /docker/meter-stats/data
 
 # 步骤 2：创建 docker-compose.yml 文件
-$ vi /docker/linclub/docker-compose.yml
+$ vi /docker/meter-stats/docker-compose.yml
 # 粘贴以下内容（见下方）
 
 # 步骤 3：启动容器
-$ cd /docker/linclub
+$ cd /docker/meter-stats
 $ docker compose up -d
 
 # 步骤 4：查看状态
@@ -99,9 +99,9 @@ $ docker compose logs -f
 # docker-compose.yml 内容（方式三需要手动创建）
 # ============================================================
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
@@ -109,10 +109,10 @@ services:
       - ./data:/data
     environment:
       - TZ=Asia/Shanghai
-      - LINCLUB_PORT=8765
-      - LINCLUB_DATA_DIR=/data
-      - LINCLUB_BIND=0.0.0.0
-      - LINCLUB_INITIAL_PASS=admin123  # ⚠️ 请修改！
+      - METER_PORT=8765
+      - METER_DATA_DIR=/data
+      - METER_BIND=0.0.0.0
+      - METER_INITIAL_PASS=admin123  # ⚠️ 请修改！
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()"]
       interval: 30s
@@ -148,10 +148,10 @@ $ docker compose down
 $ docker compose up -d --build
 
 # 进入容器终端调试
-$ docker exec -it linclub bash
+$ docker exec -it meter-stats bash
 
 # 查看数据文件
-$ docker exec -it linclub ls -la /data
+$ docker exec -it meter-stats ls -la /data
 
 # ============================================================
 # 数据迁移（从 macOS 到飞牛 OS）
@@ -171,17 +171,17 @@ $ docker exec -it linclub ls -la /data
 #    - settings.json
 
 # 3. 复制到容器内
-$ docker cp readings.json linclub:/data/
-$ docker cp charges.json linclub:/data/
-$ docker cp items.json linclub:/data/
-$ docker cp purchases.json linclub:/data/
-$ docker cp settings.json linclub:/data/
+$ docker cp readings.json meter-stats:/data/
+$ docker cp charges.json meter-stats:/data/
+$ docker cp items.json meter-stats:/data/
+$ docker cp purchases.json meter-stats:/data/
+$ docker cp settings.json meter-stats:/data/
 
 # 4. 重启容器使数据生效
 $ docker compose restart
 
 # 5. 验证数据
-$ docker exec -it linclub ls -la /data
+$ docker exec -it meter-stats ls -la /data
 
 # ============================================================
 # 常见问题排查
@@ -194,12 +194,12 @@ $ docker exec -it linclub ls -la /data
 **可能原因：**
 
 1. **飞牛 OS 端口被占用**
-   - 在飞牛 OS 终端执行：`docker port linclub`
+   - 在飞牛 OS 终端执行：`docker port meter-stats`
    - 如果端口映射为空，检查 Container Manager 中的端口配置
    - 修改 docker-compose.yml 的端口，例如：`"8888:8765"`
 
 2. **数据卷挂载失败**
-   - 在飞牛 OS 文件管理器中手动创建 `/docker/linclub/data/` 目录
+   - 在飞牛 OS 文件管理器中手动创建 `/docker/meter-stats/data/` 目录
    - 确保 Docker 对目录有读写权限
 
 3. **健康检查导致误判重启**
@@ -209,16 +209,16 @@ $ docker exec -it linclub ls -la /data
 
 4. **查看完整日志定位原因**
    ```bash
-   docker logs linclub --tail 50
+   docker logs meter-stats --tail 50
    # 如果日志只有少量输出就停止，说明启动过程中有错误
    # 如果日志完全为空，容器可能在几毫秒内就崩溃了
    ```
 
 5. **禁用重启策略测试**
    ```bash
-   docker update --restart=no linclub
+   docker update --restart=no meter-stats
    docker compose up -d
-   docker logs -f linclub
+   docker logs -f meter-stats
    ```
 
 ## Q1：容器启动后访问 404 或拒绝连接
@@ -263,13 +263,13 @@ docker pull registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
 ## Q5：修改密码后忘记
 
 **解决：**
-1. 进入容器终端：`docker exec -it linclub bash`
+1. 进入容器终端：`docker exec -it meter-stats bash`
 2. 查看 /data/settings.json
 3. 修改密码哈希（需要先重新生成哈希）
 4. 或者重置为默认：
    ```bash
    docker compose down
-   rm -rf /docker/linclub/data
+   rm -rf /docker/meter-stats/data
    docker compose up -d
    ```
 
@@ -278,10 +278,10 @@ docker pull registry.cn-hangzhou.aliyuncs.com/library/python:3.11-slim
 **解决：**
 ```bash
 # 进入容器
-docker exec -it linclub bash
+docker exec -it meter-stats bash
 
 # 修改文件权限
-chown linclub:linclub /data/*.json
+chown meter-stats:meter-stats /data/*.json
 
 # 退出并重启
 exit
@@ -292,7 +292,7 @@ docker compose restart
 
 **解决：**
 1. 在飞牛 OS Container Manager 中：
-   - 容器 → linclub → 日志
+   - 容器 → meter-stats → 日志
    - 点击"清空日志"
 2. 或限制日志大小，修改 docker-compose.yml：
    ```yaml
@@ -318,7 +318,7 @@ docker compose restart
 2. **修改默认端口**（8765 → 其他端口如 8888）
 3. **启用 HTTPS**（飞牛 OS 支持反代 + SSL 证书）
 4. **限制访问 IP**（在路由器防火墙中设置）
-5. **定期备份数据**（/docker/linclub/data 目录）
+5. **定期备份数据**（/docker/meter-stats/data 目录）
 
 # ============================================================
 # 备份与恢复
@@ -327,11 +327,11 @@ docker compose restart
 ## 备份
 ```bash
 # 方法 1：直接复制数据目录
-cp -r /docker/linclub/data /docker/linclub/data_backup_$(date +%Y%m%d)
+cp -r /docker/meter-stats/data /docker/meter-stats/data_backup_$(date +%Y%m%d)
 
 # 方法 2：使用 docker compose
-docker exec -it linclub tar czf /tmp/linclub-backup.tar.gz -C /data .
-docker cp linclub:/tmp/linclub-backup.tar.gz /docker/linclub-backup.tar.gz
+docker exec -it meter-stats tar czf /tmp/meter-backup.tar.gz -C /data .
+docker cp meter-stats:/tmp/meter-backup.tar.gz /docker/meter-backup.tar.gz
 ```
 
 ## 恢复
@@ -340,10 +340,10 @@ docker cp linclub:/tmp/linclub-backup.tar.gz /docker/linclub-backup.tar.gz
 docker compose stop
 
 # 删除旧数据
-rm -rf /docker/linclub/data
+rm -rf /docker/meter-stats/data
 
 # 恢复备份
-tar xzf /docker/linclub-backup.tar.gz -C /docker/linclub/data/
+tar xzf /docker/meter-backup.tar.gz -C /docker/meter-stats/data/
 
 # 重启容器
 docker compose start
@@ -389,7 +389,7 @@ docker compose start
 ### 第 2 步：上传到飞牛 OS
 
 1. 打开飞牛 OS 桌面 → **文件管理器**
-2. 找到或创建目录：`/docker/linclub/data/`
+2. 找到或创建目录：`/docker/meter-stats/data/`
 3. 将刚才从 macOS 复制的 5 个 `.json` 文件上传到该目录
 
 ### 第 3 步：启动 Docker 容器
@@ -397,16 +397,16 @@ docker compose start
 如果还没有启动容器，按以下方式：
 
 **Container Manager → 项目 → 创建新项目：**
-- 项目名：`linclub`
-- 项目路径：`/docker/linclub/`（包含 docker-compose.yml）
+- 项目名：`meter-stats`
+- 项目路径：`/docker/meter-stats/`（包含 docker-compose.yml）
 - 启动项目
 
 ### 第 4 步：验证数据
 
 ```bash
 # 进入飞牛 OS 终端
-docker exec -it linclub ls -la /data
-docker exec -it linclub cat /data/readings.json | head -20
+docker exec -it meter-stats ls -la /data
+docker exec -it meter-stats cat /data/readings.json | head -20
 ```
 
 应该能看到你的抄表记录。
@@ -420,7 +420,7 @@ docker exec -it linclub cat /data/readings.json | head -20
    - 主机：你的飞牛 OS IP
    - 端口：22（默认）
    - 用户名/密码：你的飞牛 OS 登录账号
-3. 连接后导航到 `/docker/linclub/data/`
+3. 连接后导航到 `/docker/meter-stats/data/`
 4. 拖拽上传 macOS 导出的 5 个 `.json` 文件
 
 ---
@@ -450,11 +450,11 @@ scp ~/linca-migration/*.json admin@NAS_IP:/tmp/linca-data/
 
 ```bash
 # 飞牛 OS 终端执行
-docker cp /tmp/linca-data/readings.json linclub:/data/
-docker cp /tmp/linca-data/charges.json linclub:/data/
-docker cp /tmp/linca-data/items.json linclub:/data/
-docker cp /tmp/linca-data/purchases.json linclub:/data/
-docker cp /tmp/linca-data/settings.json linclub:/data/
+docker cp /tmp/linca-data/readings.json meter-stats:/data/
+docker cp /tmp/linca-data/charges.json meter-stats:/data/
+docker cp /tmp/linca-data/items.json meter-stats:/data/
+docker cp /tmp/linca-data/purchases.json meter-stats:/data/
+docker cp /tmp/linca-data/settings.json meter-stats:/data/
 ```
 
 ### 第 4 步：重启容器
@@ -469,12 +469,12 @@ docker compose restart
 
 | 检查项 | 命令 | 应该看到 |
 |--------|------|----------|
-| 数据文件存在 | `docker exec linclub ls -la /data` | 5 个 `.json` 文件 |
-| 抄表记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/readings.json'))))"` | 你的抄表条数 |
-| 充值记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/charges.json'))))"` | 你的充值条数 |
-| 物品库存 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/items.json'))))"` | 你的物品数 |
-| 申购记录 | `docker exec linclub python3 -c "import json; print(len(json.load(open('/data/purchases.json'))))"` | 你的申购条数 |
-| 用户配置 | `docker exec linclub cat /data/settings.json` | 你的用户信息 |
+| 数据文件存在 | `docker exec meter-stats ls -la /data` | 5 个 `.json` 文件 |
+| 抄表记录 | `docker exec meter-stats python3 -c "import json; print(len(json.load(open('/data/readings.json'))))"` | 你的抄表条数 |
+| 充值记录 | `docker exec meter-stats python3 -c "import json; print(len(json.load(open('/data/charges.json'))))"` | 你的充值条数 |
+| 物品库存 | `docker exec meter-stats python3 -c "import json; print(len(json.load(open('/data/items.json'))))"` | 你的物品数 |
+| 申购记录 | `docker exec meter-stats python3 -c "import json; print(len(json.load(open('/data/purchases.json'))))"` | 你的申购条数 |
+| 用户配置 | `docker exec meter-stats cat /data/settings.json` | 你的用户信息 |
 
 ---
 
@@ -484,11 +484,11 @@ docker compose restart
 2. **确保覆盖而非新建**，上传文件时要选择「覆盖已存在文件」
 3. **如果提示权限问题**，在飞牛 OS 终端执行：
    ```bash
-   docker exec -it linclub chown linclub:linclub /data/*.json
+   docker exec -it meter-stats chown meter-stats:meter-stats /data/*.json
    ```
 4. **迁移完成后建议做一次备份**：
    ```bash
-   docker exec -it linclub python3 -c "
+   docker exec -it meter-stats python3 -c "
    import json
    with open('/data/settings.json') as f:
        s = json.load(f)

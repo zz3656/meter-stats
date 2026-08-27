@@ -1,4 +1,4 @@
-# 📊 林卡电表统计 — Linclub Electricity Stats
+# 📊 电表统计 — Meter Stats
 
 > 酒吧 / 场所工程部电表用量统计工具。支持 4 块电表独立抄表、充值记录、月度/年度报告、物品申购管理和三级用户权限。Docker 容器化部署，浏览器直接访问。
 
@@ -29,37 +29,37 @@
 ### Docker Run
 
 ```bash
-docker pull zz3656/linclub-electricity-stats:latest
+docker pull zz3656/meter-stats:latest
 
 docker run -d \
-  --name linclub \
+  --name meter-stats \
   -p 8765:8765 \
-  -v linclub-data:/data \
-  -e LINCLUB_INITIAL_PASS=your-secure-password \
+  -v meter-data:/data \
+  -e METER_INITIAL_PASS=your-secure-password \
   -e TZ=Asia/Shanghai \
   --restart unless-stopped \
-  zz3656/linclub-electricity-stats:latest
+  zz3656/meter-stats:latest
 ```
 
 ### Docker Compose（推荐）
 
 ```yaml
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
     volumes:
-      - linclub-data:/data
+      - meter-data:/data
     environment:
-      - LINCLUB_PORT=8765
-      - LINCLUB_DATA_DIR=/data
-      - LINCLUB_BIND=0.0.0.0
-      - LINCLUB_INITIAL_PASS=admin123
+      - METER_PORT=8765
+      - METER_DATA_DIR=/data
+      - METER_BIND=0.0.0.0
+      - METER_INITIAL_PASS=admin123
 volumes:
-  linclub-data:
+  meter-data:
     driver: local
 ```
 
@@ -75,11 +75,11 @@ docker compose up -d
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `LINCLUB_PORT` | `8765` | 服务端口 |
-| `LINCLUB_DATA_DIR` | `/data` | 数据持久化目录 |
-| `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |
-| `LINCLUB_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
-| `LINCLUB_INITIAL_PASS` | `admin123` | 初始管理员密码 |
+| `METER_PORT` | `8765` | 服务端口 |
+| `METER_DATA_DIR` | `/data` | 数据持久化目录 |
+| `METER_BIND` | `0.0.0.0` | 绑定地址 |
+| `METER_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
+| `METER_INITIAL_PASS` | `admin123` | 初始管理员密码 |
 
 ---
 
@@ -129,7 +129,7 @@ docker compose up -d
 ## 🔄 升级
 
 ```bash
-docker pull zz3656/linclub-electricity-stats:latest
+docker pull zz3656/meter-stats:latest
 docker compose down
 docker compose up -d
 ```

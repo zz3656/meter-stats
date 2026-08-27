@@ -1,5 +1,5 @@
 # ============================================================
-# 林卡电表统计 — Docker 快速启动脚本
+# 电表统计 — Docker 快速启动脚本
 # ============================================================
 # 用法:  ./docker-run.sh [命令]
 # 命令:  up / down / logs / rebuild / stop
@@ -12,7 +12,7 @@ ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 case "${1:-up}" in
   up)
-    echo "==> 启动林卡电表服务..."
+    echo "==> 启动电表服务..."
     cd "$ROOT_DIR"
     docker compose up -d
     echo ""
@@ -24,7 +24,7 @@ case "${1:-up}" in
     echo "  停止服务:   $0 down"
     ;;
   down)
-    echo "==> 停止林卡电表服务..."
+    echo "==> 停止电表服务..."
     cd "$ROOT_DIR"
     docker compose down
     echo "✓ 服务已停止"
@@ -57,7 +57,7 @@ case "${1:-up}" in
     ;;
   exec)
     cd "$ROOT_DIR"
-    docker compose exec linclub "$@"
+    docker compose exec meter-stats "$@"
     ;;
   *)
     echo "用法: $0 {up|down|logs|rebuild|stop|start|status|exec <cmd>}"

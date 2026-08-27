@@ -13,7 +13,7 @@
 
 ## 第 2 步：在 GitHub 仓库添加 Secret
 
-1. 打开 https://github.com/zz3656/linclub-electricity-stats
+1. 打开 https://github.com/zz3656/meter-stats
 2. 点击 **Settings**（设置）
 3. 左侧菜单 **Secrets and variables** → **Actions**
 4. 点击 **New repository secret**
@@ -37,7 +37,7 @@
 
 ## 第 5 步：验证
 
-打开 https://hub.docker.com/r/zz3656/linclub-electricity-stats/tags
+打开 https://hub.docker.com/r/zz3656/meter-stats/tags
 
 你会看到 `latest` 标签旁边显示：
 ```

@@ -1,7 +1,7 @@
 # ============================================================
-# 林卡电表统计 — Docker Compose
+# 电表统计 — Docker Compose
 # ============================================================
-# 镜像: zz3656/linclub-electricity-stats:latest
+# 镜像: zz3656/meter-stats:latest
 # 访问: http://localhost:8765
 # 默认: admin / admin123
 # 启动: docker compose up -d
@@ -9,9 +9,9 @@
 # ============================================================
 
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
@@ -22,15 +22,15 @@ services:
       # 时区（POSIX 标准 TZ 环境变量，默认 Asia/Shanghai）
       - TZ=Asia/Shanghai
       # 服务端口（默认 8765）
-      - LINCLUB_PORT=8765
+      - METER_PORT=8765
       # 数据目录
-      - LINCLUB_DATA_DIR=/data
+      - METER_DATA_DIR=/data
       # 绑定地址（0.0.0.0 允许外部访问，默认值已在代码中设置）
-      - LINCLUB_BIND=0.0.0.0
+      - METER_BIND=0.0.0.0
       # 初始管理员密码（⚠️ 请修改！）
-      - LINCLUB_INITIAL_PASS=admin123
+      - METER_INITIAL_PASS=admin123
       # 备份目录（相对于 /data 的相对路径，留空则使用 /data/backup）
-      # - LINCLUB_BACKUP_DIR=backup
+      # - METER_BACKUP_DIR=backup
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()"]
       interval: 30s

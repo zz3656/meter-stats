@@ -14,7 +14,7 @@ echo "==> Building ($CONFIG)..."
 cd "$ROOT"
 swift build -c "$CONFIG"
 
-BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)/Linclub"
+BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)/App"
 if [[ ! -x "$BIN_PATH" ]]; then
     echo "❌ 找不到 $BIN_PATH"
     exit 1
@@ -26,14 +26,14 @@ mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
 # 拷贝可执行
-cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/Linclub"
+cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/App"
 
 # 拷贝 Info.plist
 cp "$ROOT/Info.plist" "$APP_DIR/Contents/Info.plist"
 
 # 拷贝资源文件:直接从源码目录拷贝(ServerManager 只读 Bundle.main.resourceURL)
 # 不用 SwiftPM bundle — handlers/ 与 utils/ 各有 __init__.py,.process 会冲突
-RES_SRC="$ROOT/Sources/Linclub/Resources"
+RES_SRC="$ROOT/Sources/App/Resources"
 if [ -d "$RES_SRC" ]; then
     cp -R "$RES_SRC"/. "$APP_DIR/Contents/Resources/"
     echo "    + Resources/ (from source: server.py, index.html, handlers/, utils/, ...)"

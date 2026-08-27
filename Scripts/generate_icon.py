@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-生成林卡电表 macOS app 图标。
+生成电表 macOS app 图标。
 
 设计:
 - 背景:Linear 风格深色 #08090a 圆角矩形(带轻微内阴影营造立体感)
@@ -10,7 +10,7 @@
 输出:
 - Assets/AppIcon.iconset/*.png (10 个规格)
 - Assets/AppIcon.icns (iconutil 生成)
-- 拷贝到 ~/Applications/林卡电表.app/Contents/Resources/AppIcon.icns
+- 拷贝到 ~/Applications/电表.app/Contents/Resources/AppIcon.icns
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter

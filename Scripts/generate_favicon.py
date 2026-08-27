@@ -9,9 +9,9 @@
 - 输出: favicon.svg (矢量) + favicon-32.png + favicon-16.png
 
 输出位置:
-- Sources/Linclub/Resources/favicon.svg
-- Sources/Linclub/Resources/favicon-32.png
-- Sources/Linclub/Resources/favicon-16.png
+- Sources/MeterStats/Resources/favicon.svg
+- Sources/MeterStats/Resources/favicon-32.png
+- Sources/MeterStats/Resources/favicon-16.png
 - docker/favicon.svg (同步副本)
 """
 from pathlib import Path
@@ -21,7 +21,7 @@ import os
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
-WEB_DIR = ROOT / "Sources" / "Linclub" / "Resources"
+WEB_DIR = ROOT / "Sources" / "MeterStats" / "Resources"
 DOCKER_DIR = ROOT / "docker"
 
 # 主题色

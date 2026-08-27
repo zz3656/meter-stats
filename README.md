@@ -1,4 +1,4 @@
-# 📊 林卡电表统计 — Linclub Electricity Stats
+# 📊 电表统计 — Meter Stats
 
 > 酒吧工程部电表统计工具。支持 4 表抄表、充值、月报、物品管理和三级权限。Docker 一键部署。
 
@@ -11,9 +11,9 @@
 
 ```yaml
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
@@ -21,10 +21,10 @@ services:
       - ./data:/data
     environment:
       - TZ=Asia/Shanghai
-      - LINCLUB_PORT=8765
-      - LINCLUB_DATA_DIR=/data
-      - LINCLUB_BIND=0.0.0.0
-      - LINCLUB_INITIAL_PASS=admin123
+      - METER_PORT=8765
+      - METER_DATA_DIR=/data
+      - METER_BIND=0.0.0.0
+      - METER_INITIAL_PASS=admin123
 ```
 
 ```bash
@@ -36,14 +36,14 @@ docker compose up -d
 ### Docker Run
 
 ```bash
-docker run -d --name linclub \
+docker run -d --name meter-stats \
   -p 8765:8765 -v $(pwd)/data:/data \
   -e TZ=Asia/Shanghai \
-  -e LINCLUB_BIND=0.0.0.0 \
-  -e LINCLUB_PORT=8765 \
-  -e LINCLUB_INITIAL_PASS=your-password \
+  -e METER_BIND=0.0.0.0 \
+  -e METER_PORT=8765 \
+  -e METER_INITIAL_PASS=your-password \
   --restart unless-stopped \
-  zz3656/linclub-electricity-stats:latest
+  zz3656/meter-stats:latest
 ```
 
 ### macOS 原生应用
@@ -57,10 +57,10 @@ docker run -d --name linclub \
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `TZ` | `Asia/Shanghai` | 时区（POSIX 标准，支持所有 tzdata 时区名） |
-| `LINCLUB_PORT` | `8765` | 服务端口 |
-| `LINCLUB_DATA_DIR` | `/data` | 数据目录 |
-| `LINCLUB_INITIAL_PASS` | `admin123` | 初始密码 |
-| `LINCLUB_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
+| `METER_PORT` | `8765` | 服务端口 |
+| `METER_DATA_DIR` | `/data` | 数据目录 |
+| `METER_INITIAL_PASS` | `admin123` | 初始密码 |
+| `METER_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
 
 ## ✨ 功能
 
@@ -77,7 +77,7 @@ Python 3.11 · JSON 存储 · 零 pip 依赖 · ~92 MB · linux/amd64 + linux/ar
 ## 🔄 升级
 
 ```bash
-docker pull zz3656/linclub-electricity-stats:latest
+docker pull zz3656/meter-stats:latest
 docker compose down && docker compose up -d
 ```
 
@@ -93,7 +93,7 @@ docker compose down && docker compose up -d
 ## 📂 项目结构
 
 ```
-Sources/Linclub/          # macOS 原生应用（Swift + Python）
+Sources/MeterStats/          # macOS 原生应用（Swift + Python）
 docker/                   # Docker 部署（Web 版）
 ├── Dockerfile
 ├── docker-compose.yml
@@ -127,11 +127,11 @@ docker compose up -d --build               # Docker 开发
 | 问题 | 解决 |
 |---|---|
 | 端口被占用 | 修改 docker-compose.yml 端口映射 |
-| Docker 健康检查失败 | `docker inspect linclub | grep Health` |
+| Docker 健康检查失败 | `docker inspect meter-stats | grep Health` |
 
 ## 🤝 贡献
 
-欢迎提交 Issue 和 PR！[贡献指南](CONTRIBUTING.md) · [报告问题](https://github.com/linclub/linclub-electricity-stats/issues)
+欢迎提交 Issue 和 PR！[贡献指南](CONTRIBUTING.md) · [报告问题](https://github.com/meter-stats/meter-stats/issues)
 
 ## 📄 许可证
 

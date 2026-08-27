@@ -1,13 +1,13 @@
 # 贡献指南
 
-感谢你对 linclub-electricity-stats 的关注！
+感谢你对 meter-stats 的关注！
 
 ## 项目结构
 
 ```
 .
-├── Sources/Linclub/              # macOS .app 原生应用（Swift + Python）
-│   ├── LinclubApp.swift          # SwiftUI 入口
+├── Sources/MeterStats/              # macOS .app 原生应用（Swift + Python）
+│   ├── MeterStatsApp.swift          # SwiftUI 入口
 │   ├── ServerManager.swift     # Python 子进程管理
 │   └── Resources/              # Python 后端 + 前端
 │       ├── server.py           # HTTP 服务入口
@@ -60,7 +60,7 @@ docker compose up -d
 docker compose logs -f
 
 # 进入容器调试
-docker compose exec linclub bash
+docker compose exec meter-stats bash
 ```
 
 ## 贡献流程

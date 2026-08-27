@@ -1,12 +1,12 @@
-# 📊 林卡电表统计 — Linclub Electricity Stats
+# 📊 电表统计 — Meter Stats
 
 > 酒吧 / 场所工程部电表用量统计工具。支持 4 块电表独立抄表、充值记录、月度/年度报告、物品申购管理和三级用户权限。Docker 容器化部署，浏览器直接访问。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
-[![Image Size](https://img.shields.io/docker/image-size/zz3656/linclub-electricity-stats/latest?label=image%20size)](https://hub.docker.com/r/zz3656/linclub-electricity-stats)
-[![Platforms](https://img.shields.io/badge/platforms-linux%2Famd64%20%7C%20linux%2Farm64-brightgreen.svg)](https://hub.docker.com/r/zz3656/linclub-electricity-stats)
+[![Image Size](https://img.shields.io/docker/image-size/zz3656/meter-stats/latest?label=image%20size)](https://hub.docker.com/r/zz3656/meter-stats)
+[![Platforms](https://img.shields.io/badge/platforms-linux%2Famd64%20%7C%20linux%2Farm64-brightgreen.svg)](https://hub.docker.com/r/zz3656/meter-stats)
 
 ---
 
@@ -32,30 +32,30 @@
 ### 方式一：Docker Run
 
 ```bash
-docker pull zz3656/linclub-electricity-stats:latest
+docker pull zz3656/meter-stats:latest
 
 # 1. 创建数据目录
 mkdir -p data
 
 # 2. 启动容器（数据存放在当前目录下的 data/）
 docker run -d \
-  --name linclub \
+  --name meter-stats \
   -p 8765:8765 \
   -v $(pwd)/data:/data \
   -e TZ=Asia/Shanghai \
-  -e LINCLUB_BIND=0.0.0.0 \
-  -e LINCLUB_INITIAL_PASS=your-secure-password \
+  -e METER_BIND=0.0.0.0 \
+  -e METER_INITIAL_PASS=your-secure-password \
   --restart unless-stopped \
-  zz3656/linclub-electricity-stats:latest
+  zz3656/meter-stats:latest
 ```
 
 ### 方式二：Docker Compose（推荐）
 
 ```yaml
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
@@ -63,10 +63,10 @@ services:
       - ./data:/data
     environment:
       - TZ=Asia/Shanghai
-      - LINCLUB_PORT=8765
-      - LINCLUB_DATA_DIR=/data
-      - LINCLUB_BIND=0.0.0.0
-      - LINCLUB_INITIAL_PASS=admin123
+      - METER_PORT=8765
+      - METER_DATA_DIR=/data
+      - METER_BIND=0.0.0.0
+      - METER_INITIAL_PASS=admin123
 ```
 
 保存为 `docker-compose.yml` 后运行：
@@ -84,12 +84,12 @@ docker compose up -d
 | 变量 | 默认值 | 说明 |
 |---|---|---|
 | `TZ` | `Asia/Shanghai` | 时区（POSIX 标准，支持所有 tzdata 时区名） |
-| `LINCLUB_PORT` | `8765` | 服务端口 |
-| `LINCLUB_DATA_DIR` | `/data` | 数据持久化目录 |
-| `LINCLUB_BIND` | `0.0.0.0` | 绑定地址 |
-| `LINCLUB_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
-| `LINCLUB_INITIAL_PASS` | `admin123` | 初始管理员密码 |
-| `LINCLUB_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
+| `METER_PORT` | `8765` | 服务端口 |
+| `METER_DATA_DIR` | `/data` | 数据持久化目录 |
+| `METER_BIND` | `0.0.0.0` | 绑定地址 |
+| `METER_INITIAL_ADMIN` | `admin` | 初始管理员用户名 |
+| `METER_INITIAL_PASS` | `admin123` | 初始管理员密码 |
+| `METER_BACKUP_DIR` | `backup` | 备份目录（相对 `/data` 的相对路径，留空则默认 `/data/backup`） |
 
 ---
 
@@ -165,7 +165,7 @@ docker compose up -d
 
 ```bash
 # 拉取最新镜像
-docker pull zz3656/linclub-electricity-stats:latest
+docker pull zz3656/meter-stats:latest
 
 # 重启容器
 docker compose down
@@ -178,10 +178,10 @@ docker compose up -d
 
 ## 🛡️ 安全建议
 
-1. **修改默认密码** — 使用 `LINCLUB_INITIAL_PASS` 环境变量
+1. **修改默认密码** — 使用 `METER_INITIAL_PASS` 环境变量
 2. **修改端口** — 如果 8765 被占用，修改 `-p` 参数
 3. **限制访问** — 使用防火墙或 VPN 限制 IP
-4. **定期备份** — `docker compose exec linclub tar czf /backup.tar.gz -C /data .`
+4. **定期备份** — `docker compose exec meter-stats tar czf /backup.tar.gz -C /data .`
 5. **启用 HTTPS** — 通过 Nginx 反向代理 + SSL 证书
 
 ---
@@ -191,9 +191,9 @@ docker compose up -d
 | 问题 | 解决 |
 |---|---|
 | 端口被占用 | 修改 `docker-compose.yml` 中的端口映射 |
-| 容器启动失败 | 执行 `docker logs linclub` 查看日志 |
+| 容器启动失败 | 执行 `docker logs meter-stats` 查看日志 |
 | 数据丢失 | 检查 `/data/backup/` 目录，使用 API 恢复 |
-| 健康检查失败 | `docker inspect linclub | grep Health` |
+| 健康检查失败 | `docker inspect meter-stats | grep Health` |
 
 ---
 

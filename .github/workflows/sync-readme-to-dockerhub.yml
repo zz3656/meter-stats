@@ -26,7 +26,7 @@ jobs:
           echo " 同步 README.md 到 Docker Hub 仓库描述"
           echo "=================================================="
           echo ""
-          echo "仓库: ${DOCKERHUB_USERNAME}/linclub-electricity-stats"
+          echo "仓库: ${DOCKERHUB_USERNAME}/meter-stats"
           echo ""
 
           python3 << 'PYEOF'
@@ -57,7 +57,7 @@ jobs:
                   pass
 
           if not short_desc:
-              short_desc = "林卡酒吧工程部电表统计工具 · Web服务"
+              short_desc = "场所工程部电表统计工具 · Web服务"
 
           # 确保不超过 100 字节
           short_desc = short_desc.encode("utf-8")[:100].decode("utf-8", errors="ignore")
@@ -77,7 +77,7 @@ jobs:
           }
 
           payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-          url = f"https://hub.docker.com/v2/repositories/{dockerhub_username}/linclub-electricity-stats"
+          url = f"https://hub.docker.com/v2/repositories/{dockerhub_username}/meter-stats"
 
           req = urllib.request.Request(
               url,
@@ -94,7 +94,7 @@ jobs:
                       print("✅ Docker Hub 仓库描述已更新！")
                       print(f"   简介: {result.get('description', '')}")
                       print(f"   详细介绍: {result.get('full_description', '')[:80]}...")
-                      print(f"   访问: https://hub.docker.com/r/{dockerhub_username}/{result.get('name', 'linclub-electricity-stats')}")
+                      print(f"   访问: https://hub.docker.com/r/{dockerhub_username}/{result.get('name', 'meter-stats')}")
                   else:
                       print(f"⚠️ 意外状态码: {code}")
           except urllib.error.HTTPError as e:

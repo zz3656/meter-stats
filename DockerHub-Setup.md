@@ -14,7 +14,7 @@
 
 ### 第 2 步：在 GitHub 仓库添加 Secret
 
-1. 打开仓库: https://github.com/zz3656/linclub-electricity-stats
+1. 打开仓库: https://github.com/zz3656/meter-stats
 2. 点击 **Settings** → **Secrets and variables** → **Actions**
 3. 点击 **New repository secret**
 4. 填写：
@@ -44,7 +44,7 @@
 
 ### 第 5 步：验证推送
 
-访问: https://hub.docker.com/r/zz3656/linclub-electricity-stats
+访问: https://hub.docker.com/r/zz3656/meter-stats
 
 ---
 
@@ -85,33 +85,33 @@ docker login
 
 # 方法 B：手动构建和推送
 cd docker
-docker build -t zz3656/linclub-electricity-stats:latest .
-docker push zz3656/linclub-electricity-stats:latest
+docker build -t zz3656/meter-stats:latest .
+docker push zz3656/meter-stats:latest
 ```
 
 ---
 
 ## 在飞牛 OS 上使用推送的镜像
 
-更新 `/docker/linclub/docker-compose.yml`：
+更新 `/docker/meter-stats/docker-compose.yml`：
 
 ```yaml
 services:
-  linclub:
-    image: zz3656/linclub-electricity-stats:latest  # 从 Docker Hub 拉取
-    container_name: linclub
+  meter-stats:
+    image: zz3656/meter-stats:latest  # 从 Docker Hub 拉取
+    container_name: meter-stats
     restart: unless-stopped
     ports:
       - "8765:8765"
     volumes:
       - ./data:/data
     environment:
-      - LINCLUB_INITIAL_PASS=your-password
+      - METER_INITIAL_PASS=your-password
 ```
 
 然后启动：
 
 ```bash
-cd /docker/linclub
+cd /docker/meter-stats
 docker compose up -d
 ```

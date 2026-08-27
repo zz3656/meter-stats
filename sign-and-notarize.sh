@@ -27,7 +27,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 DEVELOPER_ID="$1"
-APP_NAME="林卡电表"
+APP_NAME="电表"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_PATH="$ROOT/.build/$APP_NAME.app"
 

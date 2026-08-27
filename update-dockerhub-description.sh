@@ -1,6 +1,6 @@
 #!/bin/bash
 # ============================================================
-# 林卡电表统计 — 更新 Docker Hub 仓库描述（Overview / About）
+# 电表统计 — 更新 Docker Hub 仓库描述（Overview / About）
 # 用法:  ./update-dockerhub-description.sh [ACCESS_TOKEN]
 # 要求:  Docker Hub Personal Access Token (dckr_pat_xxxxxxxx)
 # ============================================================
@@ -9,7 +9,7 @@ set -e
 
 TOKEN="${1:-$DOCKERHUB_TOKEN}"
 USERNAME="zz3656"
-REPO="linclub-electricity-stats"
+REPO="meter-stats"
 
 if [ -z "$TOKEN" ]; then
   echo "❌ 未提供 Docker Hub Access Token"
@@ -30,13 +30,13 @@ import json, sys, os, urllib.request, urllib.error
 
 TOKEN = sys.argv[1] if len(sys.argv) > 1 else os.environ.get("DOCKERHUB_TOKEN", "")
 USERNAME = "zz3656"
-REPO = "linclub-electricity-stats"
+REPO = "meter-stats"
 
 # Docker Hub API limits:
 # - description field: max 100 bytes
 # - full_description: no strict limit
-SHORT_DESC = "林卡酒吧工程部电表统计工具 · Web服务"
-FULL_DESC = """# 林卡电表统计 — Linclub Electricity Stats
+SHORT_DESC = "场所工程部电表统计工具 · Web服务"
+FULL_DESC = """# 电表统计 — MeterStats Electricity Stats
 
 > 酒吧/场所工程部电表用量统计工具。支持 macOS 桌面应用和 Docker Web 服务两种部署方式。
 
@@ -57,12 +57,12 @@ FULL_DESC = """# 林卡电表统计 — Linclub Electricity Stats
 
 ```bash
 docker run -d \\
-  --name linclub \\
+  --name meter-stats \\
   -p 8765:8765 \\
   -v ./data:/data \\
-  -e LINCLUB_INITIAL_PASS=your-password \\
+  -e METER_INITIAL_PASS=your-password \\
   -e TZ=Asia/Shanghai \\
-  zz3656/linclub-electricity-stats:latest
+  zz3656/meter-stats:latest
 ```
 
 ## 默认账户

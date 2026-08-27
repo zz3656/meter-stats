@@ -21,7 +21,7 @@ import unittest
 from pathlib import Path
 from typing import Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Sources" / "Linclub" / "Resources"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Sources" / "MeterStats" / "Resources"))
 
 import app_handler  # noqa: E402
 

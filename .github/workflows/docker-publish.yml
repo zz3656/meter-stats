@@ -36,14 +36,14 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            zz3656/linclub-electricity-stats:latest
-            zz3656/linclub-electricity-stats:v0.1.1
+            zz3656/meter-stats:latest
+            zz3656/meter-stats:v0.1.1
 
       - name: Update Docker Hub repository description
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DOCKERHUB_USERNAME: zz3656
-          DOCKERHUB_SHORT_DESC: 林卡酒吧工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。
+          DOCKERHUB_SHORT_DESC: 场所工程部电表用量统计工具 — Web 服务。支持 linux/amd64 和 linux/arm64 多平台构建。
         run: |
 
           python3 << 'PYEOF'
@@ -61,7 +61,7 @@ jobs:
           }
 
           payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
-          url = f"https://hub.docker.com/v2/repositories/{dockerhub_username}/linclub-electricity-stats"
+          url = f"https://hub.docker.com/v2/repositories/{dockerhub_username}/meter-stats"
           auth_str = f"{dockerhub_username}:{dockerhub_token}".encode("utf-8")
           auth_header = base64.b64encode(auth_str).decode("utf-8")
 
@@ -76,7 +76,7 @@ jobs:
                   code = resp.getcode()
                   if code == 200 or code == 201:
                       print("✅ Docker Hub description updated!")
-                      print(f"   https://hub.docker.com/r/{dockerhub_username}/linclub-electricity-stats")
+                      print(f"   https://hub.docker.com/r/{dockerhub_username}/meter-stats")
                   else:
                       print(f"⚠️ Unexpected status: {code}")
           except urllib.error.HTTPError as e:
