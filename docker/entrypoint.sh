@@ -15,12 +15,8 @@ touch /data/.write_test 2>/dev/null || {
 }
 rm -f /data/.write_test
 
-# 设置时区（支持 LINCLUB_TZ 环境变量，默认 Asia/Shanghai）
-if [ -n "$LINCLUB_TZ" ]; then
-    export TZ="$LINCLUB_TZ"
-else
-    export TZ="Asia/Shanghai"
-fi
+# 设置时区（POSIX 标准 TZ 环境变量，默认 Asia/Shanghai）
+export TZ="${TZ:-Asia/Shanghai}"
 
 # 切换到 linclub 用户运行（python 镜像通常包含 /usr/bin/runuser 或 /usr/bin/su-exec）
 # 尝试多种切换方式

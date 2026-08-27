@@ -61,7 +61,7 @@ docker run -d \\
   -p 8765:8765 \\
   -v ./data:/data \\
   -e LINCLUB_INITIAL_PASS=your-password \\
-  -e LINCLUB_TZ=Asia/Shanghai \\
+  -e TZ=Asia/Shanghai \\
   zz3656/linclub-electricity-stats:latest
 ```
 

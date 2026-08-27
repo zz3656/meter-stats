@@ -108,7 +108,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - LINCLUB_TZ=Asia/Shanghai
+      - TZ=Asia/Shanghai
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0

@@ -20,7 +20,7 @@ services:
     volumes:
       - ./data:/data
     environment:
-      - LINCLUB_TZ=Asia/Shanghai
+      - TZ=Asia/Shanghai
       - LINCLUB_PORT=8765
       - LINCLUB_DATA_DIR=/data
       - LINCLUB_BIND=0.0.0.0
@@ -38,7 +38,7 @@ docker compose up -d
 ```bash
 docker run -d --name linclub \
   -p 8765:8765 -v $(pwd)/data:/data \
-  -e LINCLUB_TZ=Asia/Shanghai \
+  -e TZ=Asia/Shanghai \
   -e LINCLUB_BIND=0.0.0.0 \
   -e LINCLUB_PORT=8765 \
   -e LINCLUB_INITIAL_PASS=your-password \
@@ -56,7 +56,7 @@ docker run -d --name linclub \
 
 | 变量 | 默认值 | 说明 |
 |---|---|---|
-| `LINCLUB_TZ` | `Asia/Shanghai` | 时区（支持所有 tzdata 时区名） |
+| `TZ` | `Asia/Shanghai` | 时区（POSIX 标准，支持所有 tzdata 时区名） |
 | `LINCLUB_PORT` | `8765` | 服务端口 |
 | `LINCLUB_DATA_DIR` | `/data` | 数据目录 |
 | `LINCLUB_INITIAL_PASS` | `admin123` | 初始密码 |
