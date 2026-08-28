@@ -1,0 +1,267 @@
+name: Build DMG
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      notarization:
+        description: 'Enable notarization'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-dmg:
+    name: Build DMG
+    runs-on: macos-latest
+    env:
+      APP_NAME: "MeterStats"
+      BUNDLE_ID: "com.meter.stats"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(python3 -c "import plistlib; p=plistlib.open('MeterStats/Info.plist'); print(p['CFBundleShortVersionString'])")
+          fi
+          echo "version=$VERSION" >> $GITHUB_ENV
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode.app
+          xcode-select -p
+
+      # ── 构建 .app ──────────────────────────────────────────
+      - name: Build with Swift Package Manager
+        run: |
+          swift build -c release --arch arm64
+          
+          # SPM 产物在 .build/Build/Products/Release/ 下
+          APP_PATH=$(find .build/Build/Products/Release/ -name "${APP_NAME}.app" -type d 2>/dev/null | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ 找不到 ${APP_NAME}.app，可用产物："
+            find .build/Build/Products/Release/ -name "*.app" 2>/dev/null
+            exit 1
+          fi
+          echo "✅ 找到 app: $APP_PATH"
+          
+          mkdir -p products
+          cp -r "$APP_PATH" products/
+
+      # ── 准备图标 ───────────────────────────────────────────
+      - name: Embed AppIcon.icns in .app bundle
+        run: |
+          APP="products/${APP_NAME}.app/Contents/Resources"
+          mkdir -p "$APP"
+          
+          # 确保 AppIcon.icns 在 Resources 中
+          cp Assets/AppIcon.icns "$APP/AppIcon.icns"
+          
+          # 更新 Info.plist 的 CFBundleIconFile
+          python3 << 'PYEOF'
+          import plistlib, sys
+
+          info_path = "products/MeterStats.app/Contents/Info.plist"
+          with open(info_path, "rb") as f:
+              info = plistlib.load(f)
+
+          info["CFBundleIconFile"] = "AppIcon"
+          info["CFBundleIconName"] = "AppIcon"
+
+          with open(info_path, "wb") as f:
+              plistlib.dump(info, f, sort_keys=False)
+
+          print("✅ Info.plist 已更新")
+          print(f"   CFBundleIconFile = {info.get('CFBundleIconFile')}")
+          PYEOF
+
+      # ── 代码签名 ───────────────────────────────────────────
+      - name: Install Apple Developer Certificate
+        if: github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/')
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD || 'keychain-password' }}
+        run: |
+          # 创建并解锁 keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+
+          # 导入证书
+          echo "$CERTIFICATE_BASE64" | base64 -d > certificate.p12
+          security import certificate.p12 -k build.keychain \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/altool
+          rm certificate.p12
+
+          # 验证
+          echo "已导入的签名身份："
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Sign app (Developer ID)
+        if: github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/')
+        env:
+          TEAM_NAME: ${{ secrets.APPLE_DEVELOPER_ID_TEAM_NAME }}
+        run: |
+          APP="products/${APP_NAME}.app"
+          SIGN_ID="Developer ID Application: $TEAM_NAME"
+          
+          echo "🔐 签名应用..."
+          codesign --verbose=4 \
+            --sign "$SIGN_ID" \
+            --options runtime \
+            --timestamp \
+            --entitlements "MeterStats/Linclub.entitlements" \
+            "$APP"
+          
+          # 验证签名链
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          echo "✅ 签名验证通过"
+
+      # ── 创建 DMG ───────────────────────────────────────────
+      - name: Create DMG
+        run: |
+          APP="products/${APP_NAME}.app"
+          DMG_NAME="${APP_NAME}-${{ env.version }}-macos.dmg"
+          
+          # 创建临时挂载点
+          STAGING="/tmp/dmg-staging"
+          rm -rf "$STAGING"
+          mkdir -p "$STAGING"
+          
+          # 把 .app 拷贝到 staging
+          cp -r "$APP" "$STAGING/"
+          
+          # 创建应用链接文件夹 (.app 的快捷方式)
+          ln -s /Applications "$STAGING/Applications"
+          
+          # 创建 DMG
+          hdiutil create -volname "${APP_NAME}" \
+            -srcfolder "$STAGING" \
+            -ov -format UDZO \
+            -imagekey zlib-level=9 \
+            "$STAGING/$DMG_NAME"
+          
+          # 复制到 products 目录
+          mv "$STAGING/$DMG_NAME" "products/$DMG_NAME"
+          
+          # 清理
+          rm -rf "$STAGING"
+          
+          echo "✅ DMG 已创建: products/$DMG_NAME"
+          ls -lh "products/$DMG_NAME"
+
+      # ── 公证 (Notarization) ────────────────────────────────
+      - name: Notarize DMG
+        if: (github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/'))
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARIZATION_APPLE_ID }}
+          APP_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
+          TEAM_ID: ${{ secrets.APPLE_NOTARIZATION_TEAM_ID }}
+        run: |
+          DMG="products/${APP_NAME}-${{ env.version }}-macos.dmg"
+          
+          echo "📤 提交公证..."
+          notarization_id=$(xcrun altool --notarize \
+            --file "$DMG" \
+            --apple-id "$APPLE_ID" \
+            --password "$APP_PASSWORD" \
+            --team-id "$TEAM_ID" \
+            2>&1 | grep -oP 'RequestUUID = \K[0-9a-f-]+')
+          
+          if [ -z "$notarization_id" ]; then
+            echo "⚠️ 无法获取 RequestUUID，尝试其他方式..."
+            xcrun altool --notarize \
+              --file "$DMG" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_PASSWORD" \
+              --team-id "$TEAM_ID"
+            exit 1
+          fi
+          
+          echo "📋 RequestUUID: $notarization_id"
+          
+          # 轮询公证状态
+          echo "⏳ 等待公证完成..."
+          for i in {1..30}; do
+            sleep 20
+            status=$(xcrun altool --notarization-status "$notarization_id" \
+              --apple-id "$APPLE_ID" \
+              --password "$APP_PASSWORD" \
+              --team-id "$TEAM_ID" 2>&1)
+            
+            echo "  状态: $status"
+            
+            if echo "$status" | grep -q "success"; then
+              echo "✅ 公证成功!"
+              break
+            elif echo "$status" | grep -qi "fail"; then
+              echo "❌ 公证失败!"
+              echo "$status"
+              exit 1
+            fi
+            
+            if [ "$i" -eq 30 ]; then
+              echo "⚠️ 等待超时，可能需要手动检查"
+            fi
+          done
+
+      - name: Staple notarization ticket
+        if: (github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/'))
+        run: |
+          APP="products/${APP_NAME}.app"
+          DMG="products/${APP_NAME}-${{ env.version }}-macos.dmg"
+          
+          echo "📌 附加票据到应用..."
+          xcrun stapler staple "$APP" 2>&1 || echo "⚠️ 票据附加失败（可能尚未公证完成）"
+          
+          echo "📌 附加票据到 DMG..."
+          xcrun stapler staple "$DMG" 2>&1 || echo "⚠️ 票据附加失败（可能尚未公证完成）"
+
+      # ── 验证 ───────────────────────────────────────────────
+      - name: Verify DMG
+        run: |
+          echo "📦 products 目录内容："
+          ls -lh products/
+          
+          # 验证 app 签名
+          codesign --verify --deep --strict --verbose=2 "products/${APP_NAME}.app" || echo "⚠️ 签名验证有警告"
+          
+          # 验证 app 在 DMG 中也能签名通过
+          hdiutil attach "products/${APP_NAME}-${{ env.version }}-macos.dmg" -readonly -noverify -nobrowse -mountpoint /tmp/mnt
+          codesign --verify --deep --strict --verbose=2 "/tmp/mnt/${APP_NAME}.app" || echo "⚠️ DMG 内签名验证有警告"
+          hdiutil detach /tmp/mnt -force
+
+      # ── 上传产物 ───────────────────────────────────────────
+      - name: Upload DMG as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "${APP_NAME}-${{ env.version }}"
+          path: |
+            products/*.dmg
+          retention-days: 30
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            products/*.dmg
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
