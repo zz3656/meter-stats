@@ -3020,30 +3020,100 @@ document.querySelectorAll('.entry-tab').forEach(btn => {
   });
 });
 
+// 侧栏切换
+const SIDEBAR_VISIBLE_SECTIONS = new Set([
+  'reading', 'charge', 'utility',
+  'reading-record', 'charge-record',
+  'item-record', 'purchase-record',
+  'item-add', 'purchase-add',
+  'report-monthly', 'report-trend', 'report-pie', 'report-utilities', 'report-yearly',
+  'alerts', 'topup-calc', 'overview'
+]);
+
+function switchSection(sectionId) {
+  // 隐藏所有 section
+  document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
+  // 显示目标 section
+  const target = document.getElementById('section-' + sectionId);
+  if (target) target.style.display = '';
+
+  // 更新侧栏高亮
+  document.querySelectorAll('.sidebar-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.section === sectionId);
+  });
+
+  // 状态条可见性
+  const bar = document.getElementById('status-bar');
+  if (SIDEBAR_VISIBLE_SECTIONS.has(sectionId)) {
+    bar.style.display = '';
+  } else {
+    bar.style.display = 'none';
+  }
+
+  // 移动端:自动关闭侧栏
+  const sidebar = document.getElementById('sidebar');
+  if (window.innerWidth <= 900) {
+    sidebar.classList.remove('mobile-open');
+    document.getElementById('sidebar-overlay')?.classList.remove('show');
+  }
+
+  // 隐藏容器里初始化的 Chart 尺寸为 0,切回报表时重新计算
+  if (sectionId === 'report-trend' && trendChart) {
+    setTimeout(() => trendChart.resize(), 60);
+  }
+  if (sectionId === 'report-pie' && pieChart) {
+    setTimeout(() => pieChart.resize(), 60);
+  }
+  if (sectionId === 'report-yearly' && _yearlyChart) {
+    setTimeout(() => _yearlyChart.resize(), 60);
+  }
+}
+
+// 侧栏点击事件
+document.querySelectorAll('.sidebar-item').forEach(btn => {
+  btn.addEventListener('click', () => switchSection(btn.dataset.section));
+});
+
+// 侧栏折叠(桌面端)
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (window.innerWidth <= 900) {
+    // 移动端:切换抽屉
+    sidebar.classList.toggle('mobile-open');
+    overlay?.classList.toggle('show');
+  } else {
+    // 桌面端:折叠/展开
+    sidebar.classList.toggle('collapsed');
+    const content = document.querySelector('.content');
+    if (content) content.style.maxWidth = sidebar.classList.contains('collapsed') ? '100%' : '';
+  }
+}
+
+// 移动端遮罩点击关闭侧栏
+document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
+  document.getElementById('sidebar').classList.remove('mobile-open');
+  document.getElementById('sidebar-overlay').classList.remove('show');
+});
+
+// 初始化:默认显示抄表录入
+document.addEventListener('DOMContentLoaded', () => {
+  applyTheme();
+  loadMonthlyReport();
+  switchSection('reading');
+});
+
 // Tab 切换
 function switchTab(tab) {
   document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tab);
   });
-  // 用 body class 控制显示
   document.body.classList.remove('show-meter', 'show-item', 'show-history');
   document.body.classList.add('show-' + tab);
-  // 隐藏容器里初始化的 Chart 尺寸为 0,切回历史 tab 时需重新计算尺寸
   if (tab === 'history' && _yearlyChart) {
     setTimeout(() => _yearlyChart.resize(), 60);
   }
 }
-document.querySelectorAll('.tab-btn').forEach(btn => {
-  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
-});
-// 默认显示电表管理
-document.body.classList.add('show-meter');
-
-// 页面打开时加载月度报告(默认月份由 refreshMonthSelectors 设定)
-window.addEventListener('DOMContentLoaded', () => {
-  applyTheme();
-  loadMonthlyReport();
-});
 
 // ===== 初始化 =====
 function todayStr() {
