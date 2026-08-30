@@ -6,28 +6,27 @@
 
 ```
 .
-├── Sources/MeterStats/              # macOS .app 原生应用（Swift + Python）
+├── MeterStats/                      # macOS .app 原生应用（Swift + Python）
 │   ├── MeterStatsApp.swift          # SwiftUI 入口
-│   ├── ServerManager.swift     # Python 子进程管理
-│   └── Resources/              # Python 后端 + 前端
-│       ├── server.py           # HTTP 服务入口
-│       ├── app_handler.py      # 请求处理 + 静态文件服务
-│       ├── storage.py          # JSON 文件读写
-│       ├── routing.py          # API 路由分发
-│       ├── report.py           # 月报/年报计算引擎
-│       ├── index.html          # 前端页面
-│       ├── style.css           # 样式
-│       ├── app.js              # 前端逻辑
-│       ├── admin.js            # 管理后台逻辑
-│       ├── handlers/           # 各模块 API handler
-│       └── utils/              # 工具函数
-├── docker/                     # Docker 部署（纯 Web 服务版）
+│   ├── ServerManager.swift          # Python 子进程管理
+│   ├── server.py                    # HTTP 服务入口
+│   ├── app_handler.py               # 请求处理 + 静态文件服务
+│   ├── storage.py                   # JSON 文件读写
+│   ├── routing.py                   # API 路由分发
+│   ├── report.py                    # 月报/年报计算引擎
+│   ├── index.html                   # 前端页面
+│   ├── style.css                    # 样式
+│   ├── app.js                       # 前端逻辑
+│   ├── admin.js                     # 管理后台逻辑
+│   ├── handlers/                    # 各模块 API handler
+│   └── utils/                       # 工具函数
+├── docker/                          # Docker 部署（纯 Web 服务版）
 │   ├── Dockerfile
 │   ├── docker-compose.yml
-│   └── server.py               # Docker 适配入口
-├── tests/                      # 回归测试
-├── build-app.sh                # macOS .app 打包脚本
-└── sign-and-notarize.sh        # Developer ID 签名 + 公证
+│   └── entrypoint.sh                # Docker 适配入口
+├── tests/                           # 回归测试
+├── build-app.sh                     # macOS .app 打包脚本
+└── sign-and-notarize.sh             # Developer ID 签名 + 公证
 ```
 
 ## 开发环境

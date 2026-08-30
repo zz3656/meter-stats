@@ -93,14 +93,14 @@ docker compose down && docker compose up -d
 ## 📂 项目结构
 
 ```
-Sources/MeterStats/          # macOS 原生应用（Swift + Python）
-docker/                   # Docker 部署（Web 版）
+MeterStats/                      # macOS 原生应用（Swift + Python）
+docker/                      # Docker 部署（Web 版）
 ├── Dockerfile
 ├── docker-compose.yml
-├── server.py
-├── index.html + style.css + app.js
-├── handlers/
-└── utils/
+├── entrypoint.sh
+├── .dockerignore
+├── docker-compose.yml
+├── docker-run.sh
 tests/ · Scripts/ · Assets/
 docker-compose.yml · docker-run.sh · README.Docker.md
 build-app.sh · sign-and-notarize.sh · CONTRIBUTING.md · LICENSE

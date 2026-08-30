@@ -20,15 +20,15 @@ RUN groupadd -r app && useradd -r -g app -d /data -s /sbin/nologin app
 # 设置工作目录
 WORKDIR /app
 
-# 复制所有应用文件（从 Sources/App/Resources/）
-COPY Sources/App/Resources/*.py ./
-COPY Sources/App/Resources/*.html ./
-COPY Sources/App/Resources/*.css ./
-COPY Sources/App/Resources/*.js ./
-COPY Sources/App/Resources/*.svg ./
-COPY Sources/App/Resources/*.png ./
-COPY Sources/App/Resources/handlers/ handlers/
-COPY Sources/App/Resources/utils/ utils/
+# 复制所有应用文件（从 MeterStats/）
+COPY MeterStats/*.py ./
+COPY MeterStats/*.html ./
+COPY MeterStats/*.css ./
+COPY MeterStats/*.js ./
+COPY MeterStats/*.svg ./
+COPY MeterStats/*.png ./
+COPY MeterStats/handlers/ handlers/
+COPY MeterStats/utils/ utils/
 
 # 复制 entrypoint 脚本
 COPY docker/entrypoint.sh /entrypoint.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 电表统计 — 一键启动脚本
+# 电表统计 — 根目录一键启动脚本
 # 用法:
 #   ./run.sh              # 启动本地服务
 #   ./run.sh stop         # 停止服务
@@ -14,9 +14,9 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SERVER_PY="$SCRIPT_DIR/server.py"
-LOG_FILE="$SCRIPT_DIR/.server.log"
-DATA_DIR="$SCRIPT_DIR/.data"
+SERVER_PY="$SCRIPT_DIR/MeterStats/server.py"
+LOG_FILE="$SCRIPT_DIR/MeterStats/.server.log"
+DATA_DIR="$SCRIPT_DIR/MeterStats/.data"
 PORT=8765
 CONTAINER_NAME="meter-stats"
 IMAGE="zz3656/meter-stats:latest"
