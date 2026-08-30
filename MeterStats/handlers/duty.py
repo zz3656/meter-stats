@@ -40,6 +40,7 @@ def handle_post_duty(handler):
     duty_type = body.get("duty_type", "").strip()
     shift = body.get("shift", "").strip()
     status = body.get("status", "").strip()
+    fault_area = body.get("fault_area", "").strip()
     note = body.get("note", "").strip()
 
     if not duty_type:
@@ -65,6 +66,7 @@ def handle_post_duty(handler):
         "record_time": record_time,
         "shift": shift,
         "status": status,
+        "fault_area": fault_area,
         "note": note,
     }
 
@@ -99,7 +101,7 @@ def handle_put_duty(handler, path_clean: str):
         return
 
     # 更新字段
-    for key in ["duty_type", "shift", "status", "note"]:
+    for key in ["duty_type", "shift", "status", "fault_area", "note"]:
         val = body.get(key)
         if val is not None:
             existing[key] = val

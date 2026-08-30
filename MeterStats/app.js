@@ -1794,6 +1794,7 @@ function renderDutyTable(dutyList, filterMonth) {
       <td>${d.record_time || '—'}</td>
       <td>${escapeHtml(d.duty_type || '—')}</td>
       <td>${escapeHtml(d.shift || '—')}</td>
+      <td>${escapeHtml(d.fault_area || '—')}</td>
       <td><span style="color:${statusColor};font-weight:510;">${escapeHtml(d.status || '—')}</span></td>
       <td>${escapeHtml(d.note || '—')}</td>
       <td>
@@ -2671,6 +2672,7 @@ document.getElementById('duty-form')?.addEventListener('submit', async (e) => {
   const record_time = document.getElementById('duty-time').value;
   const shift = document.getElementById('duty-shift').value;
   const status = document.querySelector('input[name="duty-status"]:checked')?.value;
+  const fault_area = document.getElementById('duty-fault-area').value.trim();
   const note = document.getElementById('duty-note').value.trim();
 
   if (!duty_type) { showAlert('请选择类型', 'error'); return; }
@@ -2678,12 +2680,13 @@ document.getElementById('duty-form')?.addEventListener('submit', async (e) => {
   if (!status) { showAlert('请选择处理状态', 'error'); return; }
 
   try {
-    await api('POST', '/api/duty', { duty_type, record_time, shift, status, note });
+    await api('POST', '/api/duty', { duty_type, record_time, shift, status, fault_area, note });
     showAlert('✓ 值班记录已添加', 'success');
     // 重置表单
     document.getElementById('duty-type').value = '';
     document.getElementById('duty-shift').value = '';
     document.querySelectorAll('input[name="duty-status"]').forEach(r => r.checked = false);
+    document.getElementById('duty-fault-area').value = '';
     document.getElementById('duty-note').value = '';
     // 更新工作记录列表
     await refreshDuty();
