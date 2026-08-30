@@ -226,14 +226,21 @@ def handle_post_restore(handler):
 
 
 def handle_post_upload(handler):
-    """POST /api/upload — 浏览器直接上传 JSON 文件恢复数据
+    """POST /api/upload — 浏览器直接上传 JSON 或 ZIP 文件恢复数据
 
     接受 multipart/form-data 或 JSON body:
-      - multipart: 上传 readings.json, charges.json, items.json, purchases.json, settings.json
+      - multipart: 上传 readings.json, charges.json, items.json, purchases.json, settings.json,
+                   或单个 ZIP 备份包(auto-bak-*.zip / meter-backup-*.zip)
       - JSON body: { "files": { "readings.json": [...], "charges.json": [...] } }
+                   或 { "files": { "auto-bak-20260830.zip": { "__zip_b64": "UEsD..." } } }
 
-    上传后直接覆盖 /data/ 中对应的数据文件。
+    上传后:
+      - JSON 文件:直接覆盖到 /data/<name>.json
+      - ZIP 文件:解压后覆盖到 /data/(原 handle_post_restore 的逻辑)
+
+    ⚠️ 安全措施: 恢复前自动备份当前数据,可随时回滚。
     """
+    import base64
     import shutil
     import tempfile
     import os
@@ -244,46 +251,74 @@ def handle_post_upload(handler):
         return
 
     target_dir = data_dir.parent
-
     content_type = handler.headers.get("Content-Type", "")
-
     uploaded = []
+    restored = []
+
+    # 恢复前自动备份当前数据(可回滚)
+    pre_backup = backup_data(target_dir, force=True)
+
+    def _extract_zip_to_target(zip_bytes: bytes) -> list:
+        """解压 zip 到 target_dir,返回解压出的数据文件名列表。"""
+        names = []
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            zip_path = Path(tmp_dir) / "upload.zip"
+            zip_path.write_bytes(zip_bytes)
+            with zipfile.ZipFile(zip_path, 'r') as zf:
+                zf.extractall(tmp_dir)
+            extract_dir = Path(tmp_dir)
+            # zip 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录
+            children = list(extract_dir.iterdir())
+            if len(children) == 1 and children[0].is_dir():
+                extract_dir = children[0]
+            for name in DATA_FILES.values():
+                src = extract_dir / name
+                if src.exists():
+                    shutil.copy2(src, target_dir / name)
+                    names.append(name)
+                    log(f"  恢复 {name} <- {src}")
+            settings_src = extract_dir / "settings.json"
+            if settings_src.exists():
+                shutil.copy2(settings_src, target_dir / "settings.json")
+                names.append("settings.json")
+        return names
 
     if "multipart/form-data" in content_type:
         # multipart/form-data 上传
-        # 解析表单数据 (简化版: 每个 field name 是文件名)
         boundary = content_type.split("boundary=", 1)[1]
         if not boundary:
             send_json(handler, 200, {"ok": False, "error": "无法解析 multipart boundary"})
             return
 
-        body = read_body(handler)
-        # 尝试用 multipart 解析
         data = handler.rfile.read(int(handler.headers.get("Content-Length", "0")))
-        lines = data.split(boundary.encode())
-        for line in lines:
-            line_str = line.decode("utf-8", errors="replace")
-            # 提取文件名
-            fname_match = re.search(r'filename="([^"]+)"', line_str)
+        # 解析每个 part
+        parts = data.split(boundary.encode())
+        for raw in parts:
+            raw_str = raw.decode("utf-8", errors="replace")
+            fname_match = re.search(r'filename="([^"]+)"', raw_str)
             if not fname_match:
                 continue
             fname = fname_match.group(1)
-            if fname not in DATA_FILES.values() and fname != "settings.json":
+            content_parts = raw.split(b"\r\n\r\n", 1)
+            if len(content_parts) != 2:
                 continue
-            # 提取文件内容 (在第二个 \r\n\r\n 之后)
-            parts = line.split(b"\r\n\r\n", 1)
-            if len(parts) != 2:
-                continue
-            file_content = parts[1].rstrip(b"\r\n")
+            file_content = content_parts[1].rstrip(b"\r\n")
             if fname == "--":
                 continue
-            dest = target_dir / fname
-            dest.write_bytes(file_content)
             uploaded.append(fname)
-            log(f"  上传 {fname} → {dest}")
+            if fname.lower().endswith('.zip'):
+                try:
+                    restored.extend(_extract_zip_to_target(file_content))
+                except zipfile.BadZipFile:
+                    log(f"[WARN] 上传的 {fname} 不是有效的 ZIP")
+                except Exception as e:
+                    log(f"[WARN] 解压 {fname} 失败: {e}")
+            elif fname in DATA_FILES.values() or fname == "settings.json":
+                (target_dir / fname).write_bytes(file_content)
+                log(f"  上传 {fname} → {target_dir / fname}")
 
     else:
-        # JSON body: { "files": { "readings.json": [...], ... } }
+        # JSON body: { "files": { "<filename>": <json|base64 zip wrapper> } }
         body = read_body(handler)
         files = (body or {}).get("files")
         if not files:
@@ -291,17 +326,26 @@ def handle_post_upload(handler):
             return
 
         for fname, content in files.items():
-            if fname not in DATA_FILES.values() and fname != "settings.json":
-                continue
-            dest = target_dir / fname
-            if isinstance(content, list) or isinstance(content, dict):
-                dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
-            elif isinstance(content, str):
-                dest.write_text(content, encoding="utf-8")
             uploaded.append(fname)
-            log(f"  上传 {fname} → {dest}")
+            # ZIP 文件(以 base64 wrapper 形式传入)
+            if isinstance(content, dict) and "__zip_b64" in content:
+                try:
+                    zip_bytes = base64.b64decode(content["__zip_b64"])
+                    restored.extend(_extract_zip_to_target(zip_bytes))
+                except Exception as e:
+                    log(f"[WARN] 解码/解压 {fname} 失败: {e}")
+                    continue
+            elif fname in DATA_FILES.values() or fname == "settings.json":
+                dest = target_dir / fname
+                if isinstance(content, (list, dict)):
+                    dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+                elif isinstance(content, str):
+                    dest.write_text(content, encoding="utf-8")
+                log(f"  上传 {fname} → {dest}")
 
     send_json(handler, 200, {
         "ok": True,
         "uploaded": uploaded,
+        "restored": restored,
+        "pre_backup": str(pre_backup) if pre_backup else None,
     })

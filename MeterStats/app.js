@@ -402,39 +402,29 @@ function pickBackupDir() {
       };
       window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
     } else {
-      // Docker / Web 浏览器环境: 用 prompt 让用户输入路径或使用文件选择器
-      showBrowserBackupPicker(resolve);
+      // Docker / Web 浏览器环境: 直接弹文件选择器
+      pickBackupFiles().then(resolve);
     }
   });
 }
 
-// Docker / Web 浏览器环境下的备份目录选择
-function showBrowserBackupPicker(resolve) {
-  const html = `
-    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px;line-height:1.6;">
-      💡 Docker/浏览器环境下无法选择系统目录。请选择备份数据中的 JSON 文件上传。<br>
-      <b>提示</b>: 在 macOS 原生 App 中请使用「选择备份目录」功能。
-    </div>
-  `;
-  showModal({
-    icon: 'ℹ️',
-    iconKind: 'info',
-    title: '备份/恢复 — 浏览器环境',
-    body: html,
-    confirmText: '选择文件',
-    cancelText: '取消',
-    confirmKind: 'primary',
-  }).then(confirmed => {
-    if (!confirmed) {
-      resolve(null);
-      return;
-    }
-    // 打开文件选择器
+// 浏览器/Docker 环境:直接弹文件选择器(不再需要中间确认模态框)
+// 返回 { files: { "readings.json": "..." } } 或 null(用户取消)
+function pickBackupFiles() {
+  return new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
-    input.accept = '.json';
-    input.onchange = async () => {
+    input.accept = '.json,.zip';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    let resolved = false;
+    const cleanup = () => {
+      if (input.parentNode) input.parentNode.removeChild(input);
+    };
+    input.addEventListener('change', async () => {
+      resolved = true;
+      cleanup();
       const files = Array.from(input.files);
       if (!files.length) {
         resolve(null);
@@ -442,12 +432,45 @@ function showBrowserBackupPicker(resolve) {
       }
       const fileContents = {};
       for (const file of files) {
-        fileContents[file.name] = await file.text();
+        // zip 文件用 arrayBuffer,JSON 文件用 text
+        if (file.name.toLowerCase().endsWith('.zip')) {
+          const buf = await file.arrayBuffer();
+          fileContents[file.name] = { __zip_b64: arrayBufferToBase64(buf) };
+        } else {
+          fileContents[file.name] = await file.text();
+        }
       }
       resolve({ files: fileContents, _browser: true });
-    };
+    });
+    // 用户关掉文件选择器(没选)→ focus 回到页面,但 change 不触发
+    // 用 blur 兜底清理(可能误触发,但 cleanup 已加守护)
+    input.addEventListener('blur', () => {
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          cleanup();
+          resolve(null);
+        }
+      }, 300);
+    });
     input.click();
   });
+}
+
+// ArrayBuffer → base64(用于在 JSON body 传 zip)
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+// base64 → ArrayBuffer
+function base64ToArrayBuffer(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
 }
 
 // 浏览器环境下的文件选择/上传
@@ -491,34 +514,41 @@ async function datamgmtRestore() {
   try {
     const dir = await pickBackupDir();
     if (!dir) {
-      showAlert('未选择目录,已取消恢复', 'info');
+      showAlert('未选择文件,已取消恢复', 'info');
       return;
     }
 
     let res;
     if (dir._browser) {
-      // 浏览器环境: 直接上传文件
+      // 浏览器/Docker 环境: 上传文件 — JSON 单文件 或 ZIP 备份包
+      const hasZip = Object.keys(dir.files).some(n => n.toLowerCase().endsWith('.zip'));
+      const fileNames = Object.keys(dir.files).join(', ');
       const ok = await showModal({
         icon: '⚠️',
         iconKind: 'warn',
-        title: '确认上传文件覆盖数据？',
-        body: '确认上传选中的 JSON 文件覆盖当前数据？恢复前系统会自动备份。',
-        confirmText: '确认上传',
+        title: '确认恢复数据？',
+        body: `将从 <b>${fileNames}</b> 恢复${hasZip ? '(zip 备份包将自动解压)' : ''}。<br><br>⚠️ 当前数据会被覆盖,但恢复前系统会自动备份当前数据到 backup/ 目录,可随时回滚。`,
+        confirmText: '确认恢复',
         cancelText: '取消',
         confirmKind: 'danger',
       });
       if (!ok) return;
-      btn.textContent = '⏳ 上传中…';
+      btn.textContent = '⏳ 恢复中…';
       btn.disabled = true;
       res = await api('POST', '/api/upload', { files: dir.files });
-      if (res.ok) {
-        showAlert(`✅ 已上传 ${res.uploaded.length} 个文件`, 'success');
-        await refreshAll();
-      } else {
-        showAlert('上传失败: ' + (res.error || '未知错误'), 'error');
+      if (!res.ok) {
+        showAlert('恢复失败: ' + (res.error || '未知错误'), 'error');
+        return;
       }
+      const restoredCount = (res.restored || []).length;
+      if (restoredCount > 0) {
+        showAlert(`✅ 已恢复 ${restoredCount} 个数据文件${res.pre_backup ? ';恢复前数据已备份到 ' + res.pre_backup : ''}`, 'success');
+      } else {
+        showAlert(`✅ 已上传 ${(res.uploaded || []).length} 个文件`, 'success');
+      }
+      await refreshAll();
     } else {
-      // 原生环境: 用目录路径恢复
+      // macOS 原生 App: 用目录路径恢复
       const ok = await showModal({
         icon: '⚠️',
         iconKind: 'warn',
