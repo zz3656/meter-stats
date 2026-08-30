@@ -29,7 +29,7 @@ jobs:
       - name: Determine Version
         id: version
         run: |
-          if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
             VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
