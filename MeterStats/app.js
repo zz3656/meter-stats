@@ -1518,21 +1518,34 @@ function renderItemTable(items) {
   const tbody = document.querySelector('#item-table tbody');
   if (!tbody) return;
   if (!items || items.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty">还没有物品,点击上方表单添加</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="empty">还没有物品,点击上方表单添加</td></tr>';
     return;
   }
   tbody.innerHTML = items.map(it => {
     const safeName = escapeHtml(it.name);
     const safeUnit = escapeHtml(it.unit || '');
     const safeNote = escapeHtml(it.note || '');
+    const totalQty = it.qty || 0;
+    const lentQty = it.lent_qty || 0;
+    const availableQty = totalQty - lentQty;
+    const canLend = availableQty > 0;
+    const canReturn = lentQty > 0;
+    const actionBtns = [];
+    if (canLend) {
+      actionBtns.push(`<button class="save-btn" data-action="lend-item" data-id="${it.id}" data-name="${safeName}" data-available="${availableQty}" data-unit="${safeUnit}">借出</button>`);
+    }
+    if (canReturn) {
+      actionBtns.push(`<button class="btn btn-secondary btn-sm" data-action="return-item" data-id="${it.id}" data-name="${safeName}" data-lent="${lentQty}" data-unit="${safeUnit}">归还</button>`);
+    }
+    actionBtns.push(`<button class="del-btn" data-action="del-item" data-id="${it.id}">删除</button>`);
     return `<tr>
       <td>${safeName}</td>
-      <td><strong>${it.qty}</strong></td>
+      <td><strong>${totalQty}</strong></td>
+      <td>${availableQty}</td>
+      <td>${lentQty}</td>
       <td>${safeUnit}</td>
       <td>${safeNote}</td>
-      <td>
-        <button class="del-btn" data-action="del-item" data-id="${it.id}">删除</button>
-      </td>
+      <td>${actionBtns.join(' ')}</td>
     </tr>`;
   }).join('');
 
@@ -1558,6 +1571,60 @@ function renderItemTable(items) {
       }
     });
   });
+
+  // 绑定借出按钮
+  tbody.querySelectorAll('[data-action="lend-item"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      const available = parseInt(btn.dataset.available);
+      const unit = btn.dataset.unit;
+      openLendModal(id, name, available, unit);
+    });
+  });
+
+  // 绑定归还按钮
+  tbody.querySelectorAll('[data-action="return-item"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const name = btn.dataset.name;
+      const lent = parseInt(btn.dataset.lent);
+      const unit = btn.dataset.unit;
+      const ok = await showModal({
+        title: '归还物品',
+        body: `确认归还「<strong>${name}</strong>」的全部 ${lent} ${unit}?`,
+        icon: '📥',
+        iconKind: 'info',
+        confirmText: '确认归还',
+        confirmKind: 'primary',
+      });
+      if (!ok) return;
+      try {
+        await api('PUT', `/api/items/${id}/return`, {});
+        showItemAlert('✓ 已归还', 'success');
+        await refreshAll();
+      } catch (e) {
+        showItemAlert('归还失败:' + e.message, 'error');
+      }
+    });
+  });
+}
+
+// 打开借出弹窗
+function openLendModal(id, name, available, unit) {
+  document.getElementById('lend-item-id').value = id;
+  document.getElementById('lend-item-name').textContent = name;
+  document.getElementById('lend-available-qty').textContent = `${available} ${unit}`;
+  document.getElementById('lend-qty').value = '';
+  document.getElementById('lend-qty').max = available;
+  document.getElementById('lend-borrower').value = '';
+  document.getElementById('lend-note').value = '';
+  document.getElementById('lend-modal-backdrop').classList.add('show');
+}
+
+// 关闭借出弹窗
+function closeLendModal() {
+  document.getElementById('lend-modal-backdrop').classList.remove('show');
 }
 
 // 申购记录表格
@@ -3059,6 +3126,39 @@ document.getElementById('topup-modal-backdrop').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && document.getElementById('topup-modal-backdrop').classList.contains('show')) closeTopupModal();
+});
+
+// 借出弹窗事件
+document.getElementById('lend-close').addEventListener('click', closeLendModal);
+document.getElementById('lend-modal-backdrop').addEventListener('click', e => {
+  if (e.target === document.getElementById('lend-modal-backdrop')) closeLendModal();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('lend-modal-backdrop').classList.contains('show')) closeLendModal();
+});
+document.getElementById('lend-confirm').addEventListener('click', async () => {
+  const id = document.getElementById('lend-item-id').value;
+  const qty = parseInt(document.getElementById('lend-qty').value);
+  const borrower = document.getElementById('lend-borrower').value.trim();
+  const note = document.getElementById('lend-note').value.trim();
+
+  if (!qty || qty <= 0) {
+    showItemAlert('请输入有效的借出数量', 'error');
+    return;
+  }
+  if (!borrower) {
+    showItemAlert('请输入借出人', 'error');
+    return;
+  }
+
+  try {
+    await api('PUT', `/api/items/${id}/lend`, { qty, borrower, note });
+    showItemAlert('✓ 借出成功', 'success');
+    closeLendModal();
+    await refreshAll();
+  } catch (e) {
+    showItemAlert('借出失败:' + e.message, 'error');
+  }
 });
 
 // 月度报告复制:点击后按钮变「已复制」禁用,3秒后恢复(与每日/每月用电同款反馈)

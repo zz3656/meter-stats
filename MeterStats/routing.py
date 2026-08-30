@@ -12,6 +12,7 @@ from handlers.charges import (
 )
 from handlers.items import (
     handle_get_items, handle_post_items, handle_put_items, handle_delete_items,
+    handle_put_items_lend, handle_put_items_return,
 )
 from handlers.purchases import (
     handle_get_purchases, handle_post_purchases, handle_put_purchases, handle_put_purchases_stock, handle_delete_purchases,
@@ -172,11 +173,15 @@ def route(method: str, handler, path: str):
             return
 
     if method == "PUT":
-        handler_fn = _match_prefix(_PUT_PREFIX, path_clean)
-        if not handler_fn:
-            handler_fn = handle_put_purchases_stock if (
-                path_clean.startswith("/api/purchases/") and path_clean.endswith("/stock")
-            ) else None
+        # 优先匹配更具体的路径
+        if path_clean.startswith("/api/purchases/") and path_clean.endswith("/stock"):
+            handler_fn = handle_put_purchases_stock
+        elif path_clean.startswith("/api/items/") and path_clean.endswith("/lend"):
+            handler_fn = handle_put_items_lend
+        elif path_clean.startswith("/api/items/") and path_clean.endswith("/return"):
+            handler_fn = handle_put_items_return
+        else:
+            handler_fn = _match_prefix(_PUT_PREFIX, path_clean)
         if handler_fn:
             try:
                 _call_handler(handler_fn, handler, path_clean)

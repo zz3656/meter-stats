@@ -429,10 +429,12 @@
             <thead>
               <tr>
                 <th>物品名称</th>
-                <th>数量</th>
+                <th>总数</th>
+                <th>可借</th>
+                <th>已借</th>
                 <th>单位</th>
                 <th>备注</th>
-                <th></th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -819,6 +821,40 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="topup-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- 借出弹窗 -->
+<div id="lend-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:400px;">
+    <h3 class="modal-title" id="lend-modal-title">📤 借出物品</h3>
+    <div class="modal-body">
+      <input type="hidden" id="lend-item-id" />
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称</label>
+        <div id="lend-item-name" style="padding:8px 12px;background:var(--bg-surface);border-radius:8px;font-size:14px;color:var(--text);"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">可借出数量</label>
+        <div id="lend-available-qty" style="padding:8px 12px;background:var(--bg-surface);border-radius:8px;font-size:14px;color:var(--text);"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出数量 <span style="color:var(--danger);">*</span></label>
+        <input type="number" id="lend-qty" class="field-control" min="1" placeholder="请输入借出数量" style="width:100%;padding:8px 12px;">
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="lend-borrower" class="field-control" placeholder="请输入借出人姓名" style="width:100%;padding:8px 12px;">
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注</label>
+        <input type="text" id="lend-note" class="field-control" placeholder="选填" style="width:100%;padding:8px 12px;">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="lend-close">取消</button>
+      <button type="button" class="btn btn-primary" id="lend-confirm">确认借出</button>
     </div>
   </div>
 </div>

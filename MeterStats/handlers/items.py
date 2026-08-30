@@ -123,6 +123,129 @@ def handle_delete_items(handler, path_clean: str):
     send_json(handler, 200, {"ok": True})
 
 
+def handle_put_items_lend(handler, path_clean: str):
+    """PUT /api/items/{id}/lend — 借出物品"""
+    iid = path_clean[len("/api/items/"):].replace("/lend", "")
+    body = read_body(handler)
+
+    borrower = body.get("borrower", "").strip()
+    qty = float(body.get("qty", 0))
+    note = body.get("note", "").strip()
+
+    if not borrower:
+        send_json(handler, 400, {"error": "借出人不能为空"})
+        return
+    if qty <= 0:
+        send_json(handler, 400, {"error": "借出数量必须大于0"})
+        return
+
+    items = _get("items")
+    item = None
+    for it in items:
+        if it.get("id") == iid:
+            item = it
+            break
+
+    if not item:
+        send_json(handler, 404, {"error": f"未找到物品 {iid}"})
+        return
+
+    # 计算可借出数量
+    total_qty = float(item.get("qty", 0))
+    lent_qty = float(item.get("lent_qty", 0))
+    available_qty = total_qty - lent_qty
+
+    if qty > available_qty:
+        send_json(handler, 400, {"error": f"可借出数量不足，当前可借出 {available_qty} {item.get('unit', '个')}"})
+        return
+
+    # 初始化借出记录数组
+    if "lend_records" not in item:
+        item["lend_records"] = []
+
+    # 添加借出记录
+    lend_record = {
+        "id": f"lend-{int(datetime.now().timestamp() * 1000)}",
+        "borrower": borrower,
+        "qty": qty,
+        "lend_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "return_date": None,
+        "status": "lent",
+        "note": note,
+    }
+    item["lend_records"].append(lend_record)
+    item["lent_qty"] = lent_qty + qty
+
+    _save("items", items)
+    log(f"  OK 借出 {item['name']} x{qty} 给 {borrower}")
+    send_json(handler, 200, {"ok": True, "row": item})
+
+
+def handle_put_items_return(handler, path_clean: str):
+    """PUT /api/items/{id}/return — 归还物品"""
+    iid = path_clean[len("/api/items/"):].replace("/return", "")
+    body = read_body(handler)
+
+    qty = body.get("qty")
+    note = body.get("note", "").strip()
+
+    items = _get("items")
+    item = None
+    for it in items:
+        if it.get("id") == iid:
+            item = it
+            break
+
+    if not item:
+        send_json(handler, 404, {"error": f"未找到物品 {iid}"})
+        return
+
+    lent_qty = float(item.get("lent_qty", 0))
+    if lent_qty <= 0:
+        send_json(handler, 400, {"error": "该物品没有借出记录，无需归还"})
+        return
+
+    # 如果没有指定数量，默认归还全部
+    if qty is None:
+        qty = lent_qty
+    else:
+        qty = float(qty)
+
+    if qty <= 0:
+        send_json(handler, 400, {"error": "归还数量必须大于0"})
+        return
+    if qty > lent_qty:
+        send_json(handler, 400, {"error": f"归还数量超过借出数量，当前借出 {lent_qty}"})
+        return
+
+    # 初始化借出记录数组
+    if "lend_records" not in item:
+        item["lend_records"] = []
+
+    # 查找未归还的记录，按时间倒序，先归还最早的
+    unlent_records = [r for r in item["lend_records"] if r.get("status") == "lent"]
+    unlent_records.sort(key=lambda r: r.get("lend_date", ""))
+
+    remaining_return = qty
+    for record in unlent_records:
+        if remaining_return <= 0:
+            break
+        record_qty = float(record.get("qty", 0))
+        returned_from_this = min(record_qty, remaining_return)
+        record["return_qty"] = record.get("return_qty", 0) + returned_from_this
+        remaining_return -= returned_from_this
+        if record_qty <= returned_from_this:
+            record["status"] = "returned"
+            record["return_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            if note:
+                record["return_note"] = note
+
+    item["lent_qty"] = lent_qty - qty
+    _save("items", items)
+    log(f"  OK 归还 {item['name']} x{qty}")
+    send_json(handler, 200, {"ok": True, "row": item})
+
+
 # ===== 权限检查 =====
 def _check_write(handler):
     """检查写权限（所有人）"""
