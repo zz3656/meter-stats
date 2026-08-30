@@ -58,9 +58,23 @@ function renderCharts() {
   Chart.defaults.color = isDark ? '#6b7280' : '#7a818c';
   Chart.defaults.borderColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
-  renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
+  // 当前可见的 section 触发对应的占比
+  triggerVisiblePie();
   if (_yearlyChart) {
     setTimeout(() => _yearlyChart.resize(), 60);
+  }
+}
+
+// 当前可见 section 的占比饼图(每日/月度)
+function triggerVisiblePie() {
+  const trendVisible = document.getElementById('section-report-trend')?.style.display !== 'none';
+  const monthlyVisible = document.getElementById('section-report-monthly')?.style.display !== 'none';
+  if (trendVisible) {
+    const sel = document.getElementById('day-copy-date');
+    if (sel && sel.value) renderDailyPie(sel.value);
+  } else if (monthlyVisible) {
+    const sel = document.getElementById('report-month');
+    if (sel && sel.value) renderMonthlyPie(sel.value);
   }
 }
 
@@ -171,6 +185,27 @@ async function fetchDuty() {
   }
 }
 
+// 一次拉全部数据(5 个 GET → 1 个 GET,启动时调用)
+async function fetchSnapshot() {
+  try {
+    const data = await api('GET', '/api/snapshot');
+    cacheReadings(data.readings || []);
+    cacheCharges(data.charges || []);
+    CURRENT_ITEMS = data.items || [];
+    CURRENT_PURCHASES = data.purchases || [];
+    CURRENT_DUTY = data.duty || [];
+    return data;
+  } catch (e) {
+    console.warn('snapshot 失败,回退到本地缓存:', e);
+    CURRENT_READINGS = loadReadingsCache();
+    CURRENT_CHARGES = loadChargesCache();
+    CURRENT_ITEMS = [];
+    CURRENT_PURCHASES = [];
+    CURRENT_DUTY = [];
+    return null;
+  }
+}
+
 // 后端写入
 async function saveReadingRemote(row) {
   return api('POST', '/api/readings', row);
@@ -212,7 +247,10 @@ Chart.defaults.font.family = "'Inter', -apple-system, sans-serif";
 Chart.defaults.font.size = 11;
 
 let trendChart = null;
-let pieChart = null;
+let pieChart = null;        // 月度报告饼图(独立页面删除后保留兼容)
+let pieChartB = null;       // 双月对比(已无人调用,保留占位)
+let dailyPieChart = null;    // 每日趋势页的单日饼图
+let monthlyPieChart = null;  // 月度报告页的当月饼图
 
 // ===== 全局 Toast 提示覆盖层 =====
 let _toastTimer = null;
@@ -569,17 +607,15 @@ let CURRENT_READINGS = [];
 let CURRENT_CHARGES = [];
 
 async function renderAll() {
-  // 拉取最新数据
-  CURRENT_READINGS = (await fetchReadings()).sort((a, b) => a.date.localeCompare(b.date));
-  CURRENT_CHARGES = (await fetchCharges()).sort((a, b) => a.date.localeCompare(b.date));
-  await fetchItems();
-  await fetchPurchases();
-  await fetchDuty();
+  // 一次拉全部数据(snapshot 优先,失败回退到 5 个独立 GET)
+  await fetchSnapshot();
+  CURRENT_READINGS = (CURRENT_READINGS || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  CURRENT_CHARGES = (CURRENT_CHARGES || []).slice().sort((a, b) => a.date.localeCompare(b.date));
 
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
-  renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
+  triggerVisiblePie();
   renderHistory(CURRENT_READINGS);
   renderChargeLog(CURRENT_CHARGES);
   renderItemTable(CURRENT_ITEMS);
@@ -601,7 +637,7 @@ async function refreshAndRender() {
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
-  renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
+  triggerVisiblePie();
   renderHistory(CURRENT_READINGS);
   renderChargeLog(CURRENT_CHARGES);
   renderItemTable(CURRENT_ITEMS);
@@ -810,159 +846,75 @@ function daysBetween(dateStrA, dateStrB) {
 }
 function renderChargeAlert(readings, charges) {
   readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
-  const container = document.getElementById('charge-alerts');
 
-  if (!readings || readings.length === 0) {
-    if (container) container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
-    // 抄表录入页内联预警卡片:始终显示(空数据提示)
-    const readingAlertsCard = document.getElementById('reading-alerts-card');
-    const readingAlertsContainer = document.getElementById('reading-alerts-container');
-    if (readingAlertsCard) readingAlertsCard.style.display = '';
-    if (readingAlertsContainer) {
-      readingAlertsContainer.innerHTML = '<div class="empty" style="padding:12px 0;">录入抄表数据后开始监控 4 块表的余额。</div>';
-    }
-    return;
-  }
-
-  const latest = readings[readings.length - 1];
-
-  // 算每块表的剩余天数(用于排序)
-  const items = CHARGE_METERS.map(m => {
-    const multiplier = MULTIPLIER[m.key];
-    const remaining = latest[m.key] * multiplier;
-    const usage = calcMonthlyDailyUsage(readings, charges, m.key);
-
-    let daysLeft = Infinity;
-    let dailyUsage = null;
-    let basisLabel = '';
-    let hasUsage = false;
-
-    if (usage) {
-      dailyUsage = usage.daily;
-      daysLeft = dailyUsage > 0 ? remaining / dailyUsage : Infinity;
-      basisLabel = usage.basisLabel;
-      hasUsage = true;
+  // 共用:三个容器的 HTML 渲染逻辑(独立预警页 / 抄表录入页内联 / 抄表记录页表格上方)
+  const renderInto = (container) => {
+    if (!container) return;
+    if (!readings || readings.length === 0) {
+      container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
+      return;
     }
 
-    return { m, multiplier, remaining, usage, daysLeft, dailyUsage, basisLabel, hasUsage };
-  });
+    const latest = readings[readings.length - 1];
+    const items = CHARGE_METERS.map(m => {
+      const multiplier = MULTIPLIER[m.key];
+      const remaining = latest[m.key] * multiplier;
+      const usage = calcMonthlyDailyUsage(readings, charges, m.key);
+      let daysLeft = Infinity, dailyUsage = null, basisLabel = '', hasUsage = false;
+      if (usage) {
+        dailyUsage = usage.daily;
+        daysLeft = dailyUsage > 0 ? remaining / dailyUsage : Infinity;
+        basisLabel = usage.basisLabel;
+        hasUsage = true;
+      }
+      return { m, multiplier, remaining, usage, daysLeft, dailyUsage, basisLabel, hasUsage };
+    });
 
-  // 固定按表号顺序排列:大厅 → 消防 → 包厢 → 空调
-
-  // 独立预警页主容器
-  if (container) {
     container.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
-    // 颜色 + 图标
-    let level, dotColor, statusText;
-    if (!hasUsage) {
-      level = 'pending';
-      dotColor = 'var(--text-muted)';
-      statusText = '等待数据';
-    } else if (daysLeft < 3) {
-      level = 'danger';
-      dotColor = '#dc2626';
-      statusText = '紧急';
-    } else if (daysLeft < 7) {
-      level = 'warn';
-      dotColor = '#f59e0b';
-      statusText = '注意';
-    } else {
-      level = 'ok';
-      dotColor = '#10b981';
-      statusText = '充足';
-    }
+      let level, dotColor, statusText;
+      if (!hasUsage) { level = 'pending'; dotColor = 'var(--text-muted)'; statusText = '等待数据'; }
+      else if (daysLeft < 3) { level = 'danger'; dotColor = '#dc2626'; statusText = '紧急'; }
+      else if (daysLeft < 7) { level = 'warn'; dotColor = '#f59e0b'; statusText = '注意'; }
+      else { level = 'ok'; dotColor = '#10b981'; statusText = '充足'; }
 
-    // 建议充值
-    let suggestHtml = '';
-    if (hasUsage && dailyUsage > 0 && daysLeft < 7) {
-      const targetDays = 37;
-      const targetKwh = dailyUsage * targetDays;
-      const needChargeKwh = Math.max(0, targetKwh - remaining);
-      const suggestAmount = needChargeKwh * ELECTRICITY_PRICE;
-      suggestHtml = `<span class="suggest-chip">💡 建议充值 ¥ ${suggestAmount.toFixed(0)}</span>`;
-    }
-
-    const cls = m.key === 'private_room' ? 'private' : m.key;
-    const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
-    // 预计断电日期 = 最新抄表日 + 剩余天数(只在有日均数据时显示)
-    const dueDateStr = hasUsage && dailyUsage > 0 && daysLeft !== Infinity ? addDaysToDate(latest.date, daysLeft) : '';
-    const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
-
-    return `
-      <div class="stat-card ${cls} alert-stat-${level}">
-        <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
-        <div class="value">${remaining.toFixed(0)}<small>度</small></div>
-        <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
-          ${dueDateStr ? `<span style="font-size:11px;opacity:0.85;">预计 ${dueDateStr} 断电</span>` : ''}
-          ${suggestHtml}
+      let suggestHtml = '';
+      if (hasUsage && dailyUsage > 0 && daysLeft < 7) {
+        const targetDays = 37;
+        const targetKwh = dailyUsage * targetDays;
+        const needChargeKwh = Math.max(0, targetKwh - remaining);
+        const suggestAmount = needChargeKwh * ELECTRICITY_PRICE;
+        suggestHtml = `<span class="suggest-chip">💡 建议充值 ¥ ${suggestAmount.toFixed(0)}</span>`;
+      }
+      const cls = m.key === 'private_room' ? 'private' : m.key;
+      const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
+      const dueDateStr = hasUsage && dailyUsage > 0 && daysLeft !== Infinity ? addDaysToDate(latest.date, daysLeft) : '';
+      const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
+      return `
+        <div class="stat-card ${cls} alert-stat-${level}">
+          <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
+          <div class="value">${remaining.toFixed(0)}<small>度</small></div>
+          <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
+            ${dueDateStr ? `<span style="font-size:11px;opacity:0.85;">预计 ${dueDateStr} 断电</span>` : ''}
+            ${suggestHtml}
+          </div>
+          <div class="sub" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle);font-size:11px;opacity:0.7;">
+            ${hasUsage ? `日均 ${dailyUsage.toFixed(1)} 度 · ${basisLabel}` : `至少需要 2 次抄表 + 充值数据`}
+          </div>
         </div>
-        <div class="sub" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle);font-size:11px;opacity:0.7;">
-          ${hasUsage
-            ? `日均 ${dailyUsage.toFixed(1)} 度 · ${basisLabel}`
-            : `至少需要 2 次抄表 + 充值数据`
-          }
-        </div>
-      </div>
-    `;
-  }).join('')}</div>`;
-  }
+      `;
+    }).join('')}</div>`;
+  };
 
-  // 抄表录入页内联显示余量预警卡片
+  // 三个位置都填充:
+  // 1) 抄表录入页内联卡片(保持向后兼容)
+  renderInto(document.getElementById('reading-alerts-container'));
   const readingAlertsCard = document.getElementById('reading-alerts-card');
-  const readingAlertsContainer = document.getElementById('reading-alerts-container');
-  if (readingAlertsCard && readingAlertsContainer) {
-    readingAlertsCard.style.display = '';
-    readingAlertsContainer.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
-    let level, dotColor, statusText;
-    if (!hasUsage) {
-      level = 'pending';
-      dotColor = 'var(--text-muted)';
-      statusText = '等待数据';
-    } else if (daysLeft < 3) {
-      level = 'danger';
-      dotColor = '#dc2626';
-      statusText = '紧急';
-    } else if (daysLeft < 7) {
-      level = 'warn';
-      dotColor = '#f59e0b';
-      statusText = '注意';
-    } else {
-      level = 'ok';
-      dotColor = '#10b981';
-      statusText = '充足';
-    }
-    let suggestHtml = '';
-    if (hasUsage && dailyUsage > 0 && daysLeft < 7) {
-      const targetDays = 37;
-      const targetKwh = dailyUsage * targetDays;
-      const needChargeKwh = Math.max(0, targetKwh - remaining);
-      const suggestAmount = needChargeKwh * ELECTRICITY_PRICE;
-      suggestHtml = `<span class="suggest-chip">💡 建议充值 ¥ ${suggestAmount.toFixed(0)}</span>`;
-    }
-    const cls = m.key === 'private_room' ? 'private' : m.key;
-    const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
-    const dueDateStr = hasUsage && dailyUsage > 0 && daysLeft !== Infinity ? addDaysToDate(latest.date, daysLeft) : '';
-    const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
-    return `
-      <div class="stat-card ${cls} alert-stat-${level}">
-        <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
-        <div class="value">${remaining.toFixed(0)}<small>度</small></div>
-        <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
-          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
-          ${dueDateStr ? `<span style="font-size:11px;opacity:0.85;">预计 ${dueDateStr} 断电</span>` : ''}
-          ${suggestHtml}
-        </div>
-        <div class="sub" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle);font-size:11px;opacity:0.7;">
-          ${hasUsage
-            ? `日均 ${dailyUsage.toFixed(1)} 度 · ${basisLabel}`
-            : `至少需要 2 次抄表 + 充值数据`
-          }
-        </div>
-      </div>
-    `;
-  }).join('')}</div>`;
-  }
+  if (readingAlertsCard) readingAlertsCard.style.display = '';
+  // 2) 抄表记录页表格上方(新增)
+  renderInto(document.getElementById('reading-record-alerts-container'));
+  // 3) 老的独立 #charge-alerts 容器(兼容外部调用)
+  renderInto(document.getElementById('charge-alerts'));
 }
 
 // 统计卡片 — 用新算法(读数差 + 期间充值)
@@ -1390,10 +1342,8 @@ function renderTrendChart(readings, charges) {
   });
 }
 
-// 占比饼图 — 支持单月选择 + 双月对比
-// 模式:仅 A 月(默认)显示一个饼图;点「对比」显示 A/B 两个饼图并排
-let pieChartB = null;  // 对比用的第二个饼图实例
-
+// 占比饼图 — 通用:传入 canvasId + 持有 chart 实例的变量 holder
+// 用法:drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c)
 function calcMonthPie(monthReadings, charges) {
   // monthReadings:某月内按日期排序的抄表(hall != null 已过滤)
   if (!monthReadings || monthReadings.length < 2) return null;
@@ -1408,7 +1358,9 @@ function calcMonthPie(monthReadings, charges) {
   return { usage, total, first, last };
 }
 
-function drawPie(canvasId, getChart, setChart, data, label) {
+// 占比饼图 — 通用:传入 canvasId + 持有 chart 实例的变量 holder
+// 用法:drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c)
+function drawPieChart(canvasId, data, setChart) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
@@ -1416,8 +1368,6 @@ function drawPie(canvasId, getChart, setChart, data, label) {
     const pct = data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : 0;
     return `${LABELS[k]} (${pct}%)`;
   });
-  const existing = getChart();
-  if (existing) existing.destroy();
   const chart = new Chart(ctx, {
     type: 'doughnut',
     data: {
@@ -1436,84 +1386,97 @@ function drawPie(canvasId, getChart, setChart, data, label) {
         legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
         tooltip: {
           callbacks: {
-            label: (ctx) => {
-              const v = ctx.parsed;
+            label: (c) => {
+              const v = c.parsed;
               const pct = data.total > 0 ? (v / data.total * 100).toFixed(1) : 0;
-              return `${ctx.label.split(' (')[0]}: ${v.toFixed(1)} 度 (${pct}%)`;
+              return `${c.label.split(' (')[0]}: ${v.toFixed(1)} 度 (${pct}%)`;
             },
           },
         },
       },
     },
   });
-  setChart(chart);
+  if (setChart) setChart(chart);
+  return chart;
 }
 
-function renderPieChart(readings, charges) {
-  readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
-  const rangeEl = document.getElementById('pie-range');
-  const bWrap = document.getElementById('chart-pie-b-wrap');
-  const selA = document.getElementById('pie-month-a');
-  const selB = document.getElementById('pie-month-b');
+// 单日占比(每日趋势页):从单天汇报下拉联动
+function renderDailyPie(dateStr) {
+  const wrap = document.getElementById('daily-pie-wrap');
+  const summaryEl = document.getElementById('daily-pie-summary');
+  if (!wrap || !summaryEl) return;
 
-  // 没有下拉(初始化前)或没有数据 → 保持旧行为:全部区间累计
-  if (!selA || !readings || readings.length < 2) {
-    if (pieChart) pieChart.destroy();
-    if (pieChartB) { pieChartB.destroy(); pieChartB = null; }
-    if (bWrap) bWrap.style.display = 'none';
-    const ctx = document.getElementById('chart-pie').getContext('2d');
-    ctx.canvas.parentElement.innerHTML = '<div class="empty">需要至少 2 次抄表才能计算占比</div>';
+  const readings = CURRENT_READINGS.filter(r => r.hall != null);
+  if (!dateStr || readings.length < 2) {
+    wrap.style.display = 'none';
     return;
   }
 
-  const monthA = selA.value;
-  const monthB = selB ? selB.value : '';
-  const compareMode = monthB && monthB !== monthA;
-
-  const monthA_rs = readings.filter(r => r.date.startsWith(monthA));
-  const dataA = calcMonthPie(monthA_rs, charges);
-  const dataB = compareMode ? calcMonthPie(readings.filter(r => r.date.startsWith(monthB)), charges) : null;
-
-  if (!dataA && !dataB) {
-    if (pieChart) pieChart.destroy();
-    if (pieChartB) { pieChartB.destroy(); pieChartB = null; }
-    if (bWrap) bWrap.style.display = 'none';
-    document.getElementById('chart-pie').getContext('2d').canvas.parentElement.innerHTML =
-      `<div class="empty">${monthA} 当月不足 2 次抄表,无法计算占比</div>`;
+  // 找到包含该日的前后两次抄表
+  const sorted = [...readings].sort((a, b) => a.date.localeCompare(b.date));
+  let prev = null, next = null;
+  for (let i = 0; i < sorted.length; i++) {
+    if (sorted[i].date <= dateStr) prev = sorted[i];
+    if (sorted[i].date > dateStr) { next = sorted[i]; break; }
+  }
+  if (!prev || !next) {
+    wrap.style.display = 'none';
     return;
   }
 
-  if (rangeEl) {
-    if (compareMode && dataA && dataB) {
-      rangeEl.textContent = `对比：${monthA} ${dataA.first.date}→${dataA.last.date}  vs  ${monthB} ${dataB.first.date}→${dataB.last.date}`;
-    } else if (dataA) {
-      rangeEl.textContent = `${monthA}：${dataA.first.date} → ${dataA.last.date}`;
-    } else {
-      rangeEl.textContent = `${monthB}：${dataB.first.date} → ${dataB.last.date}`;
-    }
-  }
+  // 计算 prev → next 区间,按天数均摊到 prev 日(与单天汇报口径一致)
+  const days = Math.max(1, Math.round((new Date(next.date) - new Date(prev.date)) / 86400000));
+  const usage = ['hall', 'fire', 'private_room', 'ac'].map(k => {
+    const delta = realKwh(prev[k] - next[k], k);
+    const charged = sumChargesBetween(CURRENT_CHARGES, k, prev.date, next.date);
+    return Math.max((delta + charged) / days, 0);
+  });
+  const total = usage.reduce((a, b) => a + b, 0);
 
-  if (dataA) {
-    drawPie('chart-pie', () => pieChart, (c) => pieChart = c, dataA, monthA);
-  } else if (pieChart) { pieChart.destroy(); pieChart = null; }
+  wrap.style.display = '';
+  // summary 文字
+  const pct = (i) => total > 0 ? (usage[i] / total * 100).toFixed(1) : '0';
+  summaryEl.innerHTML = `
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.hall}"></span>大厅 ${usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.fire}"></span>消防 ${usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.private_room}"></span>包厢 ${usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.ac}"></span>空调 ${usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
+  `;
 
-  if (compareMode && dataB) {
-    if (bWrap) bWrap.style.display = 'block';
-    drawPie('chart-pie-b', () => pieChartB, (c) => pieChartB = c, dataB, monthB);
-  } else {
-    if (pieChartB) { pieChartB.destroy(); pieChartB = null; }
-    if (bWrap) bWrap.style.display = 'none';
-  }
+  if (dailyPieChart) { dailyPieChart.destroy(); dailyPieChart = null; }
+  drawPieChart('chart-daily-pie', { usage, total }, c => dailyPieChart = c);
+}
 
-  // 双月对比表格:选了两个不同月份时,同步渲染对比(替代原「历史对比」模块)
-  const compareResult = document.getElementById('pie-compare-result');
-  if (compareResult) {
-    if (compareMode) {
-      applyCompare(monthA, monthB);  // async,内部渲染
-    } else {
-      compareResult.innerHTML = '';
-    }
+// 月度占比(月度报告页):从「选择月份」下拉联动
+function renderMonthlyPie(monthKey) {
+  const wrap = document.getElementById('monthly-pie-wrap');
+  const summaryEl = document.getElementById('monthly-pie-summary');
+  if (!wrap || !summaryEl) return;
+
+  const readings = CURRENT_READINGS.filter(r => r.hall != null);
+  const data = calcMonthPie(readings.filter(r => r.date.startsWith(monthKey)), CURRENT_CHARGES);
+
+  if (!data) {
+    wrap.style.display = 'none';
+    return;
   }
+  wrap.style.display = '';
+
+  const pct = (i) => data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : '0';
+  summaryEl.innerHTML = `
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.hall}"></span>大厅 ${data.usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.fire}"></span>消防 ${data.usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.private_room}"></span>包厢 ${data.usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.ac}"></span>空调 ${data.usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
+  `;
+
+  if (monthlyPieChart) { monthlyPieChart.destroy(); monthlyPieChart = null; }
+  drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c);
+}
+
+// 兼容旧入口(已被删除,但 admin.js 等可能引用)
+function renderPieChart() {
+  // 旧的独立占比页已删除,不再做任何事
 }
 
 // 物品管理表格
@@ -2163,35 +2126,26 @@ async function enterEditMode(date) {
 }
 
 // ===== 表单处理 =====
-document.getElementById('entry-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  // 空字段 → null(4 表可空,允许只录水电表底);至少填一项才能提交
+// 抄表录入共用函数（侧栏录入页 + 抄表记录页弹窗 都用）
+async function submitReadingAdd(source) {
+  const ids = source === 'sidebar'
+    ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note' }
+    : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note' };
   const num = (id) => {
     const v = document.getElementById(id).value;
     return v === '' ? null : parseFloat(v);
   };
-  const hallV = num('hall'), fireV = num('fire'), prV = num('private_room'), acV = num('ac');
-  // 水电字段已在独立的「💧 水电」tab 录入,抄表表单只提交 4 表
+  const hallV = num(ids.hall), fireV = num(ids.fire), prV = num(ids.private_room), acV = num(ids.ac);
   const allVals = [hallV, fireV, prV, acV];
-  if (allVals.every(v => v === null)) {
-    showAlert('请至少填写一块表的读数', 'error');
-    return;
-  }
-  if (allVals.some(v => v !== null && isNaN(v))) {
-    showAlert('读数必须是数字', 'error');
-    return;
-  }
+  if (allVals.every(v => v === null)) { showAlert('请至少填写一块表的读数', 'error'); return; }
+  if (allVals.some(v => v !== null && isNaN(v))) { showAlert('读数必须是数字', 'error'); return; }
   const row = {
-    date: document.getElementById('date').value,
-    hall: hallV,
-    fire: fireV,
-    private_room: prV,
-    ac: acV,
-    note: document.getElementById('entry-note').value.trim(),
+    date: document.getElementById(ids.date).value,
+    hall: hallV, fire: fireV, private_room: prV, ac: acV,
+    note: document.getElementById(ids.note).value.trim(),
   };
   if (!row.date) { showAlert('请选择日期', 'error'); return; }
 
-  // 检查是否已存在该日期(走 API 查询)
   const all = await fetchReadings();
   const existing = all.find(r => r.date === row.date);
   if (existing) {
@@ -2202,8 +2156,7 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
       body: `<strong>${row.date}</strong> 已存在数据,是否覆盖?<br><br>
         <span style="opacity:0.7">现有:</span> 大厅 ${existing.hall} · 消防 ${existing.fire} · 包厢 ${existing.private_room} · 空调 ${existing.ac}<br>
         <span style="opacity:0.7">新数据:</span> 大厅 ${row.hall} · 消防 ${row.fire} · 包厢 ${row.private_room} · 空调 ${row.ac}`,
-      confirmText: '覆盖',
-      confirmKind: 'primary',
+      confirmText: '覆盖', confirmKind: 'primary',
     });
     if (!ok) return;
   }
@@ -2211,75 +2164,77 @@ document.getElementById('entry-form').addEventListener('submit', async (e) => {
   try {
     await saveReadingRemote(row);
     showAlert(`✓ ${row.date} 已保存`, 'success');
-    ['hall', 'fire', 'private_room', 'ac', 'entry-note'].forEach(id => document.getElementById(id).value = '');
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note' }
+        : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note' };
+      ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(k => document.getElementById(p[k]).value = '');
+    });
+    if (source === 'modal') closeReadingAddModal();
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
   }
-});
+}
 
-// 充值表单 submit
-document.getElementById('charge-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const date = document.getElementById('charge-date').value;
+// 充值录入共用函数
+async function submitChargeAdd(source) {
+  const ids = source === 'sidebar'
+    ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private_room', ac: 'charge-ac', note: 'charge-note' }
+    : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac', note: 'charge-add-note' };
+  const date = document.getElementById(ids.date).value;
   if (!date) { showAlert('请选择充值日期', 'error'); return; }
 
   const charge = {
     date: date,
-    hall: parseFloat(document.getElementById('charge-hall').value) || 0,
-    fire: parseFloat(document.getElementById('charge-fire').value) || 0,
-    private_room: parseFloat(document.getElementById('charge-private_room').value) || 0,
-    ac: parseFloat(document.getElementById('charge-ac').value) || 0,
-    note: document.getElementById('charge-note').value.trim(),
+    hall: parseFloat(document.getElementById(ids.hall).value) || 0,
+    fire: parseFloat(document.getElementById(ids.fire).value) || 0,
+    private_room: parseFloat(document.getElementById(ids.private_room).value) || 0,
+    ac: parseFloat(document.getElementById(ids.ac).value) || 0,
+    note: document.getElementById(ids.note).value.trim(),
   };
-
   if (CHARGE_METERS.every(m => charge[m.key] === 0)) {
     showAlert('至少填写一块表的充值度数', 'error');
     return;
   }
-
   try {
     await saveChargeRemote(charge);
     showAlert(`✓ ${date} 充值记录已保存`, 'success');
-    ['hall', 'fire', 'private_room', 'ac'].forEach(id => {
-      const el = document.getElementById('charge-' + id);
-      if (el) el.value = '';
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private_room', ac: 'charge-ac', note: 'charge-note' }
+        : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac', note: 'charge-add-note' };
+      ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(k => document.getElementById(p[k]).value = '');
     });
-    document.getElementById('charge-note').value = '';
+    if (source === 'modal') closeChargeAddModal();
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
   }
-});
+}
 
-// 水电表单 submit(总表/分表/水表 — 独立 tab,数据仍写入抄表记录同日期)
-document.getElementById('utility-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const date = document.getElementById('utility-date').value;
+// 水电录入共用函数
+async function submitUtilityAdd(source) {
+  const ids = source === 'sidebar'
+    ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
+    : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
+  const date = document.getElementById(ids.date).value;
   if (!date) { showAlert('请选择抄表日期', 'error'); return; }
   const numU = (id) => {
     const v = document.getElementById(id).value;
     return v === '' ? null : parseFloat(v);
   };
-  const mainV = numU('main_meter'), subV = numU('sub_meter'), waterV = numU('water');
+  const mainV = numU(ids.main), subV = numU(ids.sub), waterV = numU(ids.water);
   const vals = [mainV, subV, waterV];
-  if (vals.every(v => v === null)) {
-    showAlert('请至少填写总表/分表/水表一项', 'error');
-    return;
-  }
-  if (vals.some(v => v !== null && isNaN(v))) {
-    showAlert('读数必须是数字', 'error');
-    return;
-  }
+  if (vals.every(v => v === null)) { showAlert('请至少填写总表/分表/水表一项', 'error'); return; }
+  if (vals.some(v => v !== null && isNaN(v))) { showAlert('读数必须是数字', 'error'); return; }
   const row = {
     date: date,
     main_meter: mainV,
     sub_meter: subV,
     water: waterV,
-    note: document.getElementById('utility-note').value.trim(),
+    note: document.getElementById(ids.note).value.trim(),
   };
-
-  // 同日期已存在 → 确认覆盖(仅更新水电字段,4 表读数保留)
   const all = await fetchReadings();
   const existing = all.find(r => r.date === row.date);
   if (existing) {
@@ -2290,20 +2245,99 @@ document.getElementById('utility-form').addEventListener('submit', async (e) => 
       body: `<strong>${row.date}</strong> 已有抄表记录,是否覆盖水电字段?<br><br>
         <span style="opacity:0.7">现有:</span> 总表 ${existing.main_meter ?? '—'} · 分表 ${existing.sub_meter ?? '—'} · 水表 ${existing.water ?? '—'}<br>
         <span style="opacity:0.7">新数据:</span> 总表 ${row.main_meter ?? '—'} · 分表 ${row.sub_meter ?? '—'} · 水表 ${row.water ?? '—'}`,
-      confirmText: '覆盖',
-      confirmKind: 'primary',
+      confirmText: '覆盖', confirmKind: 'primary',
     });
     if (!ok) return;
   }
-
   try {
     await saveReadingRemote(row);
     showAlert(`✓ ${date} 水电已保存`, 'success');
-    ['main_meter', 'sub_meter', 'water', 'utility-note'].forEach(id => document.getElementById(id).value = '');
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
+        : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
+      ['main', 'sub', 'water', 'note'].forEach(k => document.getElementById(p[k]).value = '');
+    });
+    if (source === 'modal') closeReadingAddModal();  // 水电 tab 共用 reading-add 弹窗
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
   }
+}
+
+// 弹窗 open/close — 抄表/水电 合并到一个弹窗,通过 tab 切换
+let currentReadingTab = 'reading';  // 'reading' | 'utility'
+
+function switchReadingTab(tab) {
+  currentReadingTab = tab;
+  const tabs = document.querySelectorAll('#reading-add-tabs .tab-btn');
+  tabs.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
+  const panels = document.querySelectorAll('#reading-add-modal-backdrop .tab-panel');
+  panels.forEach(p => p.style.display = (p.dataset.panel === tab ? '' : 'none'));
+}
+
+function openReadingAddModal() {
+  // 默认显示「抄表录入」tab
+  switchReadingTab('reading');
+  const d = document.getElementById('reading-add-date');
+  if (d && !d.value) d.value = todayStr();
+  document.getElementById('reading-add-modal-backdrop').classList.add('show');
+  document.getElementById('reading-add-hall')?.focus();
+}
+function closeReadingAddModal() {
+  document.getElementById('reading-add-modal-backdrop').classList.remove('show');
+}
+function openChargeAddModal() {
+  const d = document.getElementById('charge-add-date');
+  if (d && !d.value) d.value = todayStr();
+  document.getElementById('charge-add-modal-backdrop').classList.add('show');
+  document.getElementById('charge-add-hall')?.focus();
+}
+function closeChargeAddModal() {
+  document.getElementById('charge-add-modal-backdrop').classList.remove('show');
+}
+
+// ===== 提交按钮（侧栏录入页 form submit） =====
+document.getElementById('entry-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await submitReadingAdd('sidebar');
+});
+document.getElementById('charge-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await submitChargeAdd('sidebar');
+});
+document.getElementById('utility-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await submitUtilityAdd('sidebar');
+});
+
+// ===== 弹窗 confirm 按钮 — 根据当前 tab 路由 =====
+document.getElementById('reading-add-confirm')?.addEventListener('click', () => {
+  if (currentReadingTab === 'utility') {
+    submitUtilityAdd('modal');
+  } else {
+    submitReadingAdd('modal');
+  }
+});
+document.getElementById('charge-add-confirm')?.addEventListener('click', () => submitChargeAdd('modal'));
+
+// ===== 弹窗 open 按钮（在记录页面 header） =====
+document.getElementById('btn-open-reading-add')?.addEventListener('click', openReadingAddModal);
+document.getElementById('btn-open-charge-add')?.addEventListener('click', openChargeAddModal);
+
+// ===== Tab 切换(抄表/水电 合并弹窗内) =====
+document.querySelectorAll('#reading-add-tabs .tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchReadingTab(btn.dataset.tab));
+});
+
+// ===== 弹窗 close =====
+document.getElementById('reading-add-close')?.addEventListener('click', closeReadingAddModal);
+document.getElementById('charge-add-close')?.addEventListener('click', closeChargeAddModal);
+document.getElementById('reading-add-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('reading-add-modal-backdrop')) closeReadingAddModal();
+});
+document.getElementById('charge-add-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('charge-add-modal-backdrop')) closeChargeAddModal();
 });
 
 
@@ -2332,23 +2366,6 @@ function refreshMonthSelectors() {
     }
   }
 
-  // 用电占比:月份 A/B 下拉(默认 A=上月, B=本月),切换/对比时重渲染饼图
-  const pieA = document.getElementById('pie-month-a');
-  const pieB = document.getElementById('pie-month-b');
-  if (pieA) {
-    const prevA = pieA.value;
-    pieA.innerHTML = opts;
-    const newA = prevA && months.includes(prevA) ? prevA : (months.length > 0 ? months[months.length - 1] : '');
-    if (pieA.value !== newA) pieA.value = newA;
-  }
-  if (pieB) {
-    const prevB = pieB.value;
-    pieB.innerHTML = opts;
-    const newB = prevB && months.includes(prevB) ? prevB : (months.length >= 2 ? months[months.length - 2] : (months.length > 0 ? months[months.length - 1] : ''));
-    if (pieB.value !== newB) pieB.value = newB;
-  }
-  if (pieA && pieA.value) renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
-
   // 月度报告:有数据月份下拉,默认最后月;值变化时重新加载
   const reportSel = document.getElementById('report-month');
   if (reportSel) {
@@ -2358,6 +2375,10 @@ function refreshMonthSelectors() {
     if (reportSel.value !== newVal) {
       reportSel.value = newVal;
       loadMonthlyReport();
+    }
+    // 当前如果月度报告页可见,触发当月占比渲染
+    if (document.getElementById('section-report-monthly')?.style.display !== 'none' && reportSel.value) {
+      renderMonthlyPie(reportSel.value);
     }
   }
 
@@ -2610,90 +2631,187 @@ function downloadCSV(filename, content) {
 const statsMonthSel = document.getElementById('stats-month');
 if (statsMonthSel) statsMonthSel.addEventListener('change', () => renderStats(CURRENT_READINGS, CURRENT_CHARGES));
 
-// 用电占比:月份 A/B 切换或点「对比」重渲染
-const pieSelA = document.getElementById('pie-month-a');
-const pieSelB = document.getElementById('pie-month-b');
-const pieCompareBtn = document.getElementById('pie-compare');
-if (pieSelA) pieSelA.addEventListener('change', () => renderPieChart(CURRENT_READINGS, CURRENT_CHARGES));
-if (pieSelB) pieSelB.addEventListener('change', () => renderPieChart(CURRENT_READINGS, CURRENT_CHARGES));
-if (pieCompareBtn) pieCompareBtn.addEventListener('click', () => renderPieChart(CURRENT_READINGS, CURRENT_CHARGES));
+// 用电占比:已合并到每日趋势/月度报告页面,这里不再需要独立的月份下拉事件
 
-// 物品管理:提交新物品
-document.getElementById('btn-add-item').addEventListener('click', async () => {
-  const name = document.getElementById('item-name').value.trim();
-  const qty = parseFloat(document.getElementById('item-qty').value);
-  const unit = document.getElementById('item-unit').value.trim();
-  const note = document.getElementById('item-note').value.trim();
+// 物品管理:共用提交函数（侧栏录入页 + 物品记录页弹窗 都用）
+async function submitItemAdd(source) {
+  // source: 'sidebar' | 'modal'
+  const ids = source === 'sidebar'
+    ? { name: 'item-name', qty: 'item-qty', unit: 'item-unit', note: 'item-note' }
+    : { name: 'item-add-name', qty: 'item-add-qty', unit: 'item-add-unit', note: 'item-add-note' };
+  const name = document.getElementById(ids.name).value.trim();
+  const qty = parseFloat(document.getElementById(ids.qty).value);
+  const unit = document.getElementById(ids.unit).value.trim();
+  const note = document.getElementById(ids.note).value.trim();
   if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
   if (isNaN(qty) || qty < 0) { showItemAlert('数量必须 ≥ 0', 'error'); return; }
   try {
     await api('POST', '/api/items', { name, qty, unit, note });
     showItemAlert(`✓ ${name} 已添加`, 'success');
-    document.getElementById('item-name').value = '';
-    document.getElementById('item-qty').value = '';
-    document.getElementById('item-unit').value = '';
-    document.getElementById('item-note').value = '';
+    // 清空两个入口的表单
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { name: 'item-name', qty: 'item-qty', unit: 'item-unit', note: 'item-note' }
+        : { name: 'item-add-name', qty: 'item-add-qty', unit: 'item-add-unit', note: 'item-add-note' };
+      document.getElementById(p.name).value = '';
+      document.getElementById(p.qty).value = '';
+      document.getElementById(p.unit).value = '';
+      document.getElementById(p.note).value = '';
+    });
+    if (source === 'modal') closeItemAddModal();
     await refreshAll();
   } catch (e) {
     showItemAlert('添加失败:' + e.message, 'error');
   }
-});
+}
 
-// 申购:提交新申购
-document.getElementById('btn-add-purchase').addEventListener('click', async () => {
-  const date = document.getElementById('purchase-date').value;
-  const name = document.getElementById('purchase-name').value.trim();
-  const qty = parseFloat(document.getElementById('purchase-qty').value);
-  const unit = document.getElementById('purchase-unit').value.trim();
-  const est_price = parseFloat(document.getElementById('purchase-price').value);
-  const supplier = document.getElementById('purchase-supplier').value.trim();
-  const note = document.getElementById('purchase-note').value.trim();
+// 申购:共用提交函数
+async function submitPurchaseAdd(source) {
+  const ids = source === 'sidebar'
+    ? { date: 'purchase-date', name: 'purchase-name', qty: 'purchase-qty', unit: 'purchase-unit', price: 'purchase-price', supplier: 'purchase-supplier', note: 'purchase-note' }
+    : { date: 'purchase-add-date', name: 'purchase-add-name', qty: 'purchase-add-qty', unit: 'purchase-add-unit', price: 'purchase-add-price', supplier: 'purchase-add-supplier', note: 'purchase-add-note' };
+  const date = document.getElementById(ids.date).value;
+  const name = document.getElementById(ids.name).value.trim();
+  const qty = parseFloat(document.getElementById(ids.qty).value);
+  const unit = document.getElementById(ids.unit).value.trim();
+  const est_price = parseFloat(document.getElementById(ids.price).value);
+  const supplier = document.getElementById(ids.supplier).value.trim();
+  const note = document.getElementById(ids.note).value.trim();
   if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
   if (isNaN(qty) || qty <= 0) { showItemAlert('数量必须 > 0', 'error'); return; }
   try {
     await api('POST', '/api/purchases', { date, name, qty, unit, est_price, supplier, note });
-    showItemAlert(`✓ 申购已记录,去右侧「申购记录」确认购买`, 'success');
-    document.getElementById('purchase-name').value = '';
-    document.getElementById('purchase-qty').value = '';
-    document.getElementById('purchase-unit').value = '';
-    document.getElementById('purchase-price').value = '';
-    document.getElementById('purchase-supplier').value = '';
-    document.getElementById('purchase-note').value = '';
+    showItemAlert(`✓ 申购已记录,去「申购记录」确认购买`, 'success');
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { date: 'purchase-date', name: 'purchase-name', qty: 'purchase-qty', unit: 'purchase-unit', price: 'purchase-price', supplier: 'purchase-supplier', note: 'purchase-note' }
+        : { date: 'purchase-add-date', name: 'purchase-add-name', qty: 'purchase-add-qty', unit: 'purchase-add-unit', price: 'purchase-add-price', supplier: 'purchase-add-supplier', note: 'purchase-add-note' };
+      document.getElementById(p.date).value = '';
+      document.getElementById(p.name).value = '';
+      document.getElementById(p.qty).value = '';
+      document.getElementById(p.unit).value = '';
+      document.getElementById(p.price).value = '';
+      document.getElementById(p.supplier).value = '';
+      document.getElementById(p.note).value = '';
+    });
+    if (source === 'modal') closePurchaseAddModal();
     await refreshAll();
   } catch (e) {
     showItemAlert('添加失败:' + e.message, 'error');
   }
+}
+
+// 物品录入弹窗
+function openItemAddModal() {
+  document.getElementById('item-add-modal-backdrop').classList.add('show');
+  // 默认日期 / 默认值不重要，物品录入不需要
+  document.getElementById('item-add-name')?.focus();
+}
+function closeItemAddModal() {
+  document.getElementById('item-add-modal-backdrop').classList.remove('show');
+}
+function openPurchaseAddModal() {
+  // 默认日期 = 今天
+  const dateEl = document.getElementById('purchase-add-date');
+  if (dateEl && !dateEl.value) dateEl.value = todayStr();
+  document.getElementById('purchase-add-modal-backdrop').classList.add('show');
+  document.getElementById('purchase-add-name')?.focus();
+}
+function closePurchaseAddModal() {
+  document.getElementById('purchase-add-modal-backdrop').classList.remove('show');
+}
+
+// 侧栏录入页 + 弹窗 提交按钮
+document.getElementById('btn-add-item')?.addEventListener('click', () => submitItemAdd('sidebar'));
+document.getElementById('item-add-confirm')?.addEventListener('click', () => submitItemAdd('modal'));
+document.getElementById('btn-add-purchase')?.addEventListener('click', () => submitPurchaseAdd('sidebar'));
+document.getElementById('purchase-add-confirm')?.addEventListener('click', () => submitPurchaseAdd('modal'));
+
+// 弹窗打开按钮（在记录页面 header 上）
+document.getElementById('btn-open-item-add')?.addEventListener('click', openItemAddModal);
+document.getElementById('btn-open-purchase-add')?.addEventListener('click', openPurchaseAddModal);
+
+// 弹窗关闭按钮
+document.getElementById('item-add-close')?.addEventListener('click', closeItemAddModal);
+document.getElementById('purchase-add-close')?.addEventListener('click', closePurchaseAddModal);
+document.getElementById('item-add-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('item-add-modal-backdrop')) closeItemAddModal();
+});
+document.getElementById('purchase-add-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('purchase-add-modal-backdrop')) closePurchaseAddModal();
 });
 
-// 值班录入:提交新值班记录
-document.getElementById('duty-form')?.addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const duty_type = document.getElementById('duty-type').value;
-  const record_time = document.getElementById('duty-time').value;
-  const shift = document.getElementById('duty-shift').value;
-  const status = document.querySelector('input[name="duty-status"]:checked')?.value;
-  const fault_area = document.getElementById('duty-fault-area').value.trim();
-  const note = document.getElementById('duty-note').value.trim();
+// 值班录入:共用提交函数(侧栏录入页 + 工作记录页弹窗 都用)
+async function submitDutyAdd(source) {
+  // source: 'sidebar' | 'modal'
+  const ids = source === 'sidebar'
+    ? { type: 'duty-type', time: 'duty-time', shift: 'duty-shift', status: 'duty-status', fault_area: 'duty-fault-area', note: 'duty-note' }
+    : { type: 'duty-add-type', time: 'duty-add-time', shift: 'duty-add-shift', status: 'duty-add-status', fault_area: 'duty-add-fault-area', note: 'duty-add-note' };
+
+  const duty_type = document.getElementById(ids.type).value;
+  const raw_time = document.getElementById(ids.time).value;
+  const shift = document.getElementById(ids.shift).value;
+  const status = document.querySelector(`input[name="${ids.status}"]:checked`)?.value;
+  const fault_area = document.getElementById(ids.fault_area).value.trim();
+  const note = document.getElementById(ids.note).value.trim();
 
   if (!duty_type) { showAlert('请选择类型', 'error'); return; }
   if (!shift) { showAlert('请选择班次', 'error'); return; }
   if (!status) { showAlert('请选择处理状态', 'error'); return; }
 
+  // datetime-local → 后端期望格式 "YYYY-MM-DD HH:MM:SS"
+  let record_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
+
   try {
     await api('POST', '/api/duty', { duty_type, record_time, shift, status, fault_area, note });
     showAlert('✓ 值班记录已添加', 'success');
-    // 重置表单
-    document.getElementById('duty-type').value = '';
-    document.getElementById('duty-shift').value = '';
-    document.querySelectorAll('input[name="duty-status"]').forEach(r => r.checked = false);
-    document.getElementById('duty-fault-area').value = '';
-    document.getElementById('duty-note').value = '';
-    // 更新工作记录列表
+    // 重置两个入口的表单
+    ['sidebar', 'modal'].forEach(s => {
+      const p = s === 'sidebar'
+        ? { type: 'duty-type', time: 'duty-time', shift: 'duty-shift', status: 'duty-status', fault_area: 'duty-fault-area', note: 'duty-note' }
+        : { type: 'duty-add-type', time: 'duty-add-time', shift: 'duty-add-shift', status: 'duty-add-status', fault_area: 'duty-add-fault-area', note: 'duty-add-note' };
+      document.getElementById(p.type).value = '';
+      document.getElementById(p.shift).value = '';
+      document.querySelectorAll(`input[name="${p.status}"]`).forEach(r => r.checked = false);
+      document.getElementById(p.fault_area).value = '';
+      document.getElementById(p.note).value = '';
+      const t = document.getElementById(p.time);
+      if (t) t.value = nowDateTimeLocalStr();
+    });
+    if (source === 'modal') closeDutyAddModal();
+    if (source === 'sidebar') document.getElementById('duty-type')?.focus();
     await refreshDuty();
     populateDutyMonthSelector();
   } catch (e) {
     showAlert('添加失败:' + e.message, 'error');
   }
+}
+
+// 值班录入弹窗
+function openDutyAddModal() {
+  const timeEl = document.getElementById('duty-add-time');
+  if (timeEl) timeEl.value = nowDateTimeLocalStr();
+  document.getElementById('duty-add-modal-backdrop').classList.add('show');
+  document.getElementById('duty-add-type')?.focus();
+}
+function closeDutyAddModal() {
+  document.getElementById('duty-add-modal-backdrop').classList.remove('show');
+}
+
+// 侧栏录入页 + 弹窗 提交按钮
+document.getElementById('duty-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  await submitDutyAdd('sidebar');
+});
+document.getElementById('duty-add-confirm')?.addEventListener('click', () => submitDutyAdd('modal'));
+
+// 弹窗打开按钮(在工作记录页面 header 上)
+document.getElementById('btn-open-duty-add')?.addEventListener('click', openDutyAddModal);
+
+// 弹窗关闭
+document.getElementById('duty-add-close')?.addEventListener('click', closeDutyAddModal);
+document.getElementById('duty-add-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('duty-add-modal-backdrop')) closeDutyAddModal();
 });
 
 // 工作记录:月份筛选
@@ -2808,6 +2926,10 @@ async function loadMonthlyReport() {
   if (token !== _reportLoadToken) return;
   _currentReport = data;
   renderMonthlyReport(data);
+  // 月度报告页可见时,触发当月占比饼图
+  if (document.getElementById('section-report-monthly')?.style.display !== 'none') {
+    renderMonthlyPie(month);
+  }
 }
 
 // ========== 年度汇总 ==========
@@ -3089,19 +3211,19 @@ function recalcTopup() {
     const mult = MULTIPLIER[m.key];
     const daysLeft = daily > 0 ? (actualKwh / daily) : 0;
     return `
-      <div style="background:var(--bg-subtle,#f7f7f8);border:1px solid var(--border);border-radius:8px;padding:8px 10px;" data-daily="${daily.toFixed(4)}">
-        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:13px;min-width:60px;font-weight:600;">${m.meterNo}${m.label}</span>
+      <div class="topup-meter-card" data-daily="${daily.toFixed(4)}">
+        <div class="topup-meter-row">
+          <span class="topup-meter-name">${m.meterNo}${m.label}</span>
           <input type="number" class="field-control topup-meter" value="${Math.round(meterVal)}" step="1" data-mult="${mult}"
-                 style="width:72px;padding:4px 6px;text-align:center;" title="表读数(充值录入值,可输入取整,自动反算其他值)">
-          <span style="font-size:12px;color:var(--text-muted);white-space:nowrap;">×${mult}</span>
+                 title="表读数(充值录入值,可输入取整,自动反算其他值)">
+          <span class="topup-mult">×${mult}</span>
           <input type="number" class="field-control topup-actual" value="${Math.round(actualKwh)}" step="1" data-mult="${mult}"
-                 style="width:88px;padding:4px 6px;text-align:center;" title="实际度数(可输入取整充值,自动反算其他值)">
-          <span class="topup-yuan" style="font-size:12px;color:var(--text-muted);white-space:nowrap;">≈ ¥${Math.round(yuan)}</span>
+                 title="实际度数(可输入取整充值,自动反算其他值)">
+          <span class="topup-yuan">≈ ¥${Math.round(yuan)}</span>
         </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:4px;padding-left:60px;line-height:1.5;">
+        <div class="topup-meter-meta">
           日均 ${Math.round(daily)} 度/天 ${basis}
-          <span class="topup-daysleft" style="color:#059669;font-weight:600;">≈ 可用 ${Math.round(daysLeft)} 天</span>
+          <span class="topup-daysleft">≈ 可用 ${Math.round(daysLeft)} 天</span>
         </div>
       </div>`;
   }).join('');
@@ -3197,6 +3319,11 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (document.getElementById('lend-modal-backdrop')?.classList.contains('show')) closeLendModal();
   else if (document.getElementById('return-modal-backdrop')?.classList.contains('show')) closeReturnModal();
+  else if (document.getElementById('item-add-modal-backdrop')?.classList.contains('show')) closeItemAddModal();
+  else if (document.getElementById('purchase-add-modal-backdrop')?.classList.contains('show')) closePurchaseAddModal();
+  else if (document.getElementById('duty-add-modal-backdrop')?.classList.contains('show')) closeDutyAddModal();
+  else if (document.getElementById('reading-add-modal-backdrop')?.classList.contains('show')) closeReadingAddModal();
+  else if (document.getElementById('charge-add-modal-backdrop')?.classList.contains('show')) closeChargeAddModal();
 });
 document.getElementById('lend-confirm').addEventListener('click', async () => {
   const id = document.getElementById('lend-item-id').value;
@@ -3271,7 +3398,7 @@ btnCopyMonth.addEventListener('click', () => {
 
 // 单天用电复制(群里汇报前天数据用):点击后按钮变「已复制」禁用,3秒后恢复
 const btnCopyDay = document.getElementById('btn-copy-day');
-btnCopyDay.addEventListener('click', () => {
+btnCopyDay?.addEventListener('click', () => {
   const original = btnCopyDay.textContent;
   btnCopyDay.disabled = true;
   btnCopyDay.textContent = '✓ 已复制';
@@ -3280,6 +3407,11 @@ btnCopyDay.addEventListener('click', () => {
     btnCopyDay.disabled = false;
     btnCopyDay.textContent = original;
   }, 3000);
+});
+
+// 单天汇报下拉切换 → 重渲染单日占比饼图
+document.getElementById('day-copy-date')?.addEventListener('change', (e) => {
+  renderDailyPie(e.target.value);
 });
 
 // ========== 月度水电(总表/分表/厨房/水表)==========
@@ -3627,11 +3759,11 @@ document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
   document.getElementById('sidebar-overlay').classList.remove('show');
 });
 
-// 初始化:默认显示抄表录入
+// 初始化:默认显示抄表记录
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme();
   loadMonthlyReport();
-  switchSection('reading');
+  switchSection('reading-record');
 });
 
 // Tab 切换
@@ -3669,8 +3801,26 @@ function nowDateTimeStr() {
   const s = String(d.getSeconds()).padStart(2, '0');
   return `${y}-${m}-${day} ${h}:${mi}:${s}`;
 }
+// datetime-local 格式: YYYY-MM-DDTHH:MM(浏览器会按本地时区解释)
+function nowDateTimeLocalStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  return `${y}-${mo}-${day}T${h}:${mi}`;
+}
 const dutyTimeEl = document.getElementById('duty-time');
-if (dutyTimeEl) dutyTimeEl.value = nowDateTimeStr();
+if (dutyTimeEl) {
+  dutyTimeEl.value = nowDateTimeLocalStr();
+  // 每分钟自动更新默认值(用户没改过时跟随)
+  setInterval(() => {
+    if (document.activeElement !== dutyTimeEl) {
+      dutyTimeEl.value = nowDateTimeLocalStr();
+    }
+  }, 60_000);
+}
 
 // 启动时拉后端数据
 (async () => {

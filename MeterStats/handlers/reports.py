@@ -36,12 +36,25 @@ def handle_get_health(handler):
             else:
                 counts[name] = 0
     send_json(handler, 200, {
-        "status": "ok",
-        "version": "0.1.0",
         "data_dir": str(parent) if data_dir else None,
         "file_count": counts,
         "time": datetime.now().isoformat(),
     })
+
+
+def handle_get_snapshot(handler):
+    """GET /api/snapshot — 一次性返回所有模型数据,前端启动时用一次调用代替 5 次 GET。"""
+    paths = _get_data_paths()
+    payload = {}
+    for name in get_all_model_names():
+        fp = paths.get(name)
+        try:
+            payload[name] = load_json(fp, []) if fp else []
+        except Exception as e:
+            log(f"[WARN] snapshot {name} 加载失败: {e}")
+            payload[name] = []
+    payload["_snapshot_time"] = datetime.now().isoformat()
+    send_json(handler, 200, payload)
 
 
 def handle_get_export(handler):

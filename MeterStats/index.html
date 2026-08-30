@@ -70,50 +70,38 @@
   <aside id="sidebar" class="sidebar">
     <nav class="sidebar-nav">
 
-      <!-- 录入 -->
+      <!-- 数据记录(默认展开) -->
       <div class="sidebar-group">
-        <div class="sidebar-group-title" onclick="toggleGroup(this)">录入 ▾</div>
-        <button class="sidebar-item active" data-section="reading" onclick="switchSection('reading')">📝 抄表录入</button>
-        <button class="sidebar-item" data-section="charge" onclick="switchSection('charge')">💰 充值录入</button>
-        <button class="sidebar-item" data-section="utility" onclick="switchSection('utility')">💧 水电录入</button>
-        <button class="sidebar-item" data-section="duty" onclick="switchSection('duty')">🔧 值班录入</button>
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">
+          <span class="group-icon">📋</span><span class="group-label">数据记录</span><span class="group-arrow">▾</span>
+        </div>
+        <button class="sidebar-item active" data-section="reading-record" onclick="switchSection('reading-record')"><span class="item-icon">📜</span><span class="item-label">抄表记录</span></button>
+        <button class="sidebar-item" data-section="charge-record" onclick="switchSection('charge-record')"><span class="item-icon">💳</span><span class="item-label">充值记录</span></button>
+        <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')"><span class="item-icon">📦</span><span class="item-label">物品记录</span></button>
+        <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')"><span class="item-icon">📋</span><span class="item-label">申购记录</span></button>
+        <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')"><span class="item-icon">📝</span><span class="item-label">工作记录</span></button>
       </div>
 
-      <!-- 查看 -->
+      <!-- 报表分析 -->
       <div class="sidebar-group collapsed">
-        <div class="sidebar-group-title" onclick="toggleGroup(this)">查看 ▾</div>
-        <button class="sidebar-item" data-section="reading-record" onclick="switchSection('reading-record')">📜 抄表记录</button>
-        <button class="sidebar-item" data-section="charge-record" onclick="switchSection('charge-record')">💳 充值记录</button>
-        <button class="sidebar-item" data-section="charge-alert" onclick="switchSection('charge-alert')">🔥 余量预警</button>
-        <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')">📦 物品记录</button>
-        <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')">📋 申购记录</button>
-        <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')">📋 工作记录</button>
-      </div>
-
-      <!-- 物品 -->
-      <div class="sidebar-group collapsed">
-        <div class="sidebar-group-title" onclick="toggleGroup(this)">物品 ▾</div>
-        <button class="sidebar-item" data-section="item-add" onclick="switchSection('item-add')">🛠 物品录入</button>
-        <button class="sidebar-item" data-section="purchase-add" onclick="switchSection('purchase-add')">🛒 申购录入</button>
-      </div>
-
-      <!-- 报表 -->
-      <div class="sidebar-group collapsed">
-        <div class="sidebar-group-title" onclick="toggleGroup(this)">报表 ▾</div>
-        <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')">📊 月度报告</button>
-        <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')">📈 每日趋势</button>
-        <button class="sidebar-item" data-section="report-pie" onclick="switchSection('report-pie')">🥧 用电占比</button>
-        <button class="sidebar-item" data-section="report-utilities" onclick="switchSection('report-utilities')">💧 月度水电</button>
-        <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')">📊 年度汇总</button>
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">
+          <span class="group-icon">📊</span><span class="group-label">报表分析</span><span class="group-arrow">▾</span>
+        </div>
+        <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')"><span class="item-icon">📈</span><span class="item-label">每日趋势</span></button>
+        <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')"><span class="item-icon">📊</span><span class="item-label">月度报告</span></button>
+        <button class="sidebar-item" data-section="report-utilities" onclick="switchSection('report-utilities')"><span class="item-icon">💧</span><span class="item-label">月度水电</span></button>
+        <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')"><span class="item-icon">📅</span><span class="item-label">年度汇总</span></button>
       </div>
 
       <!-- 系统设置 -->
       <div class="sidebar-group collapsed">
-        <div class="sidebar-group-title" onclick="toggleGroup(this)">系统设置 ▾</div>
-        <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')">👥 用户管理</button>
-        <button class="sidebar-item" data-section="settings-meter" onclick="switchSettingsPage('meter')">⚙️ 电表设置</button>
-        <button class="sidebar-item" data-section="settings-data" onclick="switchSettingsPage('data')">📂 数据管理</button>
-        <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')">🔐 权限管理</button>
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">
+          <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
+        </div>
+        <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
+        <button class="sidebar-item" data-section="settings-meter" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
+        <button class="sidebar-item" data-section="settings-data" onclick="switchSettingsPage('data')"><span class="item-icon">📂</span><span class="item-label">数据管理</span></button>
+        <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')"><span class="item-icon">🔐</span><span class="item-label">权限管理</span></button>
       </div>
 
     </nav>
@@ -258,11 +246,20 @@
 
     <!-- ===== 抄表记录 ===== -->
     <section id="section-reading-record" class="content-section" style="display:none;">
+      <!-- 余量预警：移到此处，抄表记录表格上方，始终可见 -->
+      <div class="card" id="reading-record-alerts-card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <h2>🔥 余量预警</h2>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
+        </div>
+        <div id="reading-record-alerts-container"></div>
+      </div>
       <div class="card">
         <div class="card-header">
           <h2>📜 抄表记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
             <select id="history-month" class="field-control"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-reading-add" title="新增抄表(抄表/水电)">➕ 新增抄表</button>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -295,6 +292,8 @@
           <h2>💳 充值记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
             <select id="charge-month" class="field-control"></select>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-charge-add" title="新增充值">➕ 新增充值</button>
           </div>
         </div>
         <div style="overflow-x:auto">
@@ -329,17 +328,6 @@
             <div class="summary-value yuan" id="summary-yuan">¥ 0</div>
           </div>
         </div>
-      </div>
-    </section>
-
-    <!-- ===== 余量预警 ===== -->
-    <section id="section-charge-alert" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>🔥 余量预警</h2>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
-        </div>
-        <div id="charge-alerts"></div>
       </div>
     </section>
 
@@ -423,6 +411,9 @@
       <div class="card">
         <div class="card-header">
           <h2>📦 物品记录</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-item-add" title="新增物品">➕ 新增物品</button>
+          </div>
         </div>
         <div style="overflow-x:auto;">
           <table class="history-table" id="item-table">
@@ -473,6 +464,9 @@
       <div class="card">
         <div class="card-header">
           <h2>📋 申购记录</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-add" title="新增申购">➕ 新增申购</button>
+          </div>
         </div>
         <div style="overflow-x:auto;">
           <table class="history-table" id="purchase-table">
@@ -512,7 +506,7 @@
           </div>
           <div class="form-row">
             <label>时间</label>
-            <input type="text" id="duty-time" class="field-control" readonly placeholder="自动添加当前时间" />
+            <input type="datetime-local" id="duty-time" class="field-control" required />
           </div>
           <div class="form-row">
             <label>班次</label>
@@ -558,6 +552,7 @@
             <select id="duty-record-month" class="field-control">
               <option value="">全部</option>
             </select>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录">➕ 新增记录</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -610,6 +605,12 @@
           </table>
           <div id="report-summary" class="report-summary"></div>
         </div>
+        <!-- 月度用电占比 -->
+        <div id="monthly-pie-wrap" style="margin-top:16px;display:none;">
+          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 8px 0;">🥧 当月用电占比</h3>
+          <div id="monthly-pie-summary" class="daily-pie-summary"></div>
+          <div class="chart-wrap short"><canvas id="chart-monthly-pie"></canvas></div>
+        </div>
         <div id="report-empty" class="report-empty">选择月份查看月度报告</div>
       </div>
     </section>
@@ -633,28 +634,12 @@
           <span><span class="dot" style="background:#d97706"></span>充值</span>
         </div>
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-      </div>
-    </section>
-
-    <!-- ===== 用电占比 ===== -->
-    <section id="section-report-pie" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>🥧 用电占比</h2>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <label style="font-size:12px;color:var(--text-muted);">月份 A</label>
-            <select id="pie-month-a" class="field-control" style="width:auto;padding:5px 10px;"></select>
-            <label style="font-size:12px;color:var(--text-muted);">月份 B</label>
-            <select id="pie-month-b" class="field-control" style="width:auto;padding:5px 10px;"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="pie-compare">📊 对比</button>
-          </div>
+        <!-- 单日占比:从单天汇报下拉联动 -->
+        <div id="daily-pie-wrap" style="margin-top:16px;display:none;">
+          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 8px 0;">📊 当日用电占比</h3>
+          <div id="daily-pie-summary" class="daily-pie-summary"></div>
+          <div class="chart-wrap short"><canvas id="chart-daily-pie"></canvas></div>
         </div>
-        <div class="sub" id="pie-range" style="color:var(--text-muted);font-size:11px;margin:-12px 0 8px;"></div>
-        <div class="pie-compare-wrap" id="pie-compare-wrap">
-          <div class="chart-wrap short"><canvas id="chart-pie"></canvas></div>
-          <div class="chart-wrap short" id="chart-pie-b-wrap" style="display:none;"><canvas id="chart-pie-b"></canvas></div>
-        </div>
-        <div id="pie-compare-result" style="margin-top:16px;"></div>
       </div>
     </section>
 
@@ -871,15 +856,15 @@
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出数量 <span style="color:var(--danger);">*</span></label>
-        <input type="number" id="lend-qty" class="field-control" min="1" placeholder="请输入借出数量" style="width:100%;padding:8px 12px;">
+        <input type="number" id="lend-qty" class="field-control" min="1" placeholder="请输入借出数量" style="width:100%;">
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span></label>
-        <input type="text" id="lend-borrower" class="field-control" placeholder="请输入借出人姓名" style="width:100%;padding:8px 12px;">
+        <input type="text" id="lend-borrower" class="field-control" placeholder="请输入借出人姓名" style="width:100%;">
       </div>
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注</label>
-        <input type="text" id="lend-note" class="field-control" placeholder="选填" style="width:100%;padding:8px 12px;">
+        <input type="text" id="lend-note" class="field-control" placeholder="选填" style="width:100%;">
       </div>
     </div>
     <div class="modal-actions">
@@ -905,16 +890,245 @@
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还数量 <span style="color:var(--danger);">*</span></label>
-        <input type="number" id="return-qty" class="field-control" min="0.01" step="0.01" placeholder="请输入本次归还数量" style="width:100%;padding:8px 12px;">
+        <input type="number" id="return-qty" class="field-control" min="0.01" step="0.01" placeholder="请输入本次归还数量" style="width:100%;">
       </div>
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注</label>
-        <input type="text" id="return-note" class="field-control" placeholder="选填" style="width:100%;padding:8px 12px;">
+        <input type="text" id="return-note" class="field-control" placeholder="选填" style="width:100%;">
       </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="return-close">取消</button>
       <button type="button" class="btn btn-primary" id="return-confirm">确认归还</button>
+    </div>
+  </div>
+</div>
+
+<!-- 物品录入弹窗（在物品记录页面点 ➕ 触发） -->
+<div id="item-add-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:440px;">
+    <h3 class="modal-title">🛠 新增物品</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="item-add-name" placeholder="例如:十字螺丝刀" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">数量 <span style="color:var(--danger);">*</span></label>
+        <input type="number" id="item-add-qty" step="0.01" min="0" placeholder="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">单位</label>
+        <input type="text" id="item-add-unit" placeholder="例如:把 / 个 / 米" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="item-add-note" placeholder="例如:十字 6mm" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="item-add-close">取消</button>
+      <button type="button" class="btn btn-primary" id="item-add-confirm">确认新增</button>
+    </div>
+  </div>
+</div>
+
+<!-- 申购录入弹窗（在申购记录页面点 ➕ 触发） -->
+<div id="purchase-add-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:480px;">
+    <h3 class="modal-title">🛒 新增申购</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">申购日期</label>
+        <input type="date" id="purchase-add-date" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="purchase-add-name" placeholder="例如:电线 2.5mm²" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">数量 <span style="color:var(--danger);">*</span></label>
+        <input type="number" id="purchase-add-qty" step="0.01" min="0" placeholder="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">单位</label>
+        <input type="text" id="purchase-add-unit" placeholder="米 / 个 / 卷" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">预估单价 <span class="hint">选填</span></label>
+        <input type="number" id="purchase-add-price" step="0.01" min="0" placeholder="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">供应商 <span class="hint">选填</span></label>
+        <input type="text" id="purchase-add-supplier" placeholder="例如:南门五金店" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="purchase-add-note" placeholder="选填" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="purchase-add-close">取消</button>
+      <button type="button" class="btn btn-primary" id="purchase-add-confirm">确认申购</button>
+    </div>
+  </div>
+</div>
+
+<!-- 值班录入弹窗（在工作记录页面点 ➕ 触发） -->
+<div id="duty-add-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:440px;">
+    <h3 class="modal-title">📝 新增记录</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">故障区域 <span class="hint">选填</span></label>
+        <input type="text" id="duty-add-fault-area" placeholder="如:1#大厅、2#消防" maxlength="100" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">类型 <span style="color:var(--danger);">*</span></label>
+        <select id="duty-add-type" style="width:100%;">
+          <option value="">请选择类型</option>
+          <option value="维修">维修</option>
+          <option value="更换">更换</option>
+          <option value="拆除">拆除</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">时间 <span style="color:var(--danger);">*</span></label>
+        <input type="datetime-local" id="duty-add-time" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">班次 <span style="color:var(--danger);">*</span></label>
+        <select id="duty-add-shift" style="width:100%;">
+          <option value="">请选择班次</option>
+          <option value="白班">白班</option>
+          <option value="中班">中班</option>
+          <option value="夜班">夜班</option>
+        </select>
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="duty-add-note" placeholder="选填" maxlength="200" style="width:100%;" />
+      </div>
+      <div style="margin:12px 0 0;padding-top:12px;border-top:1px dashed var(--border-subtle);">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理状态 <span style="color:var(--danger);">*</span></label>
+        <div style="display:flex;gap:16px;align-items:center;">
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="duty-add-status" value="已处理" /> 已处理
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+            <input type="radio" name="duty-add-status" value="未处理" /> 未处理
+          </label>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="duty-add-close">取消</button>
+      <button type="button" class="btn btn-primary" id="duty-add-confirm">提交</button>
+    </div>
+  </div>
+</div>
+
+<!-- 抄表录入弹窗（抄表/水电 二合一,带 Tab 切换;在抄表记录页面点 ➕ 新增抄表 触发） -->
+<div id="reading-add-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:480px;">
+    <h3 class="modal-title">📝 新增抄表</h3>
+    <div class="modal-body">
+      <!-- Tab 切换 -->
+      <div class="tab-nav" id="reading-add-tabs" style="margin-bottom:16px;">
+        <button type="button" class="tab-btn active" data-tab="reading">📝 抄表录入</button>
+        <button type="button" class="tab-btn" data-tab="utility">💧 水电录入</button>
+      </div>
+      <!-- 抄表录入面板 -->
+      <div class="tab-panel" data-panel="reading">
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
+          <input type="date" id="reading-add-date" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">读数 ×160</span></label>
+          <input type="number" id="reading-add-hall" step="0.01" placeholder="例如 65.30" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">读数即实际电量</span></label>
+          <input type="number" id="reading-add-fire" step="0.01" placeholder="例如 1305.20" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">读数 ×160</span></label>
+          <input type="number" id="reading-add-private_room" step="0.01" placeholder="例如 79.80" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">读数 ×160</span></label>
+          <input type="number" id="reading-add-ac" step="0.01" placeholder="例如 52.10" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+          <input type="text" id="reading-add-note" placeholder="例如:补录上周" maxlength="100" style="width:100%;" />
+        </div>
+      </div>
+      <!-- 水电录入面板 -->
+      <div class="tab-panel" data-panel="utility" style="display:none;">
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
+          <input type="date" id="utility-add-date" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">总表 <span class="hint">每月抄 · 读数 ×50</span></label>
+          <input type="number" id="utility-add-main_meter" step="0.01" placeholder="例如 51800.00" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">分表 <span class="hint">每月抄 · 读数 ×40</span></label>
+          <input type="number" id="utility-add-sub_meter" step="0.01" placeholder="例如 20800.00" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">水表 <span class="hint">每月抄 · 读数递增</span></label>
+          <input type="number" id="utility-add-water" step="0.01" placeholder="例如 3140.00" style="width:100%;" />
+        </div>
+        <div style="margin-bottom:0;">
+          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+          <input type="text" id="utility-add-note" placeholder="例如:月底抄表" maxlength="100" style="width:100%;" />
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="reading-add-close">取消</button>
+      <button type="button" class="btn btn-primary" id="reading-add-confirm">提交</button>
+    </div>
+  </div>
+</div>
+
+<!-- 充值录入弹窗（在充值记录页面点 ➕ 充值 触发） -->
+<div id="charge-add-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:460px;">
+    <h3 class="modal-title">💰 充值录入</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
+        <input type="date" id="charge-add-date" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-add-hall" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">表读数</span></label>
+        <input type="number" id="charge-add-fire" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-add-private_room" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-add-ac" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="charge-add-note" placeholder="例如:晚上 10 点充的" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="charge-add-close">取消</button>
+      <button type="button" class="btn btn-primary" id="charge-add-confirm">提交</button>
     </div>
   </div>
 </div>

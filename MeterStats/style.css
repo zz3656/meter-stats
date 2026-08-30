@@ -129,42 +129,50 @@
 
   /* 分组标题 */
   .sidebar-group {
-    margin-bottom: 4px;
+    margin-bottom: 6px;
   }
 
   /* 分组标题 — 可点击折叠 */
   .sidebar-group-title {
-    font-size: 12px;
-    font-weight: 510;
-    color: var(--text-secondary);
-    padding: 10px 10px 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 12px 8px 6px 10px;
     user-select: none;
     cursor: pointer;
     transition: all 0.15s;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     border-radius: 6px;
-    text-transform: none;
-    letter-spacing: 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
   }
-
   .sidebar-group-title:hover {
     color: var(--text);
     background: var(--bg-hover);
   }
+  .sidebar-group-title .group-icon {
+    font-size: 12px;
+    opacity: 0.85;
+    flex-shrink: 0;
+  }
+  .sidebar-group-title .group-label {
+    flex: 1;
+    min-width: 0;
+  }
+  .sidebar-group-title .group-arrow {
+    font-size: 9px;
+    opacity: 0.55;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  /* 折叠态旋转箭头 */
+  .sidebar-group.collapsed > .sidebar-group-title .group-arrow {
+    transform: rotate(-90deg);
+  }
 
   /* 折叠的分组 — 隐藏子项 */
-  .sidebar-group.collapsed > .sidebar-group-title::after {
-    content: ' ▸';
-    font-size: 9px;
-    opacity: 0.6;
-  }
-  .sidebar-group:not(.collapsed) > .sidebar-group-title::after {
-    content: ' ▾';
-    font-size: 9px;
-    opacity: 0.6;
-  }
   .sidebar-group.collapsed > *:not(.sidebar-group-title) {
     display: none;
   }
@@ -175,7 +183,7 @@
     align-items: center;
     gap: 8px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 8px 10px 8px 14px;
     border: 1px solid transparent;
     border-radius: 8px;
     background: transparent;
@@ -187,6 +195,21 @@
     transition: all 0.15s ease;
     text-align: left;
     line-height: 1.3;
+    position: relative;
+  }
+  /* 图标 + 标签 分层 */
+  .sidebar-item .item-icon {
+    font-size: 14px;
+    width: 18px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+  .sidebar-item .item-label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .sidebar-item:hover {
@@ -194,15 +217,22 @@
     color: var(--text);
   }
 
+  /* active 状态:加左侧高亮条 + 更明显的背景 */
   .sidebar-item.active {
-    background: rgba(99, 102, 241, 0.10);
+    background: rgba(99, 102, 241, 0.12);
     color: var(--primary);
-    border-color: rgba(99, 102, 241, 0.25);
+    border-color: rgba(99, 102, 241, 0.22);
     font-weight: 510;
   }
-
-  .sidebar-item {
-    position: relative;
+  .sidebar-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: var(--primary);
   }
 
   /* ===== 主内容区 ===== */
@@ -266,13 +296,15 @@
       top: 70px;
       bottom: 0;
       z-index: 100;
-      width: 240px;
-      min-width: 240px;
+      width: 260px;
+      min-width: 260px;
+      max-width: 80vw;  /* 防止在很窄屏全屏 */
       background: var(--bg);
       box-shadow: 4px 0 24px rgba(0,0,0,0.1);
       transform: translateX(-100%);
       transition: transform 0.2s ease;
       padding: 20px 12px;
+      overflow-y: auto;
     }
 
     .sidebar.mobile-open {
@@ -280,7 +312,12 @@
     }
 
     .sidebar-toggle-btn {
-      display: block;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
     }
 
     .content {
@@ -304,6 +341,12 @@
     .sidebar-overlay.show {
       display: block;
     }
+  }
+
+  /* ≤ 600px:header 主题切换按钮缩小,避免挤压 */
+  @media (max-width: 600px) {
+    header h1 { font-size: 16px; }
+    header .theme-toggle-btn { padding: 6px 10px; font-size: 12px; }
   }
 
   .card {
@@ -352,8 +395,15 @@
     font-weight: 400;
     margin-left: 6px;
   }
+  /* 全局表单控件统一样式 — 适用于 .form-row 内的 input、弹窗里的 input、
+     .field-control 包装类,以及任何裸露的 input/select/textarea。
+     这样新增弹窗里用 <input style="..."> 也能继承深色模式。 */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
   .form-row input,
-  .form-row select {
+  .form-row select,
+  .field-control {
     padding: 8px 11px;
     border: 1px solid var(--border);
     border-radius: 6px;
@@ -363,19 +413,28 @@
     font-family: inherit;
     transition: border-color 0.15s, background 0.15s;
     color-scheme: light;
+    box-sizing: border-box;
   }
-  .form-row input::placeholder {
+  input::placeholder,
+  .form-row input::placeholder,
+  textarea::placeholder {
     color: var(--text-faint);
   }
+  input:focus,
+  select:focus,
+  textarea:focus,
   .form-row input:focus,
-  .form-row select:focus {
+  .form-row select:focus,
+  .field-control:focus {
     outline: none;
     border-color: var(--primary);
     box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.15);
     background: var(--bg-surface);
   }
   /* select 下拉项在系统菜单里的颜色(部分浏览器支持) */
-  .form-row select option {
+  select option,
+  .form-row select option,
+  .field-control option {
     background: var(--bg-elevated);
     color: var(--text);
   }
@@ -392,16 +451,56 @@
     transition: all 0.15s;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
     letter-spacing: -0.05px;
+    background: var(--bg-elevated);
+    color: var(--text);
   }
-  .btn-primary { background: var(--primary-bg); color: white; border-color: var(--primary-bg); width: 100%; justify-content: center; }
-  .btn-primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); }
-  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-  .btn-secondary { background: rgba(0,0,0,0.05); color: var(--text); border: 1px solid var(--border); }
-  .btn-secondary:hover { background: rgba(0,0,0,0.08); }
-  .btn-danger { background: transparent; color: var(--danger); border: 1px solid rgba(248,113,113,0.3); }
-  .btn-danger:hover { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.5); }
+  /* 主按钮 — 仅在 button-row 内 / 显式 .btn-block 时占满宽度;
+     header 上的紧凑按钮默认按内容宽度(去掉早期 width:100% 的副作用) */
+  .btn-primary {
+    background: var(--primary-bg);
+    color: #fff;
+    border-color: var(--primary-bg);
+  }
+  .btn-primary:hover {
+    background: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+  .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+  .btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-secondary:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+  }
+  .btn-danger {
+    background: transparent;
+    color: var(--danger);
+    border-color: rgba(220, 38, 38, 0.35);
+  }
+  .btn-danger:hover {
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.55);
+  }
+  /* 危险 + 实心填充,用于「删除」等不可逆操作 */
+  .btn-danger-solid {
+    background: var(--danger);
+    color: #fff;
+    border-color: var(--danger);
+  }
+  .btn-danger-solid:hover { filter: brightness(1.1); }
+  /* 幽灵按钮 — 无边框/无填充,纯文字按钮 */
+  .btn-ghost {
+    background: transparent;
+    border-color: transparent;
+    color: var(--text-secondary);
+  }
+  .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
 
   .button-row {
     display: flex;
@@ -1390,25 +1489,8 @@
   line-height: 1;
   white-space: nowrap;
 }
-.btn-secondary {
-  background: rgba(0, 0, 0, 0.05) !important;
-  color: var(--text) !important;
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
-}
-.btn-secondary:hover {
-  background: rgba(0, 0, 0, 0.08) !important;
-  border-color: rgba(0, 0, 0, 0.18) !important;
-}
-/* 统一下拉/数字选择控件(浅色主题) */
-.field-control {
-  padding: 8px 12px;
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-family: inherit;
-  font-size: 13px;
-}
+/* 旧 .field-control 块已合并到上面统一 input/select/textarea 规则,
+   这里不再重复定义。 */
 /* 电表设置卡片内的紧凑输入框 */
 .meter-input {
   padding: 3px 5px;
@@ -1466,6 +1548,28 @@
 }
 .pie-compare-wrap .chart-wrap.short { margin: 0; }
 
+/* 占比饼图旁的文字摘要(每日趋势/月度报告页通用) */
+.daily-pie-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.daily-pie-summary .daily-pie-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.daily-pie-summary .dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
       table.report { border-collapse: collapse; font-family: "Microsoft YaHei", "PingFang SC", sans-serif; font-size: 12pt; width: 100%; margin: 0 auto; }
       table.report caption { font-size: 18pt; font-weight: bold; padding: 12px; }
       table.report th, table.report td { border: 1px solid #000; padding: 6px 10px; text-align: right; }
@@ -1518,13 +1622,63 @@
     background-clip: content-box;
 }
 
-/* 深色表单 */
+/* 深色表单 — 覆盖所有 input/select/textarea,
+   包含弹窗里裸露 <input style="..."> 的深色适配 */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
 [data-theme="dark"] .form-row input,
-[data-theme="dark"] .form-row select {
+[data-theme="dark"] .form-row select,
+[data-theme="dark"] .field-control {
+    background: var(--bg-elevated);  /* 深灰,与卡片背景一致,不再刺眼 */
+    color: var(--text);
+    border-color: var(--border);
     color-scheme: dark;
 }
-[data-theme="dark"] .form-row select option {
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+[data-theme="dark"] .form-row input::placeholder {
+    color: var(--text-faint);
+}
+[data-theme="dark"] input:focus,
+[data-theme="dark"] select:focus,
+[data-theme="dark"] textarea:focus,
+[data-theme="dark"] .form-row input:focus,
+[data-theme="dark"] .form-row select:focus,
+[data-theme="dark"] .field-control:focus {
+    background: var(--bg-surface);  /* 聚焦时稍微提亮 */
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.18);
+}
+[data-theme="dark"] select option,
+[data-theme="dark"] .form-row select option,
+[data-theme="dark"] .field-control option {
     background: var(--bg-elevated);
+    color: var(--text);
+}
+
+/* 深色按钮 — 去掉浅色背景的硬编码,使用语义化变量 */
+[data-theme="dark"] .btn {
+    background: var(--bg-elevated);
+    color: var(--text);
+    border-color: var(--border);
+}
+[data-theme="dark"] .btn-secondary {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+}
+[data-theme="dark"] .btn-secondary:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--text-muted);
+}
+[data-theme="dark"] .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: transparent;
+}
+[data-theme="dark"] .btn-ghost:hover {
+    background: var(--bg-hover);
     color: var(--text);
 }
 
@@ -1689,4 +1843,216 @@
 .meter-reminder-close:hover {
     background: var(--reminder-btn-hover);
 }
-    
+
+/* ==================== 充电计算弹窗(桌面 4 列,移动 2 列/卡片) ==================== */
+.topup-meter-card {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.topup-meter-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.topup-meter-name {
+  font-size: 13px;
+  min-width: 70px;
+  font-weight: 600;
+}
+.topup-meter-row .topup-meter { width: 72px; padding: 4px 6px; text-align: center; }
+.topup-meter-row .topup-actual { width: 88px; padding: 4px 6px; text-align: center; }
+.topup-mult {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.topup-yuan {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  margin-left: auto;  /* 桌面端:¥ 推到行尾 */
+}
+.topup-meter-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-left: 76px;
+  line-height: 1.5;
+}
+.topup-daysleft { color: var(--success); font-weight: 600; }
+
+/* ==================== 移动端响应式 ====================
+   断点策略:
+   - ≤ 900px:  侧栏改为抽屉(已有),header 紧凑
+   - ≤ 768px:  stat-grid 2 列,history-table 横向滚动,button-row 单列
+   - ≤ 600px:  card-header wrap,弹窗全宽底部 sheet,header 简化
+   - ≤ 480px:  stat-grid 1 列,数字再缩,最小字号 */
+
+/* 默认 touch target ≥ 44px(覆盖 .btn-sm 较小高度) */
+@media (max-width: 768px) {
+  .btn { min-height: 38px; }
+  .btn-sm { min-height: 36px; padding: 6px 14px !important; }
+  /* sidebar-item 增大点击区 */
+  .sidebar-item { min-height: 42px; padding: 10px 10px 10px 14px; }
+}
+
+@media (max-width: 600px) {
+  /* card-header:title + 操作按钮纵向堆叠 */
+  .card-header {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .card-header h2 {
+    font-size: 15px;
+    width: 100%;
+  }
+  .card-header > div:not(.alert) {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+  /* 让 select 在小屏自适应宽度 */
+  .card-header select.field-control { width: 100% !important; max-width: none; }
+  .card-header .btn-sm { flex: 1; min-width: 0; }
+
+  /* form 输入:更大字号,避免移动端自动缩放 */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* chart 自适应高度 */
+  .chart-wrap { height: 220px; }
+  .chart-wrap.short { height: 200px; }
+
+  /* stat-card:大数字略缩 */
+  .stat-card .value { font-size: 22px; }
+  .stat-card.total-wide .value { font-size: 28px; }
+
+  /* status-bar 可滚动 */
+  .status-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 8px 12px;
+  }
+  .status-item { flex-shrink: 0; }
+}
+
+@media (max-width: 768px) {
+  /* history-table:横向滚动 */
+  .history-table { font-size: 12px; }
+  .history-table th, .history-table td { padding: 6px 8px; }
+  /* table 容器已在 HTML 用 overflow-x:auto,无需改 */
+}
+
+@media (max-width: 480px) {
+  /* stat-grid 单列(更小的屏) */
+  .stat-grid,
+  .stat-grid.alert-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* 更紧凑的卡片 padding */
+  .card { padding: 14px; border-radius: 10px; }
+
+  /* header 简化:logo 缩小 */
+  header h1 {
+    font-size: 16px !important;
+  }
+  header p { display: none; }  /* 副标题在小屏隐藏,省空间 */
+
+  /* content padding 再缩 */
+  .content { padding: 12px; }
+
+  /* 历史表格更紧凑 */
+  .history-table { font-size: 11px; }
+  .history-table th, .history-table td { padding: 5px 6px; }
+}
+
+/* ===== 弹窗:移动端底部 sheet 风格 ===== */
+@media (max-width: 600px) {
+  .modal-backdrop {
+    align-items: flex-end;        /* 贴底 */
+    padding: 0;
+  }
+  .modal {
+    max-width: 100% !important;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    overflow-y: auto;
+    animation: slideUpModal 0.2s ease;
+  }
+  @keyframes slideUpModal {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  /* 弹窗内边距在小屏适配 */
+  .modal { padding: 16px; }
+  .modal-body { padding: 4px 0 8px; }
+
+  /* 移动端:弹窗内 input 字号强制 16px 防止 iOS 自动缩放 */
+  .modal input,
+  .modal select,
+  .modal textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ===== 充电计算弹窗:横屏/窄屏表格转卡片 ===== */
+@media (max-width: 600px) {
+  .topup-meter-row {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .topup-meter-row .meter-cell-row {
+    flex: 1 1 calc(50% - 4px);
+    min-width: 0;
+  }
+}
+
+/* ===== header 顶部状态条:小屏可滚动 ===== */
+@media (max-width: 600px) {
+  #status-bar {
+    margin-left: -12px;
+    margin-right: -12px;
+    border-radius: 0;
+  }
+}
+
+/* ==================== 打印样式 ====================
+   适用场景:值班/工作记录/物品记录,用于打印工单存档。
+   浏览器打印(P)或 Ctrl+P 时触发。 */
+@media print {
+  /* 隐藏非打印元素 */
+  .sidebar, .sidebar-overlay, .sidebar-toggle-btn,
+  .button-row, .modal-backdrop, #status-bar, #meter-reminder,
+  .alert, .card-header select, .field-control,
+  .del-btn, .save-btn, .btn, [data-action] {
+    display: none !important;
+  }
+
+  body { background: white !important; color: black !important; }
+  .content-section { display: block !important; padding: 0 !important; margin: 0 !important; }
+  .card { box-shadow: none !important; border: 1px solid #888 !important; padding: 12px !important; page-break-inside: avoid; }
+
+  /* 表格紧凑化 */
+  .history-table { font-size: 11px; }
+  .history-table th, .history-table td { padding: 4px 6px !important; }
+
+  /* 打印页眉:用 .content-section::before 注入打印日期 */
+  body::before {
+    content: "电表统计 — 打印时间 " attr(data-print-time);
+    display: block;
+    font-size: 10px;
+    color: #555;
+    text-align: right;
+    margin-bottom: 8px;
+  }
+
+  /* 让 a 标签去掉下划线 */
+  a { color: black !important; text-decoration: none !important; }
+}

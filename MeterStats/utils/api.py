@@ -6,16 +6,27 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 import re
 import json
 from pathlib import Path
 from typing import Any
 
-# ---- CORS 配置（限制来源，避免全开 *） ----
+# ---- CORS 配置 ----
+# 默认同源（local 开发）。通过 METER_CORS_ORIGIN=* 可放开（docker/远程部署用）。
+_DEFAULT_ORIGIN = f"http://localhost:{os.environ.get('METER_PORT', '8765')}"
+CORS_ORIGIN = os.environ.get("METER_CORS_ORIGIN", _DEFAULT_ORIGIN)
+
 CORS = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": CORS_ORIGIN,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    # 只有放开跨域时才需要 Credentials；同源下浏览器忽略此头。
+    **(
+        {"Access-Control-Allow-Credentials": "true"}
+        if CORS_ORIGIN != _DEFAULT_ORIGIN
+        else {}
+    ),
 }
 
 # ---- 1x1 透明 PNG（favicon 静默响应） ----
