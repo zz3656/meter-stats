@@ -63,13 +63,18 @@ jobs:
           rm -rf "$APP_PATH"
           mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 
-          # 可执行文件
-          BIN=$(find .build -type f -path "*/release/${APP_NAME}" -perm -111 2>/dev/null | head -1)
+          # 可执行文件(多架构构建在 apple/Products/Release/,单架构在 arm64-apple-macosx/release/)
+          BIN=$(find .build -type f -path "*/Products/Release/${APP_NAME}" -perm -111 2>/dev/null | head -1)
+          if [ -z "$BIN" ]; then
+            BIN=$(find .build -type f -path "*/release/${APP_NAME}" -perm -111 2>/dev/null | head -1)
+          fi
           if [ -z "$BIN" ]; then
             echo "❌ 找不到编译产物 ${APP_NAME}，可用产物："
             find .build -name "${APP_NAME}" -type f 2>/dev/null
             exit 1
           fi
+          echo "✅ 编译产物: $BIN"
+          file "$BIN"
           cp "$BIN" "$APP_PATH/Contents/MacOS/${APP_NAME}"
 
           # 资源（Python 后端 + 前端 + VERSION）
