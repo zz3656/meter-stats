@@ -583,6 +583,7 @@ async function renderAll() {
   renderHistory(CURRENT_READINGS);
   renderChargeLog(CURRENT_CHARGES);
   renderItemTable(CURRENT_ITEMS);
+  renderLendHistory(CURRENT_ITEMS);
   renderPurchaseTable(CURRENT_PURCHASES);
   renderDutyTable(CURRENT_DUTY, '');
   populateDutyMonthSelector();
@@ -604,6 +605,7 @@ async function refreshAndRender() {
   renderHistory(CURRENT_READINGS);
   renderChargeLog(CURRENT_CHARGES);
   renderItemTable(CURRENT_ITEMS);
+  renderLendHistory(CURRENT_ITEMS);
   renderPurchaseTable(CURRENT_PURCHASES);
   refreshMonthSelectors();
   refreshDayCopySelect(CURRENT_READINGS, CURRENT_CHARGES);
@@ -653,6 +655,7 @@ async function refreshAll() {
   await fetchItems();
   await fetchPurchases();
   renderItemTable(CURRENT_ITEMS);
+  renderLendHistory(CURRENT_ITEMS);
   renderPurchaseTable(CURRENT_PURCHASES);
 }
 
@@ -1590,24 +1593,58 @@ function renderItemTable(items) {
       const name = btn.dataset.name;
       const lent = parseInt(btn.dataset.lent);
       const unit = btn.dataset.unit;
-      const ok = await showModal({
-        title: '归还物品',
-        body: `确认归还「<strong>${name}</strong>」的全部 ${lent} ${unit}?`,
-        icon: '📥',
-        iconKind: 'info',
-        confirmText: '确认归还',
-        confirmKind: 'primary',
-      });
-      if (!ok) return;
-      try {
-        await api('PUT', `/api/items/${id}/return`, {});
-        showItemAlert('✓ 已归还', 'success');
-        await refreshAll();
-      } catch (e) {
-        showItemAlert('归还失败:' + e.message, 'error');
-      }
+      // 打开归还弹窗（可填数量，默认为全部）
+      openReturnModal(id, name, lent, unit);
     });
   });
+}
+
+// 借出 / 归还 历史记录表（按借出时间倒序，含未归还的在最上面）
+function renderLendHistory(items) {
+  const tbody = document.querySelector('#lend-history-table tbody');
+  const empty = document.getElementById('lend-history-empty');
+  if (!tbody) return;
+
+  // 把所有 lend_records 收集成扁平记录，并附上物品名/单位
+  const rows = [];
+  (items || []).forEach(it => {
+    const records = it.lend_records || [];
+    records.forEach(r => {
+      rows.push({
+        ...r,
+        item_name: it.name,
+        item_unit: it.unit || '',
+      });
+    });
+  });
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  // 借出时间倒序
+  rows.sort((a, b) => (b.lend_date || '').localeCompare(a.lend_date || ''));
+
+  const statusText = { lent: '借用中', returned: '已归还' };
+  const statusColor = { lent: 'var(--warn)', returned: 'var(--success)' };
+
+  tbody.innerHTML = rows.map(r => {
+    const returnQty = (typeof r.return_qty === 'number') ? r.return_qty : 0;
+    const returnDate = r.return_date || (r.status === 'returned' ? '—' : '');
+    return `<tr>
+      <td>${escapeHtml(r.lend_date || '—')}</td>
+      <td>${escapeHtml(r.item_name || '—')}</td>
+      <td>${escapeHtml(r.borrower || '—')}</td>
+      <td>${r.qty ?? 0} ${escapeHtml(r.item_unit || '')}</td>
+      <td>${returnQty} ${escapeHtml(r.item_unit || '')}</td>
+      <td>${escapeHtml(returnDate || '—')}</td>
+      <td><span style="color:${statusColor[r.status] || 'var(--text-muted)'};font-weight:510;">${statusText[r.status] || r.status || '—'}</span></td>
+      <td>${escapeHtml(r.note || r.return_note || '—')}</td>
+    </tr>`;
+  }).join('');
 }
 
 // 打开借出弹窗
@@ -1625,6 +1662,22 @@ function openLendModal(id, name, available, unit) {
 // 关闭借出弹窗
 function closeLendModal() {
   document.getElementById('lend-modal-backdrop').classList.remove('show');
+}
+
+// 打开归还弹窗（不强制要求借出人）
+function openReturnModal(id, name, lent, unit) {
+  document.getElementById('return-item-id').value = id;
+  document.getElementById('return-item-name').textContent = name;
+  document.getElementById('return-lent-qty').textContent = `${lent} ${unit}`;
+  document.getElementById('return-qty').value = lent;  // 默认全还
+  document.getElementById('return-qty').max = lent;
+  document.getElementById('return-note').value = '';
+  document.getElementById('return-modal-backdrop').classList.add('show');
+}
+
+// 关闭归还弹窗
+function closeReturnModal() {
+  document.getElementById('return-modal-backdrop').classList.remove('show');
 }
 
 // 申购记录表格
@@ -3133,8 +3186,14 @@ document.getElementById('lend-close').addEventListener('click', closeLendModal);
 document.getElementById('lend-modal-backdrop').addEventListener('click', e => {
   if (e.target === document.getElementById('lend-modal-backdrop')) closeLendModal();
 });
+document.getElementById('return-close')?.addEventListener('click', closeReturnModal);
+document.getElementById('return-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('return-modal-backdrop')) closeReturnModal();
+});
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && document.getElementById('lend-modal-backdrop').classList.contains('show')) closeLendModal();
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('lend-modal-backdrop')?.classList.contains('show')) closeLendModal();
+  else if (document.getElementById('return-modal-backdrop')?.classList.contains('show')) closeReturnModal();
 });
 document.getElementById('lend-confirm').addEventListener('click', async () => {
   const id = document.getElementById('lend-item-id').value;
@@ -3158,6 +3217,25 @@ document.getElementById('lend-confirm').addEventListener('click', async () => {
     await refreshAll();
   } catch (e) {
     showItemAlert('借出失败:' + e.message, 'error');
+  }
+});
+document.getElementById('return-confirm')?.addEventListener('click', async () => {
+  const id = document.getElementById('return-item-id').value;
+  const qty = parseFloat(document.getElementById('return-qty').value);
+  const note = document.getElementById('return-note').value.trim();
+
+  if (!qty || qty <= 0) {
+    showItemAlert('请输入有效的归还数量', 'error');
+    return;
+  }
+
+  try {
+    await api('PUT', `/api/items/${id}/return`, { qty, note });
+    showItemAlert('✓ 已归还', 'success');
+    closeReturnModal();
+    await refreshAll();
+  } catch (e) {
+    showItemAlert('归还失败:' + e.message, 'error');
   }
 });
 
