@@ -6,10 +6,30 @@ let package = Package(
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "MeterStats"
-            // 资源不通过 SwiftPM 打包:handlers/ 与 utils/ 各有 __init__.py,
-            // .process("Resources") 会因同名资源冲突报错。
-            // 全部资源由 build-app.sh 从 Sources/App/Resources/ 直接拷贝。
+            name: "MeterStats",
+            path: "MeterStats",
+            exclude: [
+                "__pycache__",
+                "AppIcon.appiconset",
+                "handlers/__init__.py",
+                "utils/__init__.py",
+            ],
+            resources: [
+                .process("server.py"),
+                .process("index.html"),
+                .process("app.js"),
+                .process("admin.js"),
+                .process("style.css"),
+                .process("app_handler.py"),
+                .process("report.py"),
+                .process("storage.py"),
+                .process("routing.py"),
+                .process("favicon.svg"),
+                .process("favicon-16.png"),
+                .process("favicon-32.png"),
+                .process("Linclub.entitlements"),
+                .process("run.sh"),
+            ]
         )
     ]
 )

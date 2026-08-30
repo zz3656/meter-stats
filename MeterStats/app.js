@@ -555,6 +555,7 @@ async function renderAll() {
 
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
+  refreshChargeTopupSummary();
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderHistory(CURRENT_READINGS);
@@ -574,6 +575,7 @@ async function refreshAndRender() {
   await fetchPurchases();
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
+  refreshChargeTopupSummary();
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderHistory(CURRENT_READINGS);
@@ -785,7 +787,10 @@ function renderChargeAlert(readings, charges) {
   const container = document.getElementById('charge-alerts');
 
   if (!readings || readings.length === 0) {
-    container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
+    if (container) container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
+    // 抄表录入页内联预警卡片隐藏
+    const readingAlertsCard = document.getElementById('reading-alerts-card');
+    if (readingAlertsCard) readingAlertsCard.style.display = 'none';
     return;
   }
 
@@ -814,7 +819,9 @@ function renderChargeAlert(readings, charges) {
 
   // 固定按表号顺序排列:大厅 → 消防 → 包厢 → 空调
 
-  container.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
+  // 独立预警页主容器
+  if (container) {
+    container.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
     // 颜色 + 图标
     let level, dotColor, statusText;
     if (!hasUsage) {
@@ -869,6 +876,63 @@ function renderChargeAlert(readings, charges) {
       </div>
     `;
   }).join('')}</div>`;
+  }
+
+  // 抄表录入页内联显示余量预警卡片
+  const readingAlertsCard = document.getElementById('reading-alerts-card');
+  const readingAlertsContainer = document.getElementById('reading-alerts-container');
+  if (readingAlertsCard && readingAlertsContainer) {
+    readingAlertsCard.style.display = '';
+    readingAlertsContainer.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
+    let level, dotColor, statusText;
+    if (!hasUsage) {
+      level = 'pending';
+      dotColor = 'var(--text-muted)';
+      statusText = '等待数据';
+    } else if (daysLeft < 3) {
+      level = 'danger';
+      dotColor = '#dc2626';
+      statusText = '紧急';
+    } else if (daysLeft < 7) {
+      level = 'warn';
+      dotColor = '#f59e0b';
+      statusText = '注意';
+    } else {
+      level = 'ok';
+      dotColor = '#10b981';
+      statusText = '充足';
+    }
+    let suggestHtml = '';
+    if (hasUsage && dailyUsage > 0 && daysLeft < 7) {
+      const targetDays = 37;
+      const targetKwh = dailyUsage * targetDays;
+      const needChargeKwh = Math.max(0, targetKwh - remaining);
+      const suggestAmount = needChargeKwh * ELECTRICITY_PRICE;
+      suggestHtml = `<span class="suggest-chip">💡 建议充值 ¥ ${suggestAmount.toFixed(0)}</span>`;
+    }
+    const cls = m.key === 'private_room' ? 'private' : m.key;
+    const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
+    const dueDateStr = hasUsage && dailyUsage > 0 && daysLeft !== Infinity ? addDaysToDate(latest.date, daysLeft) : '';
+    const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
+    return `
+      <div class="stat-card ${cls} alert-stat-${level}">
+        <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
+        <div class="value">${remaining.toFixed(0)}<small>度</small></div>
+        <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
+          <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
+          ${dueDateStr ? `<span style="font-size:11px;opacity:0.85;">预计 ${dueDateStr} 断电</span>` : ''}
+          ${suggestHtml}
+        </div>
+        <div class="sub" style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border-subtle);font-size:11px;opacity:0.7;">
+          ${hasUsage
+            ? `日均 ${dailyUsage.toFixed(1)} 度 · ${basisLabel}`
+            : `至少需要 2 次抄表 + 充值数据`
+          }
+        </div>
+      </div>
+    `;
+  }).join('')}</div>`;
+  }
 }
 
 // 统计卡片 — 用新算法(读数差 + 期间充值)
@@ -2627,18 +2691,103 @@ function openTopupModal() {
   if (!backdrop) return;
   backdrop.classList.add('show');
   recalcTopup();
-  document.getElementById('topup-days').focus();
-  document.getElementById('topup-days').select();
+  const daysEl = document.getElementById('topup-days-modal');
+  if (daysEl) { daysEl.focus(); daysEl.select(); }
 }
 function closeTopupModal() {
   const backdrop = document.getElementById('topup-modal-backdrop');
   if (backdrop) backdrop.classList.remove('show');
 }
+
+// 充值计算摘要卡片 — 充值录入页内联显示
+function refreshChargeTopupSummary() {
+  const container = document.getElementById('charge-topup-container');
+  const card = document.getElementById('charge-topup-summary');
+  if (!container || !card) return;
+
+  const rs = (CURRENT_READINGS || []).filter(r => r.hall != null);
+  if (!rs || rs.length === 0) {
+    container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:12px;">录入抄表数据后显示计算结果</div>';
+    card.style.display = 'none';
+    return;
+  }
+
+  const latest = rs[rs.length - 1];
+  let items = [];
+
+  for (const m of CHARGE_METERS) {
+    const multiplier = MULTIPLIER[m.key];
+    const remaining = latest[m.key] * multiplier;
+    const usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
+    let daysLeft = Infinity;
+    let dailyUsage = null;
+    let basisLabel = '';
+    let hasUsage = false;
+
+    if (usage) {
+      dailyUsage = usage.daily;
+      daysLeft = dailyUsage > 0 ? remaining / dailyUsage : Infinity;
+      basisLabel = usage.basisLabel;
+      hasUsage = true;
+    }
+
+    items.push({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage });
+  }
+
+  // 颜色 + 图标
+  function getStatusInfo(item) {
+    const { hasUsage, daysLeft } = item;
+    if (!hasUsage) return { level: 'pending', dotColor: 'var(--text-muted)', statusText: '等待数据' };
+    if (daysLeft < 3) return { level: 'danger', dotColor: '#dc2626', statusText: '紧急' };
+    if (daysLeft < 7) return { level: 'warn', dotColor: '#f59e0b', statusText: '注意' };
+    return { level: 'ok', dotColor: '#10b981', statusText: '充足' };
+  }
+
+  card.style.display = '';
+  container.innerHTML = `<div class="stat-grid" style="grid-template-columns:repeat(4, 1fr);">
+    ${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
+      const { level, dotColor, statusText } = getStatusInfo({ hasUsage, daysLeft });
+      const cls = m.key === 'private_room' ? 'private' : m.key;
+      const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
+      const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
+      return `
+        <div class="stat-card ${cls} alert-stat-${level}" style="cursor:pointer;" onclick="openTopupForMeter('${m.key}')">
+          <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
+          <div class="value">${remaining.toFixed(0)}<small>度</small></div>
+          <div class="sub">
+            <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
+          </div>
+          <div style="font-size:10px;color:var(--text-muted);margin-top:4px;">点击计算充值</div>
+        </div>
+      `;
+    }).join('')}
+  </div>
+  <div style="font-size:11px;color:var(--text-muted);margin-top:8px;text-align:center;">
+    💡 点击任意卡片可快速计算该表的充值金额
+  </div>`;
+}
+
+// 从摘要卡片打开弹窗并预填某块表的值
+function openTopupForMeter(meterKey) {
+  openTopupModal();
+  // 弹窗打开后预填该表的值
+  setTimeout(() => {
+    const daysEl = document.getElementById('topup-days-modal');
+    const resultEl = document.getElementById('topup-result-modal');
+    if (!daysEl || !resultEl) return;
+    // 找到对应表的输入框
+    const meterInput = resultEl.querySelector(`.topup-meter[data-mult="${MULTIPLIER[meterKey]}"]`);
+    if (meterInput) {
+      meterInput.focus();
+      meterInput.select();
+    }
+  }, 100);
+}
 // 按预充天数 × 本月日均,算出每块表需充值表读数 + 金额(实时)
 function recalcTopup() {
-  const daysEl = document.getElementById('topup-days');
-  const resultEl = document.getElementById('topup-result');
-  const totalEl = document.getElementById('topup-total');
+  const daysEl = document.getElementById('topup-days-modal');
+  const resultEl = document.getElementById('topup-result-modal');
+  const totalEl = document.getElementById('topup-total-modal');
   if (!daysEl || !resultEl || !totalEl) return;
   const days = parseFloat(daysEl.value);
   const rs = (CURRENT_READINGS || []).filter(r => r.hall != null);
@@ -2717,7 +2866,7 @@ function onTopupActualInput(inputEl) {
 }
 // 遍历所有行累加合计(实际度数 + 表读数 + 金额)
 function updateTopupTotal() {
-  const totalEl = document.getElementById('topup-total');
+  const totalEl = document.getElementById('topup-total-modal');
   if (!totalEl) return;
   let totalActual = 0, totalMeter = 0, totalYuan = 0;
   document.querySelectorAll('.topup-actual').forEach(inp => {
@@ -2730,18 +2879,25 @@ function updateTopupTotal() {
   totalEl.value = `合计 ${Math.round(totalActual)} 度(实际) ≈ ¥ ${Math.round(totalYuan)}  (表读数 ${Math.round(totalMeter)})`;
 }
 
-document.getElementById('btn-topup-calc').addEventListener('click', openTopupModal);
-document.getElementById('topup-close').addEventListener('click', closeTopupModal);
-document.getElementById('topup-days').addEventListener('input', recalcTopup);
-// 实际度数输入框(动态生成)→ 事件委托,输入时反向计算
-document.getElementById('topup-result').addEventListener('input', e => {
-  if (!e.target.classList) return;
-  if (e.target.classList.contains('topup-actual')) {
-    onTopupActualInput(e.target);
-  } else if (e.target.classList.contains('topup-meter')) {
-    onTopupMeterInput(e.target);
-  }
+// 充值计算弹窗绑定:点击「余量预警」卡片内的按钮打开弹窗
+document.addEventListener('click', e => {
+  if (e.target.id === 'btn-topup-calc' || e.target.id === 'btn-topup-calc-reading') openTopupModal();
 });
+document.getElementById('topup-close').addEventListener('click', closeTopupModal);
+const topupDaysModal = document.getElementById('topup-days-modal');
+if (topupDaysModal) topupDaysModal.addEventListener('input', recalcTopup);
+// 实际度数输入框(动态生成)→ 事件委托,输入时反向计算
+const topupResultModal = document.getElementById('topup-result-modal');
+if (topupResultModal) {
+  topupResultModal.addEventListener('input', e => {
+    if (!e.target.classList) return;
+    if (e.target.classList.contains('topup-actual')) {
+      onTopupActualInput(e.target);
+    } else if (e.target.classList.contains('topup-meter')) {
+      onTopupMeterInput(e.target);
+    }
+  });
+}
 document.getElementById('topup-modal-backdrop').addEventListener('click', e => {
   if (e.target === document.getElementById('topup-modal-backdrop')) closeTopupModal();
 });
@@ -3007,27 +3163,14 @@ document.getElementById('report-month').addEventListener('change', loadMonthlyRe
 document.getElementById('history-month').addEventListener('change', () => renderHistory(CURRENT_READINGS));
 document.getElementById('charge-month').addEventListener('change', () => renderChargeLog(CURRENT_CHARGES));
 
-// 录入卡/记录卡 内切换(📝抄表|⚡充值 / 📜抄表记录|💰充值记录)— 按卡片作用域,互不干扰
-document.querySelectorAll('.entry-tab').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const card = btn.closest('.card');
-    if (!card) return;
-    card.querySelectorAll('.entry-tab').forEach(b => b.classList.toggle('active', b === btn));
-    const entry = btn.dataset.entry;
-    card.querySelectorAll('[data-panel]').forEach(p => {
-      p.style.display = p.dataset.panel === entry ? 'block' : 'none';
-    });
-  });
-});
-
 // 侧栏切换
 const SIDEBAR_VISIBLE_SECTIONS = new Set([
   'reading', 'charge', 'utility',
-  'reading-record', 'charge-record',
+  'reading-record', 'charge-record', 'charge-alert',
   'item-record', 'purchase-record',
   'item-add', 'purchase-add',
   'report-monthly', 'report-trend', 'report-pie', 'report-utilities', 'report-yearly',
-  'alerts', 'topup-calc', 'overview'
+  'overview'
 ]);
 
 function switchSection(sectionId) {
@@ -3036,6 +3179,15 @@ function switchSection(sectionId) {
   // 显示目标 section
   const target = document.getElementById('section-' + sectionId);
   if (target) target.style.display = '';
+
+  // 自动展开所属分组:找到点击项所在的 group,如果不是 collapsed 则展开
+  const activeBtn = document.querySelector(`.sidebar-item[data-section="${sectionId}"]`);
+  if (activeBtn) {
+    const group = activeBtn.closest('.sidebar-group');
+    if (group && group.classList.contains('collapsed')) {
+      group.classList.remove('collapsed');
+    }
+  }
 
   // 更新侧栏高亮
   document.querySelectorAll('.sidebar-item').forEach(btn => {
@@ -3069,9 +3221,51 @@ function switchSection(sectionId) {
   }
 }
 
+// 侧栏分组折叠
+function toggleGroup(el) {
+  const group = el.parentElement;
+  if (group) group.classList.toggle('collapsed');
+}
+
+// 系统设置页面切换（独立section）
+function switchSettingsPage(page) {
+  // 隐藏所有 section
+  document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
+  // 显示对应的独立 section
+  const target = document.getElementById('section-settings-' + page);
+  if (target) target.style.display = 'flex';
+
+  // 更新侧栏高亮:找到 settings-xxx 的按钮
+  document.querySelectorAll('.sidebar-item').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.section === 'settings-' + page);
+  });
+
+  // 自动展开设置分组
+  const settingsBtn = document.querySelector('.sidebar-item[data-section="settings-' + page + '"]');
+  if (settingsBtn) {
+    const group = settingsBtn.closest('.sidebar-group');
+    if (group && group.classList.contains('collapsed')) {
+      group.classList.remove('collapsed');
+    }
+  }
+
+  // 状态条:设置页面不显示
+  document.getElementById('status-bar').style.display = 'none';
+
+  // 加载对应页面数据
+  if (page === 'users') loadAdminUsers();
+  if (page === 'meter') loadMeterSettings();
+  if (page === 'data') loadBackupStatus();
+  if (page === 'roles') loadRolesInfo();
+}
+
 // 侧栏点击事件
 document.querySelectorAll('.sidebar-item').forEach(btn => {
-  btn.addEventListener('click', () => switchSection(btn.dataset.section));
+  btn.addEventListener('click', () => {
+    // settings 子菜单使用 switchSettingsPage（已有 onclick），这里跳过
+    if (btn.dataset.section.startsWith('settings-')) return;
+    switchSection(btn.dataset.section);
+  });
 });
 
 // 侧栏折叠(桌面端)

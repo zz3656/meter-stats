@@ -17,7 +17,7 @@
 <body>
 
 <!-- ===== 登录页面 ===== -->
-<div id="login-page" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;">
+<div id="login-page" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;align-items:center;justify-content:center;">
   <div style="width:360px;padding:32px;background:var(--bg-elevated);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);">
     <div style="text-align:center;margin-bottom:24px;">
       <div style="font-size:36px;margin-bottom:8px;">⚡</div>
@@ -47,7 +47,6 @@
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button type="button" class="header-backup-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:7px 10px;">🌙</button>
-    <button type="button" class="header-backup-btn" onclick="openAdminPanel()" title="后台管理:用户/电表/权限/数据">🔧 管理</button>
     <button type="button" class="header-backup-btn" id="logout-btn" onclick="doLogout()" style="display:none;" title="退出登录">🚪 退出</button>
   </div>
 </header>
@@ -72,32 +71,33 @@
     <nav class="sidebar-nav">
 
       <!-- 录入 -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">录入</div>
+      <div class="sidebar-group collapsed">
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">录入 ▾</div>
         <button class="sidebar-item active" data-section="reading" onclick="switchSection('reading')">📝 抄表录入</button>
         <button class="sidebar-item" data-section="charge" onclick="switchSection('charge')">💰 充值录入</button>
         <button class="sidebar-item" data-section="utility" onclick="switchSection('utility')">💧 水电录入</button>
       </div>
 
       <!-- 查看 -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">查看</div>
+      <div class="sidebar-group collapsed">
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">查看 ▾</div>
         <button class="sidebar-item" data-section="reading-record" onclick="switchSection('reading-record')">📜 抄表记录</button>
         <button class="sidebar-item" data-section="charge-record" onclick="switchSection('charge-record')">💳 充值记录</button>
+        <button class="sidebar-item" data-section="charge-alert" onclick="switchSection('charge-alert')">🔥 余量预警</button>
         <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')">📦 物品记录</button>
         <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')">📋 申购记录</button>
       </div>
 
-      <!-- 物品录入 -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">物品</div>
+      <!-- 物品 -->
+      <div class="sidebar-group collapsed">
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">物品 ▾</div>
         <button class="sidebar-item" data-section="item-add" onclick="switchSection('item-add')">🛠 物品录入</button>
         <button class="sidebar-item" data-section="purchase-add" onclick="switchSection('purchase-add')">🛒 申购录入</button>
       </div>
 
       <!-- 报表 -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">报表</div>
+      <div class="sidebar-group collapsed">
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">报表 ▾</div>
         <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')">📊 月度报告</button>
         <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')">📈 每日趋势</button>
         <button class="sidebar-item" data-section="report-pie" onclick="switchSection('report-pie')">🥧 用电占比</button>
@@ -105,11 +105,13 @@
         <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')">📊 年度汇总</button>
       </div>
 
-      <!-- 工具 -->
-      <div class="sidebar-group">
-        <div class="sidebar-group-title">工具</div>
-        <button class="sidebar-item" data-section="alerts" onclick="switchSection('alerts')">🔥 余量预警</button>
-        <button class="sidebar-item" data-section="topup-calc" onclick="switchSection('topup-calc')">🧮 充值计算</button>
+      <!-- 系统设置 -->
+      <div class="sidebar-group collapsed">
+        <div class="sidebar-group-title" onclick="toggleGroup(this)">系统设置 ▾</div>
+        <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')">👥 用户管理</button>
+        <button class="sidebar-item" data-section="settings-meter" onclick="switchSettingsPage('meter')">⚙️ 电表设置</button>
+        <button class="sidebar-item" data-section="settings-data" onclick="switchSettingsPage('data')">📂 数据管理</button>
+        <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')">🔐 权限管理</button>
       </div>
 
     </nav>
@@ -129,13 +131,10 @@
     <!-- ===== 抄表录入 ===== -->
     <section id="section-reading" class="content-section">
       <div class="card">
-        <div class="entry-tabs" role="tablist">
-          <button type="button" class="entry-tab active" data-entry="reading">📝 抄表</button>
-          <button type="button" class="entry-tab" data-entry="charge">⚡ 充值</button>
-          <button type="button" class="entry-tab" data-entry="utility">💧 水电</button>
+        <div class="card-header">
+          <h2>📝 抄表录入</h2>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc-reading" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
         </div>
-
-        <div id="entry-panel-reading" data-panel="reading">
         <div id="alert" class="alert"></div>
         <form id="entry-form">
           <div class="form-row">
@@ -172,9 +171,31 @@
             <button type="submit" class="btn btn-primary">提交</button>
           </div>
         </form>
+        <!-- 余量预警卡片(抄表录入页内联显示) -->
+        <div class="card" id="reading-alerts-card" style="display:none;margin-top:8px;">
+          <div class="card-header">
+            <h2>🔥 余量预警</h2>
+          </div>
+          <div id="reading-alerts-container"></div>
+        </div>
       </div>
+    </section>
 
-      <div id="entry-panel-charge" style="display:none;" data-panel="charge">
+    <!-- ===== 充值录入 ===== -->
+    <section id="section-charge" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>💰 充值录入</h2>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()">🧮 充值计算</button>
+        </div>
+        <!-- 充值计算摘要卡片 -->
+        <div class="card" id="charge-topup-summary" style="display:none;margin-top:8px;">
+          <div class="card-header">
+            <h2>⚡ 充值计算</h2>
+            <button type="button" class="btn btn-secondary btn-xs" onclick="refreshChargeTopupSummary()" style="padding:2px 8px;font-size:11px;">🔄 刷新</button>
+          </div>
+          <div id="charge-topup-container"></div>
+        </div>
         <form id="charge-form">
           <div class="form-row">
             <label>充值日期</label>
@@ -205,8 +226,14 @@
           </div>
         </form>
       </div>
+    </section>
 
-      <div id="entry-panel-utility" style="display:none;" data-panel="utility">
+    <!-- ===== 水电录入 ===== -->
+    <section id="section-utility" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>💧 水电录入</h2>
+        </div>
         <div id="utility-alert" class="alert"></div>
         <form id="utility-form">
           <div class="form-row">
@@ -234,7 +261,6 @@
           </div>
         </form>
       </div>
-    </div>
     </section>
 
     <!-- ===== 抄表记录 ===== -->
@@ -310,6 +336,17 @@
             <div class="summary-value yuan" id="summary-yuan">¥ 0</div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== 余量预警 ===== -->
+    <section id="section-charge-alert" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>🔥 余量预警</h2>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
+        </div>
+        <div id="charge-alerts"></div>
       </div>
     </section>
 
@@ -432,40 +469,6 @@
             </thead>
             <tbody></tbody>
           </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== 余量预警 ===== -->
-    <section id="section-alerts" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>🔥 余量预警</h2>
-          <button type="button" class="btn btn-primary btn-sm" id="btn-topup-calc">🧮 充值计算</button>
-        </div>
-        <div id="charge-alerts"></div>
-      </div>
-    </section>
-
-    <!-- ===== 充值计算 ===== -->
-    <section id="section-topup-calc" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>🧮 充值计算</h2>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-          <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">预充天数</label>
-          <input type="number" id="topup-days" class="field-control" value="30" min="1" step="1"
-                 style="width:90px;padding:6px 10px;">
-          <span style="font-size:12px;color:var(--text-muted);">天 × 本月日均 = 需充值度数</span>
-        </div>
-        <div id="topup-result" style="display:flex;flex-direction:column;gap:8px;"></div>
-        <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-          <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">💰 合计充值</label>
-          <input type="text" id="topup-total" class="field-control" readonly style="flex:1;background:var(--bg-subtle);">
-        </div>
-        <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
-          💡 表读数 = 充值录入时填写的值;实际度数 = 表读数 × 倍率;金额 = 实际度数 × 0.9 元
         </div>
       </div>
     </section>
@@ -599,98 +602,13 @@
 
   </div><!-- /.content -->
 
-</div><!-- /.layout -->
-
-<!-- ===== 模态弹窗 ===== -->
-
-<!-- 充值计算弹窗 -->
-<div id="topup-modal-backdrop" class="modal-backdrop">
-  <div class="modal" style="max-width:460px;">
-    <h3 class="modal-title">⚡ 充值计算</h3>
-    <div class="modal-body">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
-        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">预充天数</label>
-        <input type="number" id="topup-days-modal" class="field-control" value="30" min="1" step="1"
-               style="width:90px;padding:6px 10px;">
-        <span style="font-size:12px;color:var(--text-muted);">天 × 本月日均 = 需充值度数</span>
+  <!-- ===== 用户管理（独立页面） ===== -->
+  <section id="section-settings-users" class="content-section" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>👥 用户管理</h2>
       </div>
-      <div id="topup-result-modal" style="display:flex;flex-direction:column;gap:8px;"></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">💰 合计充值</label>
-        <input type="text" id="topup-total-modal" class="field-control" readonly style="flex:1;background:var(--bg-subtle);">
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
-        💡 表读数 = 充值录入时填写的值;实际度数 = 表读数 × 倍率;金额 = 实际度数 × 0.9 元
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-secondary" id="topup-close">关闭</button>
-    </div>
-  </div>
-</div>
-
-<!-- 数据管理弹窗 -->
-<div id="datamgmt-modal-backdrop" class="modal-backdrop">
-  <div class="modal" style="max-width:440px;">
-    <h3 class="modal-title">📂 数据管理</h3>
-    <div class="modal-body">
-      <div style="padding:10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);margin-bottom:12px;">
-        <div style="font-size:13px;font-weight:510;color:var(--text);margin-bottom:8px;">📂 备份目录</div>
-        <div id="datamgmt-backup-dir-display" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;word-break:break-all;">加载中...</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="datamgmtSetBackupDir()" style="padding:3px 10px;font-size:11px;">选择备份目录</button>
-          <button class="btn btn-secondary btn-xs" onclick="datamgmtResetBackupDir()" style="padding:3px 10px;font-size:11px;">恢复默认</button>
-        </div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);flex-wrap:wrap;">
-        <input type="checkbox" id="datamgmt-auto-backup-toggle" checked style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">
-        <div style="flex:1;min-width:200px;">
-          <div style="font-size:13px;font-weight:510;color:var(--text);">自动备份</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:1px;">启动时自动备份</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-          <label style="font-size:12px;color:var(--text-muted);">天</label>
-          <input type="number" id="datamgmt-backup-retention" min="1" class="field-control" style="width:55px;padding:3px 6px;font-size:12px;" placeholder="5">
-          <button class="btn btn-primary btn-xs" onclick="saveBackupRetention()" style="padding:3px 8px;font-size:11px;">保存</button>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <button type="button" class="btn btn-danger btn-sm" id="datamgmt-backup-btn" onclick="datamgmtBackup()" style="flex:1;">💾 手动备份</button>
-        <button type="button" class="btn btn-danger btn-sm" id="datamgmt-restore-btn" onclick="datamgmtRestore()" style="flex:1;">↩️ 恢复数据</button>
-      </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-top:8px;line-height:1.5;">
-        💡 恢复前会自动备份当前数据,可随时回滚。
-      </div>
-      <div style="padding:10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);margin-top:12px;">
-        <div style="font-size:12px;font-weight:510;color:var(--text);margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;">
-          <span>📁 备份列表</span>
-          <button class="btn btn-secondary btn-xs" onclick="loadBackupList()" style="padding:2px 8px;font-size:11px;">🔄 刷新</button>
-        </div>
-        <div id="datamgmt-backup-list" style="font-size:11px;color:var(--text-muted);">加载中...</div>
-      </div>
-    </div>
-    <div class="modal-actions">
-      <button type="button" class="btn btn-secondary" onclick="closeDataMgmtModal()">关闭</button>
-    </div>
-  </div>
-</div>
-
-<!-- ===== 后台管理弹窗 ===== -->
-<div id="admin-modal-backdrop" class="modal-backdrop">
-  <div class="modal" style="max-width:600px;max-height:80vh;overflow-y:auto;">
-    <h3 class="modal-title">🔧 后台管理</h3>
-    <div id="admin-user-info" style="font-size:12px;color:var(--text-muted);margin-bottom:12px;"></div>
-    <!-- Tabs -->
-    <nav class="tab-nav" style="margin-bottom:16px;display:flex;gap:4px;border-bottom:1px solid var(--border);padding-bottom:8px;">
-      <button class="tab-btn active" data-page="users" onclick="switchAdminPage('users')">👥 用户管理</button>
-      <button class="tab-btn" data-page="meter" onclick="switchAdminPage('meter')">⚙️ 电表设置</button>
-      <button class="tab-btn" data-page="data" onclick="switchAdminPage('data')">📂 数据管理</button>
-      <button class="tab-btn" data-page="roles" onclick="switchAdminPage('roles')">🔐 权限管理</button>
-    </nav>
-
-    <div class="modal-body" style="margin:0;padding:0;">
-      <!-- users page -->
-      <div class="admin-page" id="admin-page-users">
+      <div class="settings-card-body">
         <div style="display:flex;gap:8px;margin-bottom:12px;">
           <input type="text" id="new-username" placeholder="用户名" class="field-control" style="width:110px;">
           <input type="text" id="new-password" placeholder="密码" class="field-control" style="width:110px;">
@@ -717,25 +635,39 @@
           </table>
         </div>
       </div>
+    </div>
+  </section>
 
-      <!-- meter page -->
-      <div class="admin-page" id="admin-page-meter" style="display:none;">
+  <!-- ===== 电表设置（独立页面） ===== -->
+  <section id="section-settings-meter" class="content-section" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>⚙️ 电表设置</h2>
+      </div>
+      <div class="settings-card-body">
         <div id="meter-settings-form" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;"></div>
-        <div style="display:flex;gap:16px;align-items:center;font-size:13px;">
+        <div style="display:flex;align-items:center;gap:16px;font-size:13px;">
           <label>电价(元/度): <input type="number" id="config-elec-price" step="0.01" class="field-control" style="width:70px;padding:3px 5px;"></label>
           <label>水价(元/吨): <input type="number" id="config-water-price" step="0.01" class="field-control" style="width:70px;padding:3px 5px;"></label>
           <button class="btn btn-primary btn-sm" onclick="saveMeterSettings()">💾 保存</button>
         </div>
       </div>
+    </div>
+  </section>
 
-      <!-- data page -->
-      <div class="admin-page" id="admin-page-data" style="display:none;">
+  <!-- ===== 数据管理（独立页面） ===== -->
+  <section id="section-settings-data" class="content-section" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📂 数据管理</h2>
+      </div>
+      <div class="settings-card-body">
         <div style="padding:10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);margin-bottom:12px;">
           <div style="font-size:13px;font-weight:510;color:var(--text);margin-bottom:8px;">📂 备份目录</div>
           <div id="backup-dir-display" style="font-size:12px;color:var(--text-secondary);margin-bottom:8px;word-break:break-all;">加载中...</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="btn btn-secondary btn-xs" onclick="setBackupDir()" id="pick-backup-dir-btn" style="padding:3px 10px;font-size:11px;">选择备份目录</button>
-            <button class="btn btn-secondary btn-xs" onclick="resetBackupDir()" id="reset-backup-dir-btn" style="padding:3px 10px;font-size:11px;">恢复默认</button>
+            <button class="btn btn-secondary btn-xs" onclick="setBackupDir()" style="padding:3px 10px;font-size:11px;">选择备份目录</button>
+            <button class="btn btn-secondary btn-xs" onclick="resetBackupDir()" style="padding:3px 10px;font-size:11px;">恢复默认</button>
           </div>
         </div>
         <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--bg-subtle);border-radius:8px;border:1px solid var(--border);flex-wrap:wrap;">
@@ -762,9 +694,16 @@
           <div id="backup-list" style="font-size:11px;color:var(--text-muted);">加载中...</div>
         </div>
       </div>
+    </div>
+  </section>
 
-      <!-- roles page -->
-      <div class="admin-page" id="admin-page-roles" style="display:none;">
+  <!-- ===== 权限管理（独立页面） ===== -->
+  <section id="section-settings-roles" class="content-section" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>🔐 权限管理</h2>
+      </div>
+      <div class="settings-card-body">
         <div style="overflow-x:auto;">
           <table style="width:100%;border-collapse:collapse;font-size:12px;">
             <thead>
@@ -781,8 +720,34 @@
         </div>
       </div>
     </div>
+  </section>
+
+</div><!-- /.layout -->
+
+<!-- ===== 模态弹窗 ===== -->
+
+<!-- 充值计算弹窗 -->
+<div id="topup-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:460px;">
+    <h3 class="modal-title">⚡ 充值计算</h3>
+    <div class="modal-body">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">预充天数</label>
+        <input type="number" id="topup-days-modal" class="field-control" value="30" min="1" step="1"
+               style="width:90px;padding:6px 10px;">
+        <span style="font-size:12px;color:var(--text-muted);">天 × 本月日均 = 需充值度数</span>
+      </div>
+      <div id="topup-result-modal" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
+        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">💰 合计充值</label>
+        <input type="text" id="topup-total-modal" class="field-control" readonly style="flex:1;background:var(--bg-subtle);">
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
+        💡 表读数 = 充值录入时填写的值;实际度数 = 表读数 × 倍率;金额 = 实际度数 × 0.9 元
+      </div>
+    </div>
     <div class="modal-actions">
-      <button type="button" class="btn btn-secondary" onclick="closeAdminPanel()">关闭</button>
+      <button type="button" class="btn btn-secondary" id="topup-close">关闭</button>
     </div>
   </div>
 </div>

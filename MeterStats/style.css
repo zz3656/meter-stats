@@ -132,14 +132,41 @@
     margin-bottom: 4px;
   }
 
+  /* 分组标题 — 可点击折叠 */
   .sidebar-group-title {
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-faint);
-    padding: 12px 10px 6px 10px;
+    font-size: 12px;
+    font-weight: 510;
+    color: var(--text-secondary);
+    padding: 10px 10px 4px 10px;
     user-select: none;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-radius: 6px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .sidebar-group-title:hover {
+    color: var(--text);
+    background: var(--bg-hover);
+  }
+
+  /* 折叠的分组 — 隐藏子项 */
+  .sidebar-group.collapsed > .sidebar-group-title::after {
+    content: ' ▸';
+    font-size: 9px;
+    opacity: 0.6;
+  }
+  .sidebar-group:not(.collapsed) > .sidebar-group-title::after {
+    content: ' ▾';
+    font-size: 9px;
+    opacity: 0.6;
+  }
+  .sidebar-group.collapsed > *:not(.sidebar-group-title) {
+    display: none;
   }
 
   /* 侧栏项 */
@@ -185,6 +212,8 @@
     padding: 24px 32px;
     max-width: calc(100vw - 220px);
     overflow-x: hidden;
+    overflow-y: auto;
+    min-height: 0;
   }
 
   .content-section {
@@ -192,6 +221,40 @@
     flex-direction: column;
     gap: 20px;
     animation: fadeIn 0.15s ease;
+  }
+
+  /* 系统设置子页面撑满右侧高度 */
+  #section-settings-users,
+  #section-settings-meter,
+  #section-settings-data,
+  #section-settings-roles {
+    flex: 1;
+    min-height: 0;
+    gap: 0;
+  }
+  #section-settings-users .card,
+  #section-settings-meter .card,
+  #section-settings-data .card,
+  #section-settings-roles .card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* 设置页面的 card-header 固定在顶部，其余内容可滚动 */
+  #section-settings-users .card-header,
+  #section-settings-meter .card-header,
+  #section-settings-data .card-header,
+  #section-settings-roles .card-header {
+    flex-shrink: 0;
+  }
+  #section-settings-users .settings-card-body,
+  #section-settings-meter .settings-card-body,
+  #section-settings-data .settings-card-body,
+  #section-settings-roles .settings-card-body {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
   }
 
   @keyframes fadeIn {

@@ -8,7 +8,7 @@ const ROLE_NAMES = { admin: '管理员', supervisor: '主管', employee: '员工
 const ADMIN_DELETE_ROLES = new Set(['admin', 'supervisor']);
 const ADMIN_MANAGE_ROLES = new Set(['admin']);
 
-// ===== 初始化: 有token则显示登录成功状态 =====
+// ===== 初始化: 有token则验证, 否则显示登录页 =====
 function initAuth() {
   if (ADMIN_TOKEN) {
     // 验证会话
@@ -20,16 +20,22 @@ function initAuth() {
           clearAuth();
         }
       }).catch(() => clearAuth());
+  } else {
+    // 无 token → 显示登录页
+    const loginPage = document.getElementById('login-page');
+    if (loginPage) loginPage.style.display = 'flex';
   }
 }
 
+// 验证通过后: 隐藏登录页, 显示主应用
 function setLoggedIn(user) {
   ADMIN_USER = user;
   document.getElementById('logout-btn').style.display = '';
-  document.getElementById('admin-user-info').textContent = `(${user.name} · ${ROLE_NAMES[user.role]})`;
   document.getElementById('login-page').style.display = 'none';
+  // admin-user-info was in the removed popup modal
 }
 
+// 无权限时: 显示登录页
 function clearAuth() {
   ADMIN_TOKEN = null;
   ADMIN_USER = null;
@@ -86,33 +92,16 @@ function openAdminPanel() {
     document.getElementById('login-page').style.display = 'flex';
     return;
   }
-  // 已登录 → 打开管理弹窗 (modal)
-  document.getElementById('admin-modal-backdrop').classList.add('show');
-  document.getElementById('admin-user-info').textContent = `(${ADMIN_USER.name} · ${ROLE_NAMES[ADMIN_USER.role]})`;
-  // 默认显示第一个 tab（用户管理）
-  switchAdminPage('users');
-  loadAdminUsers();
-  loadMeterSettings();
-  loadRolesInfo();
-  // 加载顶部数据管理摘要
-  loadBackupDirConfig();
-  loadBackupStatus();
+  // 已登录 → 打开用户管理独立页面
+  switchSettingsPage('users');
 }
 
-function closeAdminPanel() {
-  document.getElementById('admin-modal-backdrop').classList.remove('show');
-}
+// 弹窗已删除，不再需要关闭
+function closeAdminPanel() {}
 
-// 切换后台页面
+// 切换后台页面（独立section）
 function switchAdminPage(page) {
-  document.querySelectorAll('.admin-page').forEach(el => { el.style.display = 'none'; el.classList.remove('active'); });
-  document.querySelectorAll('#admin-modal-backdrop .tab-btn').forEach(el => el.classList.remove('active'));
-  const target = document.getElementById('admin-page-' + page);
-  if (target) { target.style.display = 'block'; target.classList.add('active'); }
-  const btn = document.querySelector(`#admin-modal-backdrop .tab-btn[data-page="${page}"]`);
-  if (btn) btn.classList.add('active');
-  // 切换到数据页时加载备份状态（不再需要加载备份目录配置）
-  if (page === 'data') loadBackupStatus();
+  switchSettingsPage(page);
 }
 
 // ===== 用户管理 =====
