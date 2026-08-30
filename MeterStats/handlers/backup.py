@@ -90,13 +90,31 @@ def _cleanup_old_backups(backup_parent, retention_days):
                 log(f"[WARN] 移除失败 {f.name}: {e}")
 
 
+def _resolve_backup_parent(data_dir):
+    """解析备份父目录(所有备份相关 handler 共用,保持一致):
+    settings.json 的 backup_dir > METER_BACKUP_DIR 环境变量 > data_dir/backup
+    """
+    try:
+        from handlers.settings import get_settings
+        settings = get_settings()
+        custom_backup = settings.get("backup_dir")
+        if custom_backup:
+            return Path(custom_backup)
+    except Exception:
+        pass
+    backup_rel = os.environ.get("METER_BACKUP_DIR", "").strip()
+    if backup_rel:
+        return Path(data_dir) / backup_rel
+    return Path(data_dir) / "backup"
+
+
 def handle_post_backup(handler):
     """POST /api/backup
 
     手动备份: 创建数据快照 → 打包为 ZIP 压缩包 → 保存到备份目录。
 
-    备份目录由 METER_BACKUP_DIR 环境变量控制（相对路径，
-    如 "backup" → /data/backup/）；若未设置则默认 /data/backup/。
+    备份目录由 settings.json 的 backup_dir(用户自定义)或 METER_BACKUP_DIR 环境变量控制，
+    均未设置时默认 data_dir/backup。
 
     备份数量由 settings.json 中的 backup_retention_count 控制，默认保留 5 个。
 
@@ -115,23 +133,7 @@ def handle_post_backup(handler):
         return
 
     source_dir = data_dir.parent
-
-    # 确定备份父目录: settings.json 中的 backup_dir > METER_BACKUP_DIR > 默认
-    try:
-        from handlers.settings import get_settings
-        settings = get_settings()
-        custom_backup = settings.get("backup_dir")
-        if custom_backup:
-            backup_parent = Path(custom_backup)
-        else:
-            raise ValueError  # 无自定义目录，走下面逻辑
-    except Exception:
-        # settings 中没有 backup_dir，使用环境变量或默认路径
-        backup_rel = os.environ.get("METER_BACKUP_DIR", "").strip()
-        if backup_rel:
-            backup_parent = source_dir / backup_rel
-        else:
-            backup_parent = source_dir / "backup"
+    backup_parent = _resolve_backup_parent(source_dir)
 
     backup_parent.mkdir(parents=True, exist_ok=True)
 

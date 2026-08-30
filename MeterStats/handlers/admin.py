@@ -224,11 +224,12 @@ def handle_get_backup_status(handler):
     """
     import zipfile as zf_mod
     from storage import get_data_dir
+    from handlers.backup import _resolve_backup_parent
 
     settings = get_settings()
     auto_backup = settings.get("auto_backup", True)
     data_dir = get_data_dir()
-    backup_dir = data_dir / "backup"
+    backup_dir = _resolve_backup_parent(data_dir)
 
     backup_entries = []
     if backup_dir.exists():
@@ -296,10 +297,11 @@ def handle_get_backup_status(handler):
 def handle_get_backup_download(handler):
     """GET /api/admin/backup-download?zip_name=meter-backup-20250101_120000.zip → 下载 .zip 文件"""
     from storage import get_data_dir
+    from handlers.backup import _resolve_backup_parent
     from urllib.parse import parse_qs, urlparse
 
     data_dir = get_data_dir()
-    backup_dir = data_dir / "backup"
+    backup_dir = _resolve_backup_parent(data_dir)
 
     qs = parse_qs(urlparse(handler.path).query)
     zip_name = qs.get("zip_name", [None])[0]
@@ -334,10 +336,11 @@ def handle_get_backup_download(handler):
 def handle_get_backup_delete(handler):
     """GET /api/admin/backup-delete?zip_name=meter-backup-20250101_120000.zip → 删除备份"""
     from storage import get_data_dir
+    from handlers.backup import _resolve_backup_parent
     from urllib.parse import parse_qs, urlparse
 
     data_dir = get_data_dir()
-    backup_dir = data_dir / "backup"
+    backup_dir = _resolve_backup_parent(data_dir)
 
     qs = parse_qs(urlparse(handler.path).query)
     zip_name = qs.get("zip_name", [None])[0]
