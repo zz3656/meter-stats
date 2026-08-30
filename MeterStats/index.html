@@ -668,7 +668,7 @@
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
           <div style="flex:1;min-width:160px;">
             <div class="panel-title" style="margin-bottom:2px;">自动备份</div>
-            <div class="panel-desc">启动时自动备份</div>
+            <div class="panel-desc">启动时自动备份 · 按保留天数清理(auto-bak- 前缀)</div>
           </div>
           <div style="display:flex;align-items:center;gap:6px;">
             <label class="panel-desc">保留</label>
@@ -678,10 +678,11 @@
           </div>
         </div>
       </div>
-      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;min-width:140px;" id="admin-backup-btn">💾 手动备份</button>
         <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;min-width:140px;">↩️ 恢复数据</button>
       </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">💡 手动备份每次点击都会新建(meter-backup- 前缀)，最多保留 10 个，超出自动删除最旧</div>
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
           <span>📁 备份列表</span>

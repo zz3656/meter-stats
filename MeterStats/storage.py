@@ -123,10 +123,13 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     if target_parent is not None:
         parent = target_parent
     else:
-        # 优先从 settings.json 读取用户自定义备份目录
+        # 优先从 settings.json 读取用户自定义备份目录。
+        # 注意:启动时 init_data_files→backup_data 在 DATA_PATHS 就绪前执行,
+        # 不能依赖 handlers.settings.get_settings()(它从 DATA_PATHS 取目录),
+        # 直接用传入的 data_dir 读 settings.json。
         try:
-            from handlers.settings import get_settings
-            settings = get_settings()
+            import json as _json
+            settings = _json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))
             custom_backup = settings.get("backup_dir")
             if custom_backup:
                 parent = Path(custom_backup)
@@ -196,14 +199,13 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     # 清理旧格式的非 ZIP 备份目录（保持统一为 ZIP 格式）
     _cleanup_legacy_backups(parent)
 
-    # 按保留天数清理过期自动备份（只清理自动备份，不影响手动备份）
+    # 按保留天数清理过期自动备份(只清理 auto-bak- 前缀,不影响手动备份 meter-backup-)
     try:
         retention_days = int(json.loads((data_dir / "settings.json").read_text(encoding="utf-8")).get("backup_retention_count", 5))
     except Exception:
         retention_days = 5
     now = datetime.utcnow()
     cutoff_ts = (now - timedelta(days=retention_days)).timestamp()
-    # 只清理备份目录名为 auto-bak- 开头的 ZIP（自动备份）
     for f in parent.rglob("*.zip"):
         if f.is_file() and not f.name.startswith("auto-bak-"):
             continue
@@ -213,20 +215,6 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
                 log(f"[BACKUP] 清理过期自动备份: {f.name}")
             except OSError as e:
                 log(f"[WARN] 清理过期备份失败 {f.name}: {e}")
-    # 确保当天至少保留一个自动备份
-    auto_baks = sorted(
-        [f for f in parent.rglob("*.zip") if f.is_file() and f.name.startswith("auto-bak-")],
-        key=lambda x: x.stat().st_mtime,
-        reverse=True,
-    )
-    if auto_baks:
-        auto_baks = auto_baks[1:]  # 保留最新的一个，删除更早的
-        for f in auto_baks:
-            try:
-                f.unlink()
-                log(f"[BACKUP] 移除过期自动备份: {f.name}")
-            except OSError as e:
-                log(f"[WARN] 移除失败 {f.name}: {e}")
 
     log(f"  OK data backed up to {zip_path}")
     return zip_path

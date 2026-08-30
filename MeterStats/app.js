@@ -279,7 +279,7 @@ async function datamgmtSetBackupDir() {
     return;
   }
   try {
-    const res = await api('PUT', '/api/admin/backup-config', JSON.stringify({ backup_dir: dir }));
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: dir });
     if (!res.ok) {
       showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
@@ -294,7 +294,7 @@ async function datamgmtSetBackupDir() {
 // 数据管理弹窗: 恢复默认备份目录
 async function datamgmtResetBackupDir() {
   try {
-    const res = await api('PUT', '/api/admin/backup-config', JSON.stringify({ backup_dir: null }));
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
     if (!res.ok) {
       showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
       return;

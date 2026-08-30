@@ -1343,6 +1343,26 @@
 .backup-item .b-name { font-weight: 510; color: var(--text); }
 .backup-item .b-meta { color: var(--text-muted); margin-left: 8px; font-size: 11px; }
 .backup-item .b-actions { display: flex; gap: 4px; flex-shrink: 0; }
+/* 备份类型标签:手动=蓝 / 自动=灰 */
+.b-type {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 510;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+.b-type-manual {
+  color: var(--primary);
+  background: rgba(113, 112, 255, 0.1);
+  border: 1px solid rgba(113, 112, 255, 0.25);
+}
+.b-type-auto {
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+}
 
 .report-empty {
   color: #999;

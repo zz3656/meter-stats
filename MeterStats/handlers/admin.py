@@ -219,8 +219,9 @@ def handle_get_roles(handler):
 def handle_get_backup_status(handler):
     """GET /api/admin/backup-status → {auto_backup, backup_count, backups: [...]}
 
-    列出备份目录下所有的 ZIP 压缩包，每个 ZIP 算一个备份。
-    返回 { name, zip_path, file_count, total_size, created_at }
+    列出备份目录下所有的 ZIP 压缩包(手动 meter-backup- + 自动 auto-bak-)，
+    每个 ZIP 算一个备份，带 type 字段区分(manual/auto)。
+    返回 { name, zip_path, file_count, total_size, created_at, type }
     """
     import zipfile as zf_mod
     from storage import get_data_dir
@@ -233,38 +234,45 @@ def handle_get_backup_status(handler):
 
     backup_entries = []
     if backup_dir.exists():
-        # 只列出手动备份的 .zip 文件（meter-backup- 前缀），不包括自动备份（auto-bak-）
         for f in sorted(backup_dir.rglob("*.zip"), reverse=True):
-            if not f.name.startswith("meter-backup-"):
+            if not f.is_file():
                 continue
-            if f.is_file():
-                # 从文件名提取备份时间戳
-                # 格式: meter-backup-20250101_120000.zip → 20250101_120000
-                name = f.name
+            # 手动备份 meter-backup- 前缀,自动备份 auto-bak- 前缀
+            if f.name.startswith("meter-backup-"):
+                btype = "manual"
                 try:
-                    ts = name.replace("meter-backup-", "").replace(".zip", "")
+                    ts = f.name.replace("meter-backup-", "").replace(".zip", "")
                 except Exception:
-                    ts = name
-
-                # 统计 ZIP 内文件数
-                file_count = 0
-                total_size = 0
+                    ts = f.name
+            elif f.name.startswith("auto-bak-"):
+                btype = "auto"
                 try:
-                    with zf_mod.ZipFile(f, 'r') as zf:
-                        file_count = len(zf.namelist())
-                        total_size = sum(info.file_size for info in zf.infolist())
+                    ts = f.name.replace("auto-bak-", "").replace(".zip", "")
                 except Exception:
-                    total_size = f.stat().st_size
+                    ts = f.name
+            else:
+                continue
 
-                backup_entries.append({
-                    "name": ts,
-                    "zip_path": str(f),
-                    "zip_name": name,
-                    "file_count": file_count,
-                    "total_size": total_size,
-                    "created_at": datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-                    "format": "zip",
-                })
+            # 统计 ZIP 内文件数
+            file_count = 0
+            total_size = 0
+            try:
+                with zf_mod.ZipFile(f, 'r') as zf:
+                    file_count = len(zf.namelist())
+                    total_size = sum(info.file_size for info in zf.infolist())
+            except Exception:
+                total_size = f.stat().st_size
+
+            backup_entries.append({
+                "name": ts,
+                "zip_path": str(f),
+                "zip_name": f.name,
+                "file_count": file_count,
+                "total_size": total_size,
+                "created_at": datetime.datetime.fromtimestamp(f.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "format": "zip",
+                "type": btype,
+            })
 
         # 再列出旧格式的备份目录（非 .zip 目录，排除带 _ 的时间戳目录，因为已被 ZIP 覆盖）
         for d in sorted(backup_dir.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
@@ -283,12 +291,14 @@ def handle_get_backup_status(handler):
                         "total_size": total_size,
                         "created_at": datetime.datetime.fromtimestamp(d.stat().st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
                         "format": "dir",
+                        "type": "manual",
                     })
 
     send_json(handler, 200, {
         "auto_backup": auto_backup,
         "backup_count": len(backup_entries),
         "retention_count": _get_backup_retention_count(),
+        "manual_backup_max": 10,
         "data_dir": str(data_dir),
         "backups": backup_entries,
     })

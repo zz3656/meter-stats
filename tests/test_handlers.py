@@ -203,8 +203,8 @@ class TestBackupApi(TestApiBase):
         with zipfile.ZipFile(zip_path, 'r') as zf:
             self.assertIn("readings.json", zf.namelist())
 
-    def test_manual_backup_same_day_returns_exists(self):
-        """同日再次手动备份:返回 exists,不新增备份文件。"""
+    def test_manual_backup_same_day_multiple_allowed(self):
+        """同日可多次手动备份,每次独立生成新文件(无一日一备限制)。"""
         self.call("POST", "/api/readings", {"date": "2026-08-18", "hall": 100.0})
         first = self.call("POST", "/api/backup")
         self.assertTrue(first.parsed["ok"])
@@ -212,38 +212,26 @@ class TestBackupApi(TestApiBase):
 
         second = self.call("POST", "/api/backup")
         self.assertEqual(second.response_status, 200)
-        self.assertFalse(second.parsed["ok"])
-        self.assertTrue(second.parsed["exists"])
-        self.assertTrue(second.parsed["existing"])
+        self.assertTrue(second.parsed["ok"])
+        self.assertTrue(Path(second.parsed["zip_path"]).is_file())
 
-        # 备份文件数量不变(仍只有 1 个今日手动备份)
-        today = datetime.now().strftime("%Y%m%d")
-        zips = list(backup_dir.glob(f"meter-backup-{today}_*.zip"))
-        self.assertEqual(len(zips), 1)
+        # 两个独立备份文件
+        zips = list(backup_dir.glob("meter-backup-*.zip"))
+        self.assertEqual(len(zips), 2)
 
-    def test_manual_backup_force_overwrites_same_day(self):
-        """force=1 时删除旧今日备份并重新打包当前数据。"""
+    def test_manual_backup_max_10(self):
+        """手动备份最多保留 10 个,超出自动删除最旧。"""
         self.call("POST", "/api/readings", {"date": "2026-08-18", "hall": 100.0})
         first = self.call("POST", "/api/backup")
         backup_dir = Path(first.parsed["zip_path"]).parent
 
-        # 再写入一条数据,force 覆盖(同秒内新旧文件同路径,按内容验证)
-        self.call("POST", "/api/readings", {"date": "2026-08-19", "hall": 50.0})
-        forced = self.call("POST", "/api/backup?force=1")
-        self.assertEqual(forced.response_status, 200)
-        self.assertTrue(forced.parsed["ok"])
-        new_zip = Path(forced.parsed["zip_path"])
-        self.assertTrue(new_zip.is_file())
+        # 连做 12 次手动备份
+        for _ in range(11):
+            h = self.call("POST", "/api/backup")
+            self.assertTrue(h.parsed["ok"])
 
-        # 今日手动备份仍只有 1 个,且内容是最新数据(2 条抄表)
-        today = datetime.now().strftime("%Y%m%d")
-        zips = list(backup_dir.glob(f"meter-backup-{today}_*.zip"))
-        self.assertEqual(len(zips), 1)
-        with zipfile.ZipFile(new_zip, 'r') as zf:
-            names = zf.namelist()
-            self.assertIn("readings.json", names)
-            readings = json.loads(zf.read("readings.json").decode("utf-8"))
-            self.assertEqual(len(readings), 2)
+        zips = sorted(backup_dir.glob("meter-backup-*.zip"))
+        self.assertEqual(len(zips), 10)  # 只保留最新 10 个
 
 
 class TestStorageRecovery(unittest.TestCase):

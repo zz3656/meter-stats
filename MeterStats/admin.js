@@ -283,7 +283,7 @@ async function setBackupDir() {
     return;
   }
   try {
-    const res = await api('PUT', '/api/admin/backup-config', JSON.stringify({ backup_dir: dir }));
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: dir });
     if (!res.ok) {
       showToast('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
@@ -298,7 +298,7 @@ async function setBackupDir() {
 // 恢复默认备份目录
 async function resetBackupDir() {
   try {
-    const res = await api('PUT', '/api/admin/backup-config', JSON.stringify({ backup_dir: null }));
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
     if (!res.ok) {
       showToast('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
@@ -372,6 +372,15 @@ function saveBackupRetention() {
   }).catch(e => showAlert('保存失败: ' + e.message, 'error'));
 }
 
+function backupTypeTag(b) {
+  // 手动备份 meter-backup- 前缀 / 自动备份 auto-bak- 前缀,列表明确标注
+  const isAuto = b.type === 'auto' || (b.zip_name || '').startsWith('auto-bak-');
+  const isManual = b.type === 'manual' || (b.zip_name || '').startsWith('meter-backup-');
+  if (isAuto) return '<span class="b-type b-type-auto">自动</span>';
+  if (isManual) return '<span class="b-type b-type-manual">手动</span>';
+  return '';
+}
+
 function renderBackupList(backups) {
   // 渲染后台管理页面的备份列表
   const adminList = document.getElementById('backup-list');
@@ -387,6 +396,7 @@ function renderBackupList(backups) {
         html += `<div class="backup-item">
           <div>
             <span class="b-name">${b.name}</span>
+            ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
             <span class="b-meta">${b.created_at}</span>
           </div>
@@ -414,6 +424,7 @@ function renderBackupList(backups) {
         html += `<div class="backup-item">
           <div>
             <span class="b-name">${b.name}</span>
+            ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
           <div class="b-actions">
@@ -674,31 +685,6 @@ function browserPickFiles() {
 async function adminBackup() {
   showAlert('正在备份数据…', 'info');
   const res = await api('POST', '/api/backup');
-  if (res && res.exists) {
-    // 今日已存在手动备份 → 询问是否覆盖
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '今日已存在备份文件',
-      body: `今日已经存在备份文件（${(res.existing || []).join('、')}），是否覆盖？<br><span style="font-size:12px;color:var(--text-muted);">覆盖将删除旧的今日备份并重新打包当前数据。</span>`,
-      confirmText: '覆盖',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) {
-      showAlert('已取消，保留现有备份', 'info');
-      return;
-    }
-    showAlert('正在覆盖备份…', 'info');
-    const res2 = await api('POST', '/api/backup?force=1');
-    if (!res2.ok) {
-      showAlert('备份失败: ' + (res2.error || '未知错误'), 'error');
-      return;
-    }
-    showAlert('✅ 数据已打包备份: ' + (res2.backup_name || '成功'), 'success');
-    setTimeout(() => loadBackupList(), 500);
-    return;
-  }
   if (!res.ok) {
     showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
