@@ -31,6 +31,8 @@ jobs:
         run: |
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
           else
             VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
           fi
