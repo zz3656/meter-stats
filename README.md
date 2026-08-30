@@ -48,7 +48,16 @@ docker run -d --name meter-stats \
 
 ### macOS 原生应用
 
+从 GitHub Releases 下载最新 DMG（https://github.com/zz3656/meter-stats/releases），挂载后把 `MeterStats.app` 拖入「应用程序」。
+
+> ⚠️ **关于"已损坏，无法打开"**：未配置 Apple Developer ID 签名/公证时，构建的应用是 ad-hoc 本地签名，首次打开 macOS 会拦截。任选一种方式绕过（只需一次）：
+>
+> 1. **右键点击应用 → 打开**，在弹出的提示中再点「打开」
+> 2. 或执行：`xattr -dr com.apple.quarantine "/Applications/MeterStats.app"`
+> 3. 或首次打开前执行：`codesign --force --deep --sign - "/Applications/MeterStats.app"` 重新本地签名
+
 ```bash
+# 开发者本地构建
 ./build-app.sh release --install
 ```
 
