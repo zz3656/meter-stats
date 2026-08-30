@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'README.md'
+      - 'README.Docker.md'
   workflow_dispatch:
 
 permissions:
@@ -17,13 +17,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Sync README to Docker Hub
+      - name: Sync README.Docker.md to Docker Hub
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           echo "=================================================="
-          echo " 同步 README.md 到 Docker Hub 仓库描述"
+          echo " 同步 README.Docker.md 到 Docker Hub 仓库描述"
           echo "=================================================="
           echo ""
           echo "仓库: ${DOCKERHUB_USERNAME}/meter-stats"
@@ -39,8 +39,8 @@ jobs:
               print("❌ 未设置 DOCKERHUB_TOKEN / DOCKERHUB_USERNAME")
               exit(1)
 
-          # 1. 读取 README.md
-          readme_content = open("README.md", "r", encoding="utf-8").read()
+          # 1. 读取 README.Docker.md(Docker Hub 专用,Docker 用户聚焦)
+          readme_content = open("README.Docker.md", "r", encoding="utf-8").read()
 
           # 2. 提取简要描述（description 字段最多 100 字节）
           #    取第一行标题 + 第二行 blockquote 作为简短描述
