@@ -214,47 +214,20 @@
     overflow-x: hidden;
     overflow-y: auto;
     min-height: 0;
+    /* 让 flex:1 的子元素能撑满高度 */
+    display: flex;
+    flex-direction: column;
   }
 
   .content-section {
-    display: flex;
+    display: none; /* 默认隐藏，JS 控制显示 */
     flex-direction: column;
     gap: 20px;
     animation: fadeIn 0.15s ease;
-  }
-
-  /* 系统设置子页面撑满右侧高度 */
-  #section-settings-users,
-  #section-settings-meter,
-  #section-settings-data,
-  #section-settings-roles {
+    /* 非设置页面: 撑满高度自行滚动 */
     flex: 1;
     min-height: 0;
-    gap: 0;
-  }
-  #section-settings-users .card,
-  #section-settings-meter .card,
-  #section-settings-data .card,
-  #section-settings-roles .card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  /* 设置页面的 card-header 固定在顶部，其余内容可滚动 */
-  #section-settings-users .card-header,
-  #section-settings-meter .card-header,
-  #section-settings-data .card-header,
-  #section-settings-roles .card-header {
-    flex-shrink: 0;
-  }
-  #section-settings-users .settings-card-body,
-  #section-settings-meter .settings-card-body,
-  #section-settings-data .settings-card-body,
-  #section-settings-roles .settings-card-body {
     overflow-y: auto;
-    flex: 1;
-    min-height: 0;
   }
 
   @keyframes fadeIn {
@@ -1257,6 +1230,120 @@
   align-items: center;
   margin-bottom: 12px;
 }
+
+/* ===== 系统设置页 ===== */
+/* 设置页表格:与 .history-table 同一视觉语言(11px 大写表头/分隔线/hover) */
+.settings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.settings-table th,
+.settings-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.settings-table th {
+  background: transparent;
+  font-weight: 510;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+.settings-table tr:hover { background: var(--bg-hover); }
+.settings-table .ta-center { text-align: center; }
+.settings-table .ta-right { text-align: right; }
+
+/* 设置页顶部操作栏(新增用户 / 保存配置) */
+.settings-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.settings-toolbar .field-control { width: auto; }
+.inline-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.inline-field .field-control { width: 70px; }
+
+/* 电表设置 4 表参数网格 */
+.meter-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+@media (max-width: 700px) {
+  .meter-grid { grid-template-columns: 1fr; }
+}
+
+/* 设置页信息面板(备份目录 / 自动备份 / 备份列表) */
+.settings-panel {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.settings-panel .panel-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 510;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.settings-panel .panel-title:only-child { margin-bottom: 0; }
+.settings-panel .panel-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+}
+
+/* 自动备份行:开关 + 说明 + 保留天数 */
+.auto-backup-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.auto-backup-row > input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.auto-backup-row .field-control { width: 60px; }
+
+/* 备份列表项 */
+.backup-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+.backup-item:last-child { border-bottom: none; }
+.backup-item .b-name { font-weight: 510; color: var(--text); }
+.backup-item .b-meta { color: var(--text-muted); margin-left: 8px; font-size: 11px; }
+.backup-item .b-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
 .report-empty {
   color: #999;
   font-size: 13px;
@@ -1272,6 +1359,16 @@
   flex: 0 0 auto;
   align-self: flex-start;
   line-height: 1;
+}
+.btn-xs {
+  padding: 3px 9px !important;
+  font-size: 11px !important;
+  height: 24px;
+  width: auto;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  line-height: 1;
+  white-space: nowrap;
 }
 .btn-secondary {
   background: rgba(0, 0, 0, 0.05) !important;
@@ -1307,6 +1404,32 @@
   border-color: var(--primary);
   box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
 }
+/* 电表设置:单表参数格 */
+.meter-cell {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.meter-cell-title {
+  font-size: 12px;
+  font-weight: 510;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.meter-cell-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.meter-cell-row:last-child { margin-bottom: 0; }
+.meter-cell-row label {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 42px;
+}
+.meter-cell-row .meter-input { flex: 1; min-width: 0; }
 .field-control:focus {
   outline: none;
   border-color: rgba(99, 102, 241, 0.5);

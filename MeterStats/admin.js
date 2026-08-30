@@ -112,14 +112,14 @@ function loadAdminUsers() {
       if (!tbody) return;
       const users = res || [];
       tbody.innerHTML = users.map(u => `
-        <tr style="border-bottom:1px solid var(--border);">
-          <td style="padding:6px 8px;">${u.username}</td>
-          <td style="padding:6px 8px;">${u.name}</td>
-          <td style="padding:6px 8px;">${ROLE_NAMES[u.role] || u.role}</td>
-          <td style="padding:6px 8px;">${u.enabled ? '✅ 启用' : '❌ 禁用'}</td>
-          <td style="padding:6px 8px;text-align:right;">
-            <button class="btn btn-primary btn-sm" onclick="editAdminUser(${u.id},'${u.username}')" style="margin-right:4px;">编辑</button>
-            ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-sm" onclick="deleteAdminUser(${u.id})" style="margin-right:4px;">删除</button>` : ''}
+        <tr>
+          <td>${u.username}</td>
+          <td>${u.name}</td>
+          <td>${ROLE_NAMES[u.role] || u.role}</td>
+          <td>${u.enabled ? '✅ 启用' : '❌ 禁用'}</td>
+          <td class="ta-right">
+            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
+            ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
           </td>
         </tr>
       `).join('');
@@ -206,15 +206,15 @@ function loadMeterSettings() {
       form.innerHTML = meterKeys.map(k => {
         const m = meter[k] || {};
         return `
-          <div style="background:var(--bg-subtle);padding:8px;border-radius:6px;border:1px solid var(--border);">
-            <div style="font-size:12px;font-weight:510;margin-bottom:6px;">${icons[k]} ${m.label || k}</div>
-            <div style="display:flex;gap:6px;align-items:center;margin-bottom:3px;">
-              <label style="font-size:11px;color:var(--text-muted);min-width:50px;">倍率</label>
-              <input type="number" class="meter-input" data-key="${k}" data-field="multiplier" value="${m.multiplier || 1}" style="flex:1;padding:3px 5px;">
+          <div class="meter-cell">
+            <div class="meter-cell-title">${icons[k]} ${m.label || k}</div>
+            <div class="meter-cell-row">
+              <label>倍率</label>
+              <input type="number" class="meter-input" data-key="${k}" data-field="multiplier" value="${m.multiplier || 1}">
             </div>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <label style="font-size:11px;color:var(--text-muted);min-width:50px;">表名</label>
-              <input type="text" class="meter-input" data-key="${k}" data-field="label" value="${m.label || ''}" style="flex:1;padding:3px 5px;">
+            <div class="meter-cell-row">
+              <label>表名</label>
+              <input type="text" class="meter-input" data-key="${k}" data-field="label" value="${m.label || ''}">
             </div>
           </div>
         `;
@@ -384,16 +384,16 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
-        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+        html += `<div class="backup-item">
           <div>
-            <span style="color:var(--text);font-weight:510;">${b.name}</span>
-            <span style="color:var(--text-muted);margin-left:8px;">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
-            <span style="color:var(--text-muted);margin-left:8px;font-size:10px;">${b.created_at}</span>
+            <span class="b-name">${b.name}</span>
+            <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
+            <span class="b-meta">${b.created_at}</span>
           </div>
-          <div style="display:flex;gap:4px;">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">🗑️ 删除</button>` : ''}
+          <div class="b-actions">
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -411,15 +411,15 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
-        html += `<div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);">
+        html += `<div class="backup-item">
           <div>
-            <span style="color:var(--text);font-weight:510;">${b.name}</span>
-            <span style="color:var(--text-muted);margin-left:8px;">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
+            <span class="b-name">${b.name}</span>
+            <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
-          <div style="display:flex;gap:4px;">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">⬇️ 下载</button>` : '<span style="font-size:10px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')" style="padding:2px 8px;font-size:11px;white-space:nowrap;">🗑️ 删除</button>` : ''}
+          <div class="b-actions">
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -674,6 +674,31 @@ function browserPickFiles() {
 async function adminBackup() {
   showAlert('正在备份数据…', 'info');
   const res = await api('POST', '/api/backup');
+  if (res && res.exists) {
+    // 今日已存在手动备份 → 询问是否覆盖
+    const ok = await showModal({
+      icon: '⚠️',
+      iconKind: 'warn',
+      title: '今日已存在备份文件',
+      body: `今日已经存在备份文件（${(res.existing || []).join('、')}），是否覆盖？<br><span style="font-size:12px;color:var(--text-muted);">覆盖将删除旧的今日备份并重新打包当前数据。</span>`,
+      confirmText: '覆盖',
+      cancelText: '取消',
+      confirmKind: 'danger',
+    });
+    if (!ok) {
+      showAlert('已取消，保留现有备份', 'info');
+      return;
+    }
+    showAlert('正在覆盖备份…', 'info');
+    const res2 = await api('POST', '/api/backup?force=1');
+    if (!res2.ok) {
+      showAlert('备份失败: ' + (res2.error || '未知错误'), 'error');
+      return;
+    }
+    showAlert('✅ 数据已打包备份: ' + (res2.backup_name || '成功'), 'success');
+    setTimeout(() => loadBackupList(), 500);
+    return;
+  }
   if (!res.ok) {
     showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
@@ -756,12 +781,12 @@ function loadRolesInfo() {
     { role: 'employee', name: '员工', read: true, edit: true, delete: false, manage: false },
   ];
   tbody.innerHTML = permConfig.map(p => `
-    <tr style="border-bottom:1px solid var(--border);">
-      <td style="padding:6px 8px;font-weight:510;">${p.name}</td>
-      <td style="padding:6px 8px;text-align:center;">${p.read ? '✅' : '❌'}</td>
-      <td style="padding:6px 8px;text-align:center;">${p.edit ? '✅' : '❌'}</td>
-      <td style="padding:6px 8px;text-align:center;">${p.delete ? '✅' : '❌'}</td>
-      <td style="padding:6px 8px;text-align:center;">${p.manage ? '✅' : '❌'}</td>
+    <tr>
+      <td style="font-weight:510;">${p.name}</td>
+      <td class="ta-center">${p.read ? '✅' : '—'}</td>
+      <td class="ta-center">${p.edit ? '✅' : '—'}</td>
+      <td class="ta-center">${p.delete ? '✅' : '—'}</td>
+      <td class="ta-center">${p.manage ? '✅' : '—'}</td>
     </tr>
   `).join('');
 }

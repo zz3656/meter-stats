@@ -43,16 +43,25 @@ def _save(data: dict):
 
 
 def init_settings(data_dir: Path):
-    """初始化 settings.json（如果不存在）。"""
+    """初始化 settings.json（如果不存在）。
+
+    初始管理员用户名/密码可通过环境变量覆盖:
+      - METER_INITIAL_ADMIN（默认 admin）
+      - METER_INITIAL_PASS（默认 admin123）
+    仅首次创建时生效;settings.json 已存在时忽略。
+    """
+    import os
     path = _get_settings_file(data_dir)
     if path.exists():
         return
+    username = os.environ.get("METER_INITIAL_ADMIN", "").strip() or _DEFAULT_USER
+    password = os.environ.get("METER_INITIAL_PASS", "").strip() or _DEFAULT_PASS
     default = {
         "users": [
             {
                 "id": 1,
-                "username": _DEFAULT_USER,
-                "password": _hash_pass(_DEFAULT_PASS),
+                "username": username,
+                "password": _hash_pass(password),
                 "role": ROLE_ADMIN,
                 "name": "管理员",
                 "enabled": True,

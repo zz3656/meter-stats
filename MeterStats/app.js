@@ -788,9 +788,13 @@ function renderChargeAlert(readings, charges) {
 
   if (!readings || readings.length === 0) {
     if (container) container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
-    // 抄表录入页内联预警卡片隐藏
+    // 抄表录入页内联预警卡片:始终显示(空数据提示)
     const readingAlertsCard = document.getElementById('reading-alerts-card');
-    if (readingAlertsCard) readingAlertsCard.style.display = 'none';
+    const readingAlertsContainer = document.getElementById('reading-alerts-container');
+    if (readingAlertsCard) readingAlertsCard.style.display = '';
+    if (readingAlertsContainer) {
+      readingAlertsContainer.innerHTML = '<div class="empty" style="padding:12px 0;">录入抄表数据后开始监控 4 块表的余额。</div>';
+    }
     return;
   }
 
@@ -2708,7 +2712,7 @@ function refreshChargeTopupSummary() {
   const rs = (CURRENT_READINGS || []).filter(r => r.hall != null);
   if (!rs || rs.length === 0) {
     container.innerHTML = '<div style="font-size:12px;color:var(--text-muted);padding:12px;">录入抄表数据后显示计算结果</div>';
-    card.style.display = 'none';
+    card.style.display = '';  // 始终显示(空数据提示)
     return;
   }
 
@@ -3176,9 +3180,9 @@ const SIDEBAR_VISIBLE_SECTIONS = new Set([
 function switchSection(sectionId) {
   // 隐藏所有 section
   document.querySelectorAll('.content-section').forEach(s => s.style.display = 'none');
-  // 显示目标 section
+  // 显示目标 section（.content-section 默认 display:none，需显式 flex）
   const target = document.getElementById('section-' + sectionId);
-  if (target) target.style.display = '';
+  if (target) target.style.display = 'flex';
 
   // 自动展开所属分组:找到点击项所在的 group,如果不是 collapsed 则展开
   const activeBtn = document.querySelector(`.sidebar-item[data-section="${sectionId}"]`);

@@ -100,9 +100,14 @@ def handle_post_backup(handler):
 
     备份数量由 settings.json 中的 backup_retention_count 控制，默认保留 5 个。
 
+    今日已存在手动备份(同一天 meter-backup- 前缀 ZIP)时:
+    - 默认返回 { ok: false, exists: true, existing: [...] }，提示前端询问是否覆盖
+    - 携带 force=1(查询参数或 body 字段) 则删除旧今日备份后重新打包
+
     返回 { ok: true, zip_path: "/data/backup/20250101_120000/meter-backup-20250101_120000.zip", backup_name: "20250101_120000" }
     """
     import datetime
+    from urllib.parse import parse_qs, urlparse
 
     data_dir = _get_data_paths().get("readings")
     if not data_dir:
@@ -130,8 +135,42 @@ def handle_post_backup(handler):
 
     backup_parent.mkdir(parents=True, exist_ok=True)
 
-    # 生成带时间戳的备份目录名和文件名
+    # ---- 今日已存在手动备份 → 非 force 请求先询问是否覆盖 ----
     now = datetime.datetime.now()
+    today_prefix = now.strftime("%Y%m%d")
+    force = False
+    try:
+        qs = parse_qs(urlparse(handler.path).query)
+        force = qs.get("force", ["0"])[0].lower() in ("1", "true", "yes")
+    except Exception:
+        pass
+    if not force:
+        body = read_body(handler) or {}
+        force = body.get("force") is True or str(body.get("force", "")).lower() in ("1", "true", "yes")
+
+    existing_today = sorted(
+        (f for f in backup_parent.glob(f"meter-backup-{today_prefix}_*.zip") if f.is_file()),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    if existing_today and not force:
+        send_json(handler, 200, {
+            "ok": False,
+            "exists": True,
+            "existing": [f.name for f in existing_today],
+            "error": "今日已存在备份文件",
+            "message": "今日已存在备份文件，是否覆盖？",
+        })
+        return
+    if existing_today:
+        for f in existing_today:
+            try:
+                f.unlink()
+                log(f"[BACKUP] 覆盖今日备份: 删除旧文件 {f.name}")
+            except OSError as e:
+                log(f"[WARN] 删除旧今日备份失败 {f.name}: {e}")
+
+    # 生成带时间戳的备份目录名和文件名
     stamp = now.strftime("%Y%m%d_%H%M%S")
     backup_dir = backup_parent / stamp
     zip_filename = f"meter-backup-{stamp}.zip"
@@ -165,7 +204,7 @@ def handle_post_backup(handler):
 
         send_json(handler, 200, {
             "ok": True,
-            "zip_path": str(zip_path),
+            "zip_path": str(final_zip),
             "backup_name": stamp,
             "backup_dir": str(backup_parent),
             "retention_count": retention,

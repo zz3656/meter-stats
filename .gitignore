@@ -57,9 +57,6 @@ data/
 MeterStats/.data/
 MeterStats/.server.log
 
-# Version files (local)
-MeterStats/VERSION
-
 # Local build/deploy scripts & docs (dev tools only)
 build-dmg.sh
 build-app.sh

@@ -20,7 +20,7 @@ DATA_DIR="$SCRIPT_DIR/.data"
 PORT=8765
 CONTAINER_NAME="meter-stats"
 IMAGE="zz3656/meter-stats:latest"
-PASS="${METER_INITIAL_PASS:-admin}"
+PASS="${METER_INITIAL_PASS:-admin123}"
 
 # ---------- 工具函数 ----------
 

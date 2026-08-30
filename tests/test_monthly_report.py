@@ -11,7 +11,7 @@ import sys
 import unittest
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "Sources" / "MeterStats" / "Resources"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
 from report import calculate_monthly_report, calculate_yearly_report  # noqa: E402
 
