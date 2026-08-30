@@ -20,7 +20,7 @@ jobs:
       - name: Sync README to Docker Hub
         env:
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          DOCKERHUB_USERNAME: zz3656
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
         run: |
           echo "=================================================="
           echo " 同步 README.md 到 Docker Hub 仓库描述"
@@ -30,13 +30,13 @@ jobs:
           echo ""
 
           python3 << 'PYEOF'
-          import json, os, base64, urllib.request, urllib.error
+          import json, os, urllib.request, urllib.error
 
           dockerhub_token = os.environ.get("DOCKERHUB_TOKEN", "")
           dockerhub_username = os.environ.get("DOCKERHUB_USERNAME", "")
 
-          if not dockerhub_token:
-              print("❌ 未设置 DOCKERHUB_TOKEN")
+          if not dockerhub_token or not dockerhub_username:
+              print("❌ 未设置 DOCKERHUB_TOKEN / DOCKERHUB_USERNAME")
               exit(1)
 
           # 1. 读取 README.md
@@ -52,9 +52,6 @@ jobs:
                   short_desc = line[2:].strip()
               elif line.startswith("> ") and not short_desc:
                   short_desc = line[2:].strip()
-              elif short_desc and short_desc.startswith("# "):
-                  # 如果第一行是标题，取第二行 blockquote
-                  pass
 
           if not short_desc:
               short_desc = "场所工程部电表统计工具 · Web服务"
@@ -64,12 +61,22 @@ jobs:
 
           # 3. 清理 README 作为完整描述
           #    Docker Hub full_description 支持 Markdown
-          #    去掉顶部的重复标题块，避免过长
           clean_desc = readme_content
 
-          # 4. Docker Hub API 认证
-          auth_str = f"{dockerhub_username}:{dockerhub_token}".encode("utf-8")
-          auth_header = base64.b64encode(auth_str).decode("utf-8")
+          # 4. 官方 JWT 登录(个人访问令牌作为密码;Basic 认证对写接口会 401)
+          login_payload = json.dumps({"username": dockerhub_username, "password": dockerhub_token}).encode("utf-8")
+          login_req = urllib.request.Request(
+              "https://hub.docker.com/v2/users/login/",
+              data=login_payload,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+          try:
+              with urllib.request.urlopen(login_req, timeout=30) as resp:
+                  jwt = json.loads(resp.read().decode("utf-8"))["token"]
+          except urllib.error.HTTPError as e:
+              print(f"❌ Docker Hub 登录失败 (HTTP {e.code}): {e.read().decode()[:300]}")
+              exit(1)
 
           data = {
               "description": short_desc,
@@ -82,7 +89,7 @@ jobs:
           req = urllib.request.Request(
               url,
               data=payload,
-              headers={"Authorization": f"Basic {auth_header}", "Content-Type": "application/json"},
+              headers={"Authorization": f"JWT {jwt}", "Content-Type": "application/json"},
               method="PATCH",
           )
 
