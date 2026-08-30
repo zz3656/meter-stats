@@ -58,6 +58,9 @@ jobs:
               print("❌ 缺少 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN 环境变量")
               exit(1)
 
+          # description 字段上限 100 字节(中文 3 字节/字,必须截断)
+          short_desc = short_desc.encode("utf-8")[:100].decode("utf-8", errors="ignore")
+
           # 1. 官方 JWT 登录(个人访问令牌作为密码)
           login_payload = json.dumps({"username": dockerhub_username, "password": dockerhub_token}).encode("utf-8")
           login_req = urllib.request.Request(
