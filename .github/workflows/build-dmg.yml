@@ -167,8 +167,7 @@ jobs:
           echo "$CERTIFICATE_BASE64" | base64 -d > certificate.p12
           security import certificate.p12 -k build.keychain \
             -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign \
-            -T /usr/bin/altool
+            -T /usr/bin/codesign
           rm certificate.p12
 
           # 验证
@@ -237,51 +236,15 @@ jobs:
           TEAM_ID: ${{ secrets.APPLE_NOTARIZATION_TEAM_ID }}
         run: |
           DMG="products/${APP_NAME}-${{ env.version }}-macos.dmg"
-          
+
           echo "📤 提交公证..."
-          notarization_id=$(xcrun altool --notarize \
-            --file "$DMG" \
+          xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" \
             --password "$APP_PASSWORD" \
             --team-id "$TEAM_ID" \
-            2>&1 | grep -oP 'RequestUUID = \K[0-9a-f-]+')
-          
-          if [ -z "$notarization_id" ]; then
-            echo "⚠️ 无法获取 RequestUUID，尝试其他方式..."
-            xcrun altool --notarize \
-              --file "$DMG" \
-              --apple-id "$APPLE_ID" \
-              --password "$APP_PASSWORD" \
-              --team-id "$TEAM_ID"
-            exit 1
-          fi
-          
-          echo "📋 RequestUUID: $notarization_id"
-          
-          # 轮询公证状态
-          echo "⏳ 等待公证完成..."
-          for i in {1..30}; do
-            sleep 20
-            status=$(xcrun altool --notarization-status "$notarization_id" \
-              --apple-id "$APPLE_ID" \
-              --password "$APP_PASSWORD" \
-              --team-id "$TEAM_ID" 2>&1)
-            
-            echo "  状态: $status"
-            
-            if echo "$status" | grep -q "success"; then
-              echo "✅ 公证成功!"
-              break
-            elif echo "$status" | grep -qi "fail"; then
-              echo "❌ 公证失败!"
-              echo "$status"
-              exit 1
-            fi
-            
-            if [ "$i" -eq 30 ]; then
-              echo "⚠️ 等待超时，可能需要手动检查"
-            fi
-          done
+            --wait
+
+          echo "✅ 公证成功!"
 
       - name: Staple notarization ticket
         if: (github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/'))
