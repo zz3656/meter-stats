@@ -76,6 +76,7 @@
         <button class="sidebar-item active" data-section="reading" onclick="switchSection('reading')">📝 抄表录入</button>
         <button class="sidebar-item" data-section="charge" onclick="switchSection('charge')">💰 充值录入</button>
         <button class="sidebar-item" data-section="utility" onclick="switchSection('utility')">💧 水电录入</button>
+        <button class="sidebar-item" data-section="duty" onclick="switchSection('duty')">🔧 值班录入</button>
       </div>
 
       <!-- 查看 -->
@@ -86,6 +87,7 @@
         <button class="sidebar-item" data-section="charge-alert" onclick="switchSection('charge-alert')">🔥 余量预警</button>
         <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')">📦 物品记录</button>
         <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')">📋 申购记录</button>
+        <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')">📋 工作记录</button>
       </div>
 
       <!-- 物品 -->
@@ -461,6 +463,88 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+    </section>
+
+    <!-- ===== 值班录入 ===== -->
+    <section id="section-duty" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>🔧 值班录入</h2>
+        </div>
+        <div id="duty-alert" class="alert"></div>
+        <form id="duty-form">
+          <div class="form-row">
+            <label>类型</label>
+            <select id="duty-type" class="field-control" required>
+              <option value="">请选择类型</option>
+              <option value="维修">维修</option>
+              <option value="更换">更换</option>
+              <option value="拆除">拆除</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>时间</label>
+            <input type="text" id="duty-time" class="field-control" readonly placeholder="自动添加当前时间" />
+          </div>
+          <div class="form-row">
+            <label>班次</label>
+            <select id="duty-shift" class="field-control" required>
+              <option value="">请选择班次</option>
+              <option value="白班">白班</option>
+              <option value="中班">中班</option>
+              <option value="夜班">夜班</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <label>处理状态</label>
+            <div style="display:flex;gap:16px;align-items:center;">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="duty-status" value="已处理" required /> 已处理
+              </label>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                <input type="radio" name="duty-status" value="未处理" /> 未处理
+              </label>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>备注 <span class="hint">选填</span></label>
+            <input type="text" id="duty-note" class="field-control" placeholder="选填" maxlength="200" />
+          </div>
+          <div class="button-row">
+            <button type="submit" class="btn btn-primary">提交</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ===== 工作记录 ===== -->
+    <section id="section-duty-record" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 工作记录</h2>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select id="duty-record-month" class="field-control">
+              <option value="">全部</option>
+            </select>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="history-table" id="duty-table">
+            <thead>
+              <tr>
+                <th>时间</th>
+                <th>类型</th>
+                <th>班次</th>
+                <th>状态</th>
+                <th>备注</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <div id="duty-list-empty" class="empty">还没有工作记录</div>
       </div>
     </section>
 

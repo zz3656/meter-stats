@@ -23,6 +23,7 @@ DATA_FILES = {
     "charges": "charges.json",
     "items": "items.json",
     "purchases": "purchases.json",
+    "duty": "duty.json",
 }
 
 # 每个模型的读写锁,避免 ThreadingHTTPServer 下并发写冲突

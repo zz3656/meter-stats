@@ -20,6 +20,7 @@ DATA_PATHS: dict = {
     "charges": None,
     "items": None,
     "purchases": None,
+    "duty": None,
 }
 
 

@@ -133,6 +133,7 @@ async function fetchCharges() {
 
 let CURRENT_ITEMS = [];
 let CURRENT_PURCHASES = [];
+let CURRENT_DUTY = [];
 
 async function fetchItems() {
   try {
@@ -158,6 +159,18 @@ async function fetchPurchases() {
   }
 }
 
+async function fetchDuty() {
+  try {
+    const data = await api('GET', '/api/duty');
+    CURRENT_DUTY = data;
+    return data;
+  } catch (e) {
+    console.warn('后端不可用,duty 用空数组:', e);
+    CURRENT_DUTY = [];
+    return [];
+  }
+}
+
 // 后端写入
 async function saveReadingRemote(row) {
   return api('POST', '/api/readings', row);
@@ -176,6 +189,15 @@ async function updateChargeRemote(id, fields) {
 }
 async function deleteChargeRemote(id) {
   return api('DELETE', `/api/charges/${id}`);
+}
+async function saveDutyRemote(row) {
+  return api('POST', '/api/duty', row);
+}
+async function updateDutyRemote(id, fields) {
+  return api('PUT', `/api/duty/${id}`, fields);
+}
+async function deleteDutyRemote(id) {
+  return api('DELETE', `/api/duty/${id}`);
 }
 
 // 同步本地缓存(写入成功后调)
@@ -552,6 +574,7 @@ async function renderAll() {
   CURRENT_CHARGES = (await fetchCharges()).sort((a, b) => a.date.localeCompare(b.date));
   await fetchItems();
   await fetchPurchases();
+  await fetchDuty();
 
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
@@ -561,6 +584,8 @@ async function renderAll() {
   renderChargeLog(CURRENT_CHARGES);
   renderItemTable(CURRENT_ITEMS);
   renderPurchaseTable(CURRENT_PURCHASES);
+  renderDutyTable(CURRENT_DUTY, '');
+  populateDutyMonthSelector();
   refreshMonthSelectors();
   refreshDayCopySelect(CURRENT_READINGS, CURRENT_CHARGES);
   updateStatusBar(CURRENT_READINGS, CURRENT_CHARGES);
@@ -1614,6 +1639,101 @@ function renderPurchaseTable(purchases) {
   });
 }
 
+// 工作记录表格
+function renderDutyTable(dutyList, filterMonth) {
+  const tbody = document.querySelector('#duty-table tbody');
+  const empty = document.getElementById('duty-list-empty');
+  if (!tbody) return;
+
+  if (!dutyList || dutyList.length === 0) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+
+  // 过滤月份
+  let filtered = dutyList;
+  if (filterMonth && filterMonth !== '') {
+    filtered = dutyList.filter(d => d.record_time && d.record_time.startsWith(filterMonth));
+  }
+
+  // 按时间倒序
+  const sorted = [...filtered].sort((a, b) => (b.record_time || '').localeCompare(a.record_time || ''));
+
+  if (sorted.length === 0) {
+    tbody.innerHTML = '';
+    if (empty) empty.style.display = 'block';
+    return;
+  }
+
+  if (empty) empty.style.display = 'none';
+
+  tbody.innerHTML = sorted.map(d => {
+    const statusColor = d.status === '已处理' ? 'var(--success)' : 'var(--warn)';
+    return `<tr>
+      <td>${d.record_time || '—'}</td>
+      <td>${escapeHtml(d.duty_type || '—')}</td>
+      <td>${escapeHtml(d.shift || '—')}</td>
+      <td><span style="color:${statusColor};font-weight:510;">${escapeHtml(d.status || '—')}</span></td>
+      <td>${escapeHtml(d.note || '—')}</td>
+      <td>
+        <button class="del-btn" data-action="del-duty" data-id="${d.id}">删除</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // 绑定删除按钮
+  tbody.querySelectorAll('[data-action="del-duty"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const ok = await showModal({
+        title: '删除记录',
+        body: '确定删除这条工作记录?',
+        icon: '🗑',
+        iconKind: 'warn',
+        confirmText: '删除',
+        confirmKind: 'danger',
+      });
+      if (!ok) return;
+      try {
+        await api('DELETE', `/api/duty/${id}`);
+        showAlert('✓ 已删除', 'success');
+        await refreshDuty();
+      } catch (e) {
+        showAlert('删除失败:' + e.message, 'error');
+      }
+    });
+  });
+}
+
+// 刷新工作记录
+async function refreshDuty() {
+  await fetchDuty();
+  const filterMonth = document.getElementById('duty-record-month')?.value || '';
+  renderDutyTable(CURRENT_DUTY, filterMonth);
+}
+
+// 填充工作记录月份下拉
+function populateDutyMonthSelector() {
+  const sel = document.getElementById('duty-record-month');
+  if (!sel) return;
+
+  const months = new Set();
+  CURRENT_DUTY.forEach(d => {
+    if (d.record_time) {
+      const month = d.record_time.substring(0, 7);
+      months.add(month);
+    }
+  });
+
+  const sorted = [...months].sort().reverse();
+  const currentValue = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' + sorted.map(m => `<option value="${m}">${m}</option>`).join('');
+  if (currentValue && [...months].includes(currentValue)) {
+    sel.value = currentValue;
+  }
+}
+
 // 历史表格(抄表记录)
 function renderHistory(readings) {
   const tbody = document.querySelector('#history-table tbody');
@@ -2422,6 +2542,40 @@ document.getElementById('btn-add-purchase').addEventListener('click', async () =
   } catch (e) {
     showItemAlert('添加失败:' + e.message, 'error');
   }
+});
+
+// 值班录入:提交新值班记录
+document.getElementById('duty-form')?.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const duty_type = document.getElementById('duty-type').value;
+  const record_time = document.getElementById('duty-time').value;
+  const shift = document.getElementById('duty-shift').value;
+  const status = document.querySelector('input[name="duty-status"]:checked')?.value;
+  const note = document.getElementById('duty-note').value.trim();
+
+  if (!duty_type) { showAlert('请选择类型', 'error'); return; }
+  if (!shift) { showAlert('请选择班次', 'error'); return; }
+  if (!status) { showAlert('请选择处理状态', 'error'); return; }
+
+  try {
+    await api('POST', '/api/duty', { duty_type, record_time, shift, status, note });
+    showAlert('✓ 值班记录已添加', 'success');
+    // 重置表单
+    document.getElementById('duty-type').value = '';
+    document.getElementById('duty-shift').value = '';
+    document.querySelectorAll('input[name="duty-status"]').forEach(r => r.checked = false);
+    document.getElementById('duty-note').value = '';
+    // 更新工作记录列表
+    await refreshDuty();
+    populateDutyMonthSelector();
+  } catch (e) {
+    showAlert('添加失败:' + e.message, 'error');
+  }
+});
+
+// 工作记录:月份筛选
+document.getElementById('duty-record-month')?.addEventListener('change', (e) => {
+  renderDutyTable(CURRENT_DUTY, e.target.value);
 });
 
 // ========== 月度报告(逐日逐表用电) ==========
@@ -3322,6 +3476,20 @@ function todayStr() {
 document.getElementById('date').value = todayStr();
 document.getElementById('charge-date').value = todayStr();
 document.getElementById('utility-date').value = todayStr();
+
+// 设置值班时间字段为当前时间
+function nowDateTimeStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const h = String(d.getHours()).padStart(2, '0');
+  const mi = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  return `${y}-${m}-${day} ${h}:${mi}:${s}`;
+}
+const dutyTimeEl = document.getElementById('duty-time');
+if (dutyTimeEl) dutyTimeEl.value = nowDateTimeStr();
 
 // 启动时拉后端数据
 (async () => {

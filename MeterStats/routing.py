@@ -16,6 +16,9 @@ from handlers.items import (
 from handlers.purchases import (
     handle_get_purchases, handle_post_purchases, handle_put_purchases, handle_put_purchases_stock, handle_delete_purchases,
 )
+from handlers.duty import (
+    handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty,
+)
 from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
     handle_get_yearly_report, handle_get_monthly_utilities,
@@ -46,6 +49,7 @@ _GET_ROUTES = {
     "/api/charges": handle_get_charges,
     "/api/items": handle_get_items,
     "/api/purchases": handle_get_purchases,
+    "/api/duty": handle_get_duty,
 }
 
 _POST_PREFIX = {
@@ -59,6 +63,7 @@ _POST_PREFIX = {
     "/api/admin/users": handle_post_users,
     "/api/items": handle_post_items,
     "/api/purchases": handle_post_purchases,
+    "/api/duty": handle_post_duty,
 }
 
 _PUT_PREFIX = {
@@ -71,6 +76,7 @@ _PUT_PREFIX = {
     "/api/admin/auto-backup": handle_put_auto_backup,
     "/api/admin/backup-retention": handle_put_backup_retention,
     "/api/admin/backup-config": handle_put_backup_config,
+    "/api/duty": handle_put_duty,
 }
 
 _DELETE_PREFIX = {
@@ -79,6 +85,7 @@ _DELETE_PREFIX = {
     "/api/items": handle_delete_items,
     "/api/purchases": handle_delete_purchases,
     "/api/admin/users": handle_delete_users,
+    "/api/duty": handle_delete_duty,
 }
 
 # 新增 admin 路由
