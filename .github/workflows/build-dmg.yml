@@ -83,7 +83,16 @@ jobs:
             echo "❌ 找不到资源 bundle"
             exit 1
           fi
-          cp -R "$BUNDLE_DIR/." "$APP_PATH/Contents/Resources/"
+          # 兼容两种 bundle 布局:
+          #   单架构构建: bundle/index.html(扁平)
+          #   universal 构建: bundle/Contents/Resources/index.html(嵌套)
+          RES_SRC="$BUNDLE_DIR"
+          if [ -d "$BUNDLE_DIR/Contents/Resources" ]; then
+            RES_SRC="$BUNDLE_DIR/Contents/Resources"
+          fi
+          echo "✅ 资源源目录: $RES_SRC"
+          ls "$RES_SRC" | head -5
+          cp -R "$RES_SRC/." "$APP_PATH/Contents/Resources/"
 
           # Info.plist（CFBundleExecutable 指向实际二进制）
           cp MeterStats/Info.plist "$APP_PATH/Contents/Info.plist"
