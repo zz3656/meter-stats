@@ -290,14 +290,28 @@ jobs:
             products/*.dmg
           retention-days: 30
 
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: |
-            products/*.dmg
-          generate_release_notes: true
-          draft: false
-          prerelease: false
+      # ── 发布 Release ───────────────────────────────────────
+      # 每次 DMG 构建成功都自动发布 GitHub Release(手动触发或打 tag 均可)。
+      # tag 统一为 v{VERSION}(手动触发时取自 Info.plist,打 tag 时即触发 tag)。
+      # 同版本已存在则删除重建,支持重跑。
+      - name: Publish GitHub Release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ env.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -e
+          TAG="v${VERSION}"
+          echo "==> 发布 Release: $TAG (commit ${SHA:0:7})"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "ℹ️ Release $TAG 已存在,删除后重建"
+            gh release delete "$TAG" --yes --cleanup-tag || true
+          fi
+
+          gh release create "$TAG" products/*.dmg \
+            --target "$SHA" \
+            --title "MeterStats v${VERSION}" \
+            --generate-notes
+
+          echo "✅ Release 已发布: https://github.com/zz3656/meter-stats/releases/tag/$TAG"
