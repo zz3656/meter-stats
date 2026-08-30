@@ -555,7 +555,6 @@ async function renderAll() {
 
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
-  refreshChargeTopupSummary();
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderHistory(CURRENT_READINGS);
@@ -575,7 +574,6 @@ async function refreshAndRender() {
   await fetchPurchases();
   renderStats(CURRENT_READINGS, CURRENT_CHARGES);
   renderChargeAlert(CURRENT_READINGS, CURRENT_CHARGES);
-  refreshChargeTopupSummary();
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderPieChart(CURRENT_READINGS, CURRENT_CHARGES);
   renderHistory(CURRENT_READINGS);

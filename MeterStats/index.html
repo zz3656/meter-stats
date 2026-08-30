@@ -133,7 +133,6 @@
       <div class="card">
         <div class="card-header">
           <h2>📝 抄表录入</h2>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc-reading" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
         </div>
         <!-- 余量预警卡片(抄表录入页内联显示,始终可见) -->
         <div class="card" id="reading-alerts-card" style="display:none;margin-bottom:16px;">
@@ -187,14 +186,6 @@
         <div class="card-header">
           <h2>💰 充值录入</h2>
           <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()">🧮 充值计算</button>
-        </div>
-        <!-- 充值计算摘要卡片 -->
-        <div class="card" id="charge-topup-summary" style="display:none;margin-top:8px;">
-          <div class="card-header">
-            <h2>⚡ 充值计算</h2>
-            <button type="button" class="btn btn-secondary btn-xs" onclick="refreshChargeTopupSummary()" style="padding:2px 8px;font-size:11px;">🔄 刷新</button>
-          </div>
-          <div id="charge-topup-container"></div>
         </div>
         <form id="charge-form">
           <div class="form-row">
