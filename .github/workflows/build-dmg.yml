@@ -32,13 +32,15 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref_type }}" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
           else
-            VERSION=$(python3 -c "import plistlib; p=plistlib.open('MeterStats/Info.plist'); print(p['CFBundleShortVersionString'])")
+            VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
           fi
           echo "version=$VERSION" >> $GITHUB_ENV
 
       - name: Select Xcode
         run: |
-          sudo xcode-select -s /Applications/Xcode.app
+          if [ -d /Applications/Xcode.app ]; then
+            sudo xcode-select -s /Applications/Xcode.app
+          fi
           xcode-select -p
 
       # ── 构建 .app ──────────────────────────────────────────
@@ -53,7 +55,8 @@ jobs:
           # 清理 Python 缓存，避免被打进资源 bundle
           find MeterStats -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-          swift build -c release --arch arm64
+          # 构建宿主架构(runner 可能是 arm64 或 x64)
+          swift build -c release
 
           APP_PATH="products/${APP_NAME}.app"
           rm -rf "$APP_PATH"
