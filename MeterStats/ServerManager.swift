@@ -47,9 +47,9 @@ final class ServerManager {
             throw NSError(domain: "MeterStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到 bundle Resources"])
         }
 
-        if let bv = bundleVersion(), let rv = runtimeVersion(), bv == rv {
-            return
-        }
+        // ⚠️ 不能用 VERSION 相同就跳过复制:版本号不变但文件内容可能已更新
+        // (如 0.1.0 内部多次构建修复 UI),否则 runtime 会一直用旧文件。
+        // 改为始终按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
 
         let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "index.html", "style.css", "app.js", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
         for filename in files {
