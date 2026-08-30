@@ -50,11 +50,13 @@ docker run -d --name meter-stats \
 
 从 GitHub Releases 下载最新 DMG（https://github.com/zz3656/meter-stats/releases），挂载后把 `MeterStats.app` 拖入「应用程序」。
 
-> ⚠️ **关于"已损坏，无法打开"**：未配置 Apple Developer ID 签名/公证时，构建的应用是 ad-hoc 本地签名，首次打开 macOS 会拦截。任选一种方式绕过（只需一次）：
+> ⚠️ **关于首次打开被拦截**：未配置 Apple Developer ID 签名/公证时，应用是 ad-hoc 本地签名，首次打开 macOS 会提示「Apple 无法验证是否包含恶意软件」（旧版未签名构建则提示"已损坏，无法打开"）。**应用本身安全**，只需手动放行一次（每台电脑一次）：
 >
-> 1. **右键点击应用 → 打开**，在弹出的提示中再点「打开」
-> 2. 或执行：`xattr -dr com.apple.quarantine "/Applications/MeterStats.app"`
-> 3. 或首次打开前执行：`codesign --force --deep --sign - "/Applications/MeterStats.app"` 重新本地签名
+> 1. **右键点击应用 → 打开** → 弹窗中再点「打开」（最简单）
+> 2. 或：系统设置 → 隐私与安全性 → 点「仍要打开」
+> 3. 或终端执行：`xattr -dr com.apple.quarantine "/Applications/MeterStats.app"`（之后双击即开）
+>
+> 如需彻底免提示，需配置 Apple Developer ID 证书并走签名+公证流程（打 `v*` tag 自动执行）。
 
 ```bash
 # 开发者本地构建
