@@ -2,21 +2,33 @@ name: Build DMG
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - '.DS_Store'
+      - 'docs/**'
+      - '.github/workflows/sync-readme-to-dockerhub.yml'
+      - '.github/workflows/docker-publish.yml'
+      - '.github/workflows/build-dmg.yml'
   workflow_dispatch:
     inputs:
-      notarization:
-        description: 'Enable notarization'
-        type: boolean
-        default: true
+      version:
+        description: 'Version (e.g. 0.1.1),留空则用 MeterStats/VERSION'
+        type: string
+        default: ''
+
+concurrency:
+  group: dmg-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: write
 
 jobs:
   build-dmg:
-    name: Build DMG
+    name: Build & Release DMG
     runs-on: macos-latest
     env:
       APP_NAME: "MeterStats"
@@ -25,16 +37,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Determine Version
         id: version
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          elif [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
+          if [[ "${{ github.event.inputs.version }}" != "" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(python3 -c "import plistlib; p=plistlib.load(open('MeterStats/Info.plist','rb')); print(p['CFBundleShortVersionString'])")
+            VERSION=$(cat MeterStats/VERSION | tr -d ' \n\r')
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "❌ 无法确定版本号"
+            exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_ENV
 
@@ -46,32 +62,25 @@ jobs:
           xcode-select -p
 
       # ── 构建 .app ──────────────────────────────────────────
-      # swift build 只产出裸可执行文件 + bundle，不生成 .app，
-      # 这里手动组装标准 macOS 应用包（Info.plist / MacOS / Resources）。
       - name: Build with Swift Package Manager
         run: |
-          # VERSION 参与资源打包，缺失时用 Info.plist 中的版本生成
-          if [ ! -f MeterStats/VERSION ]; then
-            echo "${VERSION}" > MeterStats/VERSION
-          fi
-          # 清理 Python 缓存，避免被打进资源 bundle
+          echo "${VERSION}" > MeterStats/VERSION
           find MeterStats -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
-          # 构建通用二进制(arm64 + x86_64),Intel 与 Apple Silicon 都能运行;
-          # 若交叉编译失败则回退为宿主架构
+          # 通用二进制(arm64 + x86_64),失败回退宿主架构
           swift build -c release --arch arm64 --arch x86_64 || swift build -c release
 
           APP_PATH="products/${APP_NAME}.app"
           rm -rf "$APP_PATH"
           mkdir -p "$APP_PATH/Contents/MacOS" "$APP_PATH/Contents/Resources"
 
-          # 可执行文件(多架构构建在 apple/Products/Release/,单架构在 arm64-apple-macosx/release/)
+          # 可执行文件(多架构在 apple/Products/Release/,单架构在 arm64-apple-macosx/release/)
           BIN=$(find .build -type f -path "*/Products/Release/${APP_NAME}" -perm -111 2>/dev/null | head -1)
           if [ -z "$BIN" ]; then
             BIN=$(find .build -type f -path "*/release/${APP_NAME}" -perm -111 2>/dev/null | head -1)
           fi
           if [ -z "$BIN" ]; then
-            echo "❌ 找不到编译产物 ${APP_NAME}，可用产物："
+            echo "❌ 找不到编译产物 ${APP_NAME}"
             find .build -name "${APP_NAME}" -type f 2>/dev/null
             exit 1
           fi
@@ -79,24 +88,20 @@ jobs:
           file "$BIN"
           cp "$BIN" "$APP_PATH/Contents/MacOS/${APP_NAME}"
 
-          # 资源（Python 后端 + 前端 + VERSION）
+          # 资源(兼容扁平/嵌套两种 bundle 布局)
           BUNDLE_DIR=$(find .build -type d -name "*.bundle" 2>/dev/null | head -1)
           if [ -z "$BUNDLE_DIR" ]; then
             echo "❌ 找不到资源 bundle"
             exit 1
           fi
-          # 兼容两种 bundle 布局:
-          #   单架构构建: bundle/index.html(扁平)
-          #   universal 构建: bundle/Contents/Resources/index.html(嵌套)
           RES_SRC="$BUNDLE_DIR"
           if [ -d "$BUNDLE_DIR/Contents/Resources" ]; then
             RES_SRC="$BUNDLE_DIR/Contents/Resources"
           fi
           echo "✅ 资源源目录: $RES_SRC"
-          ls "$RES_SRC" | head -5
           cp -R "$RES_SRC/." "$APP_PATH/Contents/Resources/"
 
-          # Info.plist（CFBundleExecutable 指向实际二进制）
+          # Info.plist
           cp MeterStats/Info.plist "$APP_PATH/Contents/Info.plist"
           python3 - <<'PYEOF'
           import plistlib
@@ -108,169 +113,136 @@ jobs:
               plistlib.dump(info, f, sort_keys=False)
           PYEOF
 
-          echo "✅ 已组装 .app: $APP_PATH"
-          find "$APP_PATH" -type f | head -20
+          echo "✅ 已组装 .app"
+          find "$APP_PATH" -type f | head -10
 
-      # ── 准备图标 ───────────────────────────────────────────
-      - name: Embed AppIcon.icns in .app bundle
+      # ── 图标 ────────────────────────────────────────────────
+      - name: Embed AppIcon
         run: |
           APP="products/${APP_NAME}.app/Contents/Resources"
           mkdir -p "$APP"
-          
-          # 确保 AppIcon.icns 在 Resources 中
           cp Assets/AppIcon.icns "$APP/AppIcon.icns"
-          
-          # 更新 Info.plist 的 CFBundleIconFile
-          python3 << 'PYEOF'
-          import plistlib, sys
-
+          python3 - <<'PYEOF'
+          import plistlib
           info_path = "products/MeterStats.app/Contents/Info.plist"
           with open(info_path, "rb") as f:
               info = plistlib.load(f)
-
           info["CFBundleIconFile"] = "AppIcon"
           info["CFBundleIconName"] = "AppIcon"
-
           with open(info_path, "wb") as f:
               plistlib.dump(info, f, sort_keys=False)
-
-          print("✅ Info.plist 已更新")
-          print(f"   CFBundleIconFile = {info.get('CFBundleIconFile')}")
           PYEOF
 
-      # ── 临时签名(ad-hoc) ───────────────────────────────────
-      # 未配置 Apple Developer ID 时,给 app 加本地 ad-hoc 签名,
-      # 避免未签名应用被 Gatekeeper 判为"已损坏,无法打开"。
-      # 有 Developer ID 时后面的正式签名会覆盖此签名。
-      - name: Ad-hoc sign app
+      # ── 临时签名 ───────────────────────────────────────────
+      - name: Ad-hoc sign
         run: |
           APP="products/${APP_NAME}.app"
           codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
-          echo "✅ 已生成 ad-hoc 签名(无 Developer ID 时的本地签名)"
+          echo "✅ ad-hoc 签名完成"
 
-      # ── 代码签名 ───────────────────────────────────────────
+      # ── 正式签名(有 Developer ID 才执行) ───────────────────
       - name: Install Apple Developer Certificate
-        if: github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/')
         env:
           CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE }}
           CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD || 'keychain-password' }}
+          KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
         run: |
-          # 创建并解锁 keychain
+          if [ -z "$CERTIFICATE_BASE64" ] || [ "$CERTIFICATE_BASE64" = "null" ]; then
+            echo "⏭️ 未配置 APPLE_DEVELOPER_ID_CERTIFICATE，跳过证书安装"
+            exit 0
+          fi
+          if [ -z "$CERTIFICATE_PASSWORD" ] || [ "$CERTIFICATE_PASSWORD" = "null" ]; then
+            echo "❌ APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD 未配置"
+            exit 1
+          fi
+          if [ -z "$KEYCHAIN_PASSWORD" ] || [ "$KEYCHAIN_PASSWORD" = "null" ]; then
+            KEYCHAIN_PASSWORD="keychain-password"
+          fi
+
           security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security default-keychain -s build.keychain
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
           security set-keychain-settings -lut 21600 build.keychain
 
-          # 导入证书
           echo "$CERTIFICATE_BASE64" | base64 -d > certificate.p12
           security import certificate.p12 -k build.keychain \
-            -P "$CERTIFICATE_PASSWORD" \
-            -T /usr/bin/codesign
+            -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/altool
           rm certificate.p12
 
-          # 验证
-          echo "已导入的签名身份："
           security find-identity -v -p codesigning build.keychain
 
       - name: Sign app (Developer ID)
-        if: github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/')
         env:
           TEAM_NAME: ${{ secrets.APPLE_DEVELOPER_ID_TEAM_NAME }}
         run: |
+          if [ -z "$TEAM_NAME" ] || [ "$TEAM_NAME" = "null" ]; then
+            echo "⏭️ 未配置 APPLE_DEVELOPER_ID_TEAM_NAME，跳过正式签名"
+            exit 0
+          fi
           APP="products/${APP_NAME}.app"
           SIGN_ID="Developer ID Application: $TEAM_NAME"
-          
           echo "🔐 签名应用..."
-          codesign --verbose=4 \
-            --sign "$SIGN_ID" \
-            --options runtime \
-            --timestamp \
-            --entitlements "MeterStats/Linclub.entitlements" \
-            "$APP"
-          
-          # 验证签名链
+          codesign --verbose=4 --sign "$SIGN_ID" --options runtime --timestamp \
+            --entitlements "MeterStats/Linclub.entitlements" "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
-          echo "✅ 签名验证通过"
+          echo "✅ 正式签名完成"
 
       # ── 创建 DMG ───────────────────────────────────────────
       - name: Create DMG
         run: |
           APP="products/${APP_NAME}.app"
-          DMG_NAME="${APP_NAME}-${{ env.version }}-macos.dmg"
-          
-          # 创建临时挂载点
+          DMG_NAME="${APP_NAME}-${VERSION}-macos.dmg"
           STAGING="/tmp/dmg-staging"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
-          
-          # 把 .app 拷贝到 staging
           cp -r "$APP" "$STAGING/"
-          
-          # 创建应用链接文件夹 (.app 的快捷方式)
           ln -s /Applications "$STAGING/Applications"
-          
-          # 创建 DMG
-          hdiutil create -volname "${APP_NAME}" \
-            -srcfolder "$STAGING" \
-            -ov -format UDZO \
-            -imagekey zlib-level=9 \
-            "$STAGING/$DMG_NAME"
-          
-          # 复制到 products 目录
+
+          hdiutil create -volname "${APP_NAME}" -srcfolder "$STAGING" \
+            -ov -format UDZO -imagekey zlib-level=9 "$STAGING/$DMG_NAME"
           mv "$STAGING/$DMG_NAME" "products/$DMG_NAME"
-          
-          # 清理
           rm -rf "$STAGING"
-          
+
           echo "✅ DMG 已创建: products/$DMG_NAME"
           ls -lh "products/$DMG_NAME"
 
-      # ── 公证 (Notarization) ────────────────────────────────
+      # ── 公证(有 Apple ID 才执行) ───────────────────────────
       - name: Notarize DMG
-        if: (github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/'))
         env:
           APPLE_ID: ${{ secrets.APPLE_NOTARIZATION_APPLE_ID }}
           APP_PASSWORD: ${{ secrets.APPLE_NOTARIZATION_PASSWORD }}
           TEAM_ID: ${{ secrets.APPLE_NOTARIZATION_TEAM_ID }}
         run: |
-          DMG="products/${APP_NAME}-${{ env.version }}-macos.dmg"
-
+          if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "null" ]; then
+            echo "⏭️ 未配置 APPLE_NOTARIZATION_APPLE_ID，跳过公证"
+            exit 0
+          fi
+          DMG="products/${APP_NAME}-${VERSION}-macos.dmg"
           echo "📤 提交公证..."
           xcrun notarytool submit "$DMG" \
-            --apple-id "$APPLE_ID" \
-            --password "$APP_PASSWORD" \
-            --team-id "$TEAM_ID" \
-            --wait
-
+            --apple-id "$APPLE_ID" --password "$APP_PASSWORD" \
+            --team-id "$TEAM_ID" --wait
           echo "✅ 公证成功!"
 
       - name: Staple notarization ticket
-        if: (github.event.inputs.notarization == 'true' || startsWith(github.ref, 'refs/tags/'))
+        env:
+          APPLE_ID: ${{ secrets.APPLE_NOTARIZATION_APPLE_ID }}
         run: |
+          if [ -z "$APPLE_ID" ] || [ "$APPLE_ID" = "null" ]; then
+            echo "⏭️ 未配置 APPLE_NOTARIZATION_APPLE_ID，跳过票据附加"
+            exit 0
+          fi
           APP="products/${APP_NAME}.app"
-          DMG="products/${APP_NAME}-${{ env.version }}-macos.dmg"
-          
-          echo "📌 附加票据到应用..."
-          xcrun stapler staple "$APP" 2>&1 || echo "⚠️ 票据附加失败（可能尚未公证完成）"
-          
-          echo "📌 附加票据到 DMG..."
-          xcrun stapler staple "$DMG" 2>&1 || echo "⚠️ 票据附加失败（可能尚未公证完成）"
+          DMG="products/${APP_NAME}-${VERSION}-macos.dmg"
+          xcrun stapler staple "$APP" 2>&1 || echo "⚠️ 票据附加失败"
+          xcrun stapler staple "$DMG" 2>&1 || echo "⚠️ 票据附加失败"
 
       # ── 验证 ───────────────────────────────────────────────
-      - name: Verify DMG
+      - name: Verify
         run: |
-          echo "📦 products 目录内容："
           ls -lh products/
-          
-          # 验证 app 签名
-          codesign --verify --deep --strict --verbose=2 "products/${APP_NAME}.app" || echo "⚠️ 签名验证有警告"
-          
-          # 验证 app 在 DMG 中也能签名通过
-          hdiutil attach "products/${APP_NAME}-${{ env.version }}-macos.dmg" -readonly -noverify -nobrowse -mountpoint /tmp/mnt
-          codesign --verify --deep --strict --verbose=2 "/tmp/mnt/${APP_NAME}.app" || echo "⚠️ DMG 内签名验证有警告"
-          hdiutil detach /tmp/mnt -force
+          codesign --verify --deep --strict "products/${APP_NAME}.app" || echo "⚠️ 签名验证有警告"
 
       # ── 上传产物 ───────────────────────────────────────────
       - name: Upload DMG as artifact
@@ -281,10 +253,7 @@ jobs:
             products/*.dmg
           retention-days: 30
 
-      # ── 发布 Release ───────────────────────────────────────
-      # 每次 DMG 构建成功都自动发布 GitHub Release(手动触发或打 tag 均可)。
-      # tag 统一为 v{VERSION}(手动触发时取自 Info.plist,打 tag 时即触发 tag)。
-      # 同版本已存在则删除重建,支持重跑。
+      # ── 发布 Release(覆盖式 latest) ────────────────────────
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -292,21 +261,20 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -e
-          TAG="v${VERSION}"
-          echo "==> 发布 Release: $TAG (commit ${SHA:0:7})"
+          TAG="latest"
+          echo "==> 发布 Release: $TAG (MeterStats v${VERSION}, commit ${SHA:0:7})"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "ℹ️ Release $TAG 已存在,删除后重建"
             gh release delete "$TAG" --yes --cleanup-tag || true
           fi
 
-          # 拉取完整历史 + tags,用于生成更新说明
+          # 生成结构化更新说明
           git fetch --prune --unshallow --tags origin 2>/dev/null || git fetch --tags origin 2>/dev/null || true
-
           NOTES=$(python3 << 'PYEOF'
-          import re, subprocess
+          import re, subprocess, os
 
-          version = __import__("os").environ["VERSION"]
+          version = os.environ["VERSION"]
           prev_tag = subprocess.run(
               ["git", "describe", "--tags", "--abbrev=0", "HEAD~1"],
               capture_output=True, text=True).stdout.strip()
@@ -355,12 +323,14 @@ jobs:
               + section("🔧", "其他改动", cats["other"])
           )
           print(body.rstrip())
+
           PYEOF
           )
 
           gh release create "$TAG" products/*.dmg \
             --target "$SHA" \
             --title "MeterStats v${VERSION}" \
-            --notes "$NOTES"
+            --notes "$NOTES" \
+            --latest
 
           echo "✅ Release 已发布: https://github.com/zz3656/meter-stats/releases/tag/$TAG"
