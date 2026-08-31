@@ -531,7 +531,7 @@ async function restoreBackup(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    refreshAll && refreshAll();
+    renderAll && renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   }
@@ -586,7 +586,7 @@ async function adminRestoreFromZip(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    refreshAll && refreshAll();
+    renderAll && renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
@@ -640,7 +640,7 @@ async function datamgmtRestoreFromZip(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    refreshAll && refreshAll();
+    renderAll && renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
@@ -735,7 +735,7 @@ async function adminRestore() {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    refreshAll && refreshAll();
+    renderAll && renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {

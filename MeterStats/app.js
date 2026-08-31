@@ -189,11 +189,13 @@ async function fetchDuty() {
 async function fetchSnapshot() {
   try {
     const data = await api('GET', '/api/snapshot');
-    cacheReadings(data.readings || []);
-    cacheCharges(data.charges || []);
+    CURRENT_READINGS = data.readings || [];
+    CURRENT_CHARGES = data.charges || [];
     CURRENT_ITEMS = data.items || [];
     CURRENT_PURCHASES = data.purchases || [];
     CURRENT_DUTY = data.duty || [];
+    cacheReadings(CURRENT_READINGS);
+    cacheCharges(CURRENT_CHARGES);
     return data;
   } catch (e) {
     console.warn('snapshot 失败,回退到本地缓存:', e);
@@ -3873,3 +3875,7 @@ if (dutyTimeEl) {
     showAlert('👋 欢迎!先录入今天的抄表数据开始。', 'info');
   }
 })();
+
+// 把关键函数暴露到 window,让 admin.js(strict mode 单独作用域)能调用恢复后刷新整个页面
+window.renderAll = renderAll;
+window.refreshAll = refreshAll;  // 兼容旧的调用
