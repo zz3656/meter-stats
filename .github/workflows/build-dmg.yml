@@ -53,6 +53,8 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> $GITHUB_ENV
+          # 用 step output 暴露版本号,供后续步骤通过 ${{ steps.version.outputs.version }} 引用
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Select Xcode
         run: |
@@ -248,7 +250,9 @@ jobs:
       - name: Upload DMG as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "${APP_NAME}-${{ env.version }}"
+          # 用 step output 引用版本号(之前用 ${{ env.version }} 是空字符串,
+          # 导致 artifact 名变成 "MeterStats--macos.dmg" 缺版本号)
+          name: "${APP_NAME}-${{ steps.version.outputs.version }}-macos"
           path: |
             products/*.dmg
           retention-days: 30
@@ -257,7 +261,7 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ env.version }}
+          VERSION: ${{ steps.version.outputs.version }}
           SHA: ${{ github.sha }}
         run: |
           set -e
