@@ -268,7 +268,7 @@ jobs:
         run: |
           set -e
           TAG="latest"
-          echo "==> 发布 Release: $TAG (MeterStats v${version}, commit ${SHA:0:7})"
+          echo "==> 发布 Release: $TAG (MeterStats v${VERSION}, commit ${SHA:0:7})"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "ℹ️ Release $TAG 已存在,删除后重建"
@@ -276,67 +276,31 @@ jobs:
           fi
 
           # 生成结构化更新说明
+          # 脚本独立维护在 scripts/gen_release_notes.py,避免 heredoc 嵌套 + YAML 解析问题
           git fetch --prune --unshallow --tags origin 2>/dev/null || git fetch --tags origin 2>/dev/null || true
-          NOTES=$(python3 << 'PYEOF'
-          import re, subprocess, os
+          NOTES=$(python3 scripts/gen_release_notes.py)
 
-          version = os.environ["VERSION"]
-          prev_tag = subprocess.run(
-              ["git", "describe", "--tags", "--abbrev=0", "HEAD~1"],
-              capture_output=True, text=True).stdout.strip()
-          if not prev_tag:
-              prev_tag = subprocess.run(
-                  ["git", "rev-list", "--max-parents=0", "HEAD"],
-                  capture_output=True, text=True).stdout.strip()
-
-          rng = f"{prev_tag}..HEAD" if prev_tag and prev_tag != "HEAD" else "HEAD"
-          log = subprocess.run(
-              ["git", "log", "--pretty=format:%s", rng],
-              capture_output=True, text=True).stdout.strip().split("\n")
-
-          cats = {"feat": [], "fix": [], "docs": [], "other": []}
-          for msg in log:
-              if not msg:
-                  continue
-              m = re.match(r'^(feat|fix|docs?|refactor|ci|chore)(\(.*\))?:\s*(.*)$', msg)
-              if m:
-                  kind, _, rest = m.groups()
-                  key = {"feat": "feat", "fix": "fix", "docs": "docs"}.get(kind, "other")
-                  cats[key].append(rest.strip() or msg)
-              else:
-                  cats["other"].append(msg.strip())
-
-          def section(icon, title, items):
-              if not items:
-                  return ""
-              lines = "\n".join(f"- {i}" for i in items)
-              return f"### {icon} {title}\n{lines}\n"
-
-          header = "\n".join([
-              f"## 📦 MeterStats v{version}",
-              "",
-              "> macOS 原生应用 · 通用二进制(Apple Silicon + Intel) · ad-hoc 本地签名",
-              "",
-              f"**安装**: 下载 `MeterStats-{version}-macos.dmg`,把 `MeterStats.app` 拖入「应用程序」。",
-              "首次打开如被拦截(Apple 无法验证开发者),请 **右键点击应用 → 打开** 放行一次。",
-              "",
-          ])
-          body = (
-              header
-              + section("✨", "新功能", cats["feat"])
-              + section("🐛", "问题修复", cats["fix"])
-              + section("📖", "文档", cats["docs"])
-              + section("🔧", "其他改动", cats["other"])
-          )
-          print(body.rstrip())
-
-          PYEOF
-          )
-
-          gh release create "$TAG" products/*.dmg \
+           "$TAG" products/*.dmg \
             --target "$SHA" \
-            --title "MeterStats v${version}" \
+            --title "MeterStats v${VERSION}" \
             --notes "$NOTES" \
             --latest
 
+          # 把 notes 写到文件,后续步骤可同步到 Docker Hub
+          echo "$NOTES" > /tmp/release-notes.md
+
           echo "✅ Release 已发布: https://github.com/zz3656/meter-stats/releases/tag/$TAG"
+
+      # ── 把 release notes 同步给 Docker README ──────────
+      - name: Sync changelog to Docker README
+        if: always()
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ ! -z "$DOCKERHUB_TOKEN" ] && [ ! -z "$DOCKERHUB_USERNAME" ] && [ -f /tmp/release-notes.md ]; then
+            echo "==> 把 release notes 追加到 README.Docker.md"
+            python3 scripts/sync_docker_readme.py /tmp/release-notes.md "${VERSION}"
+          else
+            echo "⏭️ DOCKERHUB_TOKEN/username 未配置或无 release notes,跳过 Docker README 更新"
+          fi
