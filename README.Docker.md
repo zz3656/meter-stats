@@ -197,3 +197,173 @@ docker compose down && docker compose up -d
 ---
 
 **项目仓库**: [github.com/zz3656/meter-stats](https://github.com/zz3656/meter-stats) · 欢迎 ⭐ 和提交 Issue / PR
+
+## 更新历史
+
+## 📦 MeterStats v0.1.0
+
+> macOS + Docker + Web 三端统一部署 · 提交 `1c0f17b` · 完整改动见下方
+
+**升级 Docker 容器**:
+```bash
+docker compose pull
+docker compose up -d
+```
+
+
+#### 📦 backup
+
+- 恢复流程直接弹文件选择器 + 支持 zip 备份上传 (
+a5b123)
+  ## 文件选择器: 跳过中间模态框
+  > - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框
+  > (showBrowserBackupPicker) → 用户点「选择文件」才触发文件选择器
+  > - 现在 pickBackupFiles() 直接创建 <input type='file'> → 自动弹出系统文件选择器,
+  > 用户选完后直接进入恢复流程(中间不再需要点确认)
+
+#### 📦 duty
+
+- 值班录入新增故障区域字段 (
+7d1fe8)
+  > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
+  > - 工作记录表格新增「故障区域」列展示
+  > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 录入集成+侧栏重构+UI统一+移动端适配 (
+4a5d7e)
+  ## 录入整合与弹窗合并
+  > - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数)
+  > - 抄表/水电弹窗合并为带 Tab 的单弹窗(reading-add-modal),充电计算独立弹窗
+  > - 工作记录弹窗标题改「📝 新增记录」,字段顺序:故障区域(首行)→ 类型 → 时间 → 班次 → 备注 → 处理状态(末行带 dashed 分隔)
+  ## 报表分析重构
+
+- 完善借出归还 — 新增历史记录表与归还弹窗 (
+236e44)
+  > - 物品记录页面新增「借出 / 归还 记录」表格,展示每次借出和后续归还情况
+  > - 归还流程从简单的二次确认弹窗改为完整弹窗:不要求借出人,可填归还数量(默认全还)和备注
+  > - 借出仍强制要求填借出人(后端校验已存在)
+  > - 借出/归还记录保存在物品的 lend_records 数组里(后端未变,前端展示新增)
+
+- 物品记录新增借出和归还功能 (
+86b140)
+  > - handlers/items.py 添加借出/归还API处理
+  > - routing.py 添借出/归还路由
+  > - index.html 添加借出弹窗和物品表格更新
+  > - app.js 添加借出/归还前端逻辑
+
+- 新增值班录入和工作记录功能 (
+ebde2e)
+  > - 新增 handlers/duty.py 处理值班录入API
+  > - routing.py 添加 duty 相关路由
+  > - app_handler.py DATA_PATHS 添加 duty
+  > - storage.py DATA_FILES 添加 duty.json
+  > - index.html 添加值班录入和工作记录页面
+### 🐛 fix
+
+#### 📦 backup
+
+- 手动备份恢复数据到 docker 不生效 (
+844411)
+  > 根因:
+  > 1. datamgmtRestore 恢复后调用 refreshAll() 只刷 items/purchases,
+  > 不刷新 readings/charges/图表等页面 → 改用 renderAll() 全量刷新
+  > 2. 手动备份 zip 含完整 settings.json(含 backup_dir 宿主机路径),
+  > 恢复到 docker 容器会把容器 backup_dir 覆盖为无效路径
+
+#### 🚀 CI/CD
+
+- 修复 build-dmg gh release create 行被误删 (1c0f17b)
+
+- build-dmg shell 步骤改用 $version 取版本号($VERSION 为空) (
+c8a474)
+  > 之前 $GITHUB_ENV 写入的是 'version=0.1.0' (小写),但 Create DMG/Notarize/
+  > Publish Release 等步骤用 ${VERSION} (大写),shell 中 $VERSION 是空,
+  > 导致 dmg 文件名变成 'MeterStats--macos.dmg'(双横线)。
+  > 统一改成 ${version} (与 $GITHUB_ENV 写入的小写名一致)。
+
+- 修正 build-dmg release artifact 文件名缺失版本号 (
+a30640)
+  > ${{ env.version }} 在 $GITHUB_ENV 写入后只在 step shell 中可见,
+  > YAML 表达式上下文读不到,导致 artifact 名为 'MeterStats--macos.dmg' (双横线)。
+  > 改用 step output(${{ steps.version.outputs.version }}) 暴露版本号,
+  > artifact 名修正为 'MeterStats-0.1.0-macos.dmg'。
+
+- 修复 Build DMG 失败 + push 自动构建发布 (
+352490)
+  > - 修复手动触发 Build DMG 失败:无 Apple secrets 时证书步骤无条件执行
+  > 导致 security import 失败。改为运行时检测 secret,未配置则跳过
+  > 证书安装/正式签名/公证(仅 ad-hoc 签名+发布)
+  > - 实现 push main 自动构建并发布 Release:
+  > 触发改为 push branches main(paths-ignore 文档/CI 文件)+手动触发,
+
+#### 🚀 部署/CDN
+
+- 注入 ?v=<token> 绕过 Cloudflare CDN 缓存旧版 app.js (
+e53d93)
+  > 根因:Cloudflare CDN 默认缓存 .js/.css/.html 静态文件 4 小时(max-age=14400)。
+  > 即便 docker 容器已经拉了新镜像重启,Cloudflare 仍然返回旧的 app.js 给用户浏览器,
+  > 导致用户看到的是修复前的代码,bug 看似'修不好'。
+  > 修复两层防护:
+  > 1. _handle_static 给 html/js/css 响应加 Cache-Control: no-cache, no-store,
+
+#### 🍎 macOS 原生 App
+
+- 修复 macOS app 点击恢复数据不弹文件选择器 (
+381fe6)
+  > 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file">
+  > 的 .click() 调用都静默失败(用户无任何反馈),且没有 Swift 桥让前端
+  > 显式弹 NSOpenPanel 选文件。
+  > 修复:
+  > 1. Swift 新增 PickFileHandler: macOSPickFile WKScriptMessage,
+
+#### 📦 swift
+
+- url.lastPath → url.lastPathComponent (
+44c210)
+  > Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
+  > DMG build 失败已修复。
+
+#### 🌐 Web/Docker 前端
+
+- 修复 fetchSnapshot/admin 恢复后页面不刷新导致用户看不到数据 (
+a2c621)
+  > 两个相关 bug:
+  > - fetchSnapshot 成功路径只写 localStorage 缓存,未赋值全局
+  > CURRENT_READINGS / CURRENT_CHARGES,导致 renderAll 拿到空数组,
+  > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
+  > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
+
+- 修复 build-dmg.yml 工作流 (
+6a6eaa)
+  > - 移除已弃用的 altool 引用
+  > - 使用新的 notarytool 替代 altool --notarize 公证
+
+- 完善 build-dmg.yml 版本判断逻辑 (
+bbbcea)
+### 📖 docs
+
+- 重写 README + DockerHub 描述;清理冗余文件 (
+3c6afb)
+  ## 删除冗余(从仓库移除)
+  > - .run.sh:与 MeterStats/run.sh 重复(MeterStats/run.sh 已存在)
+  > - Info.plist(根目录):与 MeterStats/Info.plist 重复(bundle 用的是后者)
+  > - DEPLOY_FNOS.md:内容已合并到 README.md
+  > - DO-HUB-TOKEN-GUIDE.md:同上
+### 📝 其他改动
+
+- 
+547d79ef3985f8398cba0308a0da3a959dfd1ffd ()
+  > ci(release): 用结构化 commit 解析生成详细 release notes + 同步 Docker README
+- 
+6b72706def55e37e35b69584542cba1de724fbb2 ()
+  > fix: 修复 build-dmg.yml 中判断 tag push 的条件
+### ⬆️ 升级指引
+
+⚠️ **强烈建议升级**:本次包含问题修复。
+- 🌐 **Web/Docker 用户**:重启 docker 容器 `docker compose pull && docker compose up -d`,浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)。
+- 🍎 **macOS 用户**:下载下方 DMG 覆盖安装。
+
+---
+
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...1c0f17b)
+
