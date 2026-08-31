@@ -278,11 +278,19 @@ jobs:
           # 生成结构化更新说明
           # 脚本独立维护在 scripts/gen_release_notes.py,避免 heredoc 嵌套 + YAML 解析问题
           git fetch --prune --unshallow --tags origin 2>/dev/null || git fetch --tags origin 2>/dev/null || true
+          # 生成 NOTES: 分离 stdout(真正 notes)和 stderr(诊断信息),
+          # 否则 2>&1 会把 set -x 的 + python3 ... 行混进 NOTES,导致发布错误的 release notes
           set -x  # 调试:显示 python3 实际输出
-          NOTES=$(python3 scripts/gen_release_notes.py 2>&1)
+          NOTES=$(python3 scripts/gen_release_notes.py 2>/tmp/gen-notes.err)
+          NOTES_RC=$?
           set +x
           echo "[DEBUG] NOTES length: ${#NOTES}"
           echo "[DEBUG] NOTES first 200 chars: ${NOTES:0:200}"
+          if [ $NOTES_RC -ne 0 ] || [ -z "$NOTES" ]; then
+            echo "❌ NOTES 生成失败 (exit=$NOTES_RC)"
+            cat /tmp/gen-notes.err
+            exit 1
+          fi
 
           gh release create "$TAG" products/*.dmg \
             --target "$SHA" \
