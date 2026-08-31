@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `6010b28` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `dc81fe2` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -314,15 +314,6 @@ e53d93)
   > 修复:
   > 1. Swift 新增 PickFileHandler: macOSPickFile WKScriptMessage,
 
-#### 📦 repo
-
-- 重命名 Scripts/ → scripts/ 保持 Linux CI case-sensitive 一致 (6010b28)
-  > git tracked Scripts/(大写 S),但 build-dmg.yml 引用 scripts/(小写)。
-  > 本地 macOS HFS+ 是 case-insensitive,大小写都指向同一文件,所以
-  > 本地能跑;但 GitHub Actions 是 Linux(ext4 case-sensitive),找不到
-  > scripts/gen_release_notes.py → python3 失败 → NOTES 为空 →
-  > gh release create 用空 notes 发布,但 sync step 用上一次的
-
 #### 📦 swift
 
 - url.lastPath → url.lastPathComponent (
@@ -365,8 +356,19 @@ e19fdd)
   > - Info.plist(根目录):与 MeterStats/Info.plist 重复(bundle 用的是后者)
   > - DEPLOY_FNOS.md:内容已合并到 README.md
   > - DO-HUB-TOKEN-GUIDE.md:同上
+### 🚀 ci
+
+#### 📦 Release
+
+- 加调试输出确认 NOTES 生成 (dc81fe2)
 ### 📝 其他改动
 
+- 
+1001533d92f6b4594aaac6e05affc8f3bf1b4d03 ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+6010b2836867c51e1676dc847fa3ef3f03a9cc7b ()
+  > fix(repo): 重命名 Scripts/ → scripts/ 保持 Linux CI case-sensitive 一致
 - 
 099fb8f06784313072ac5d1f22a02c1c0a703e9b ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -393,5 +395,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...6010b28)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...dc81fe2)
 
