@@ -185,8 +185,9 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
     try:
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for f in backup_dir.rglob('*'):
-                if f.is_file():
+            # 只打包数据文件,跳过 zip_path 自身(避免 zip 包含自身 0 字节空文件)
+            for f in sorted(backup_dir.iterdir()):
+                if f.is_file() and f != zip_path:
                     zf.write(f, f.name)
         log(f"[BACKUP] 已打包 ZIP: {zip_filename}")
     except Exception as e:

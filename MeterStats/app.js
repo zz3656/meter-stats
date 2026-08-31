@@ -546,7 +546,9 @@ async function datamgmtRestore() {
       } else {
         showAlert(`✅ 已上传 ${(res.uploaded || []).length} 个文件`, 'success');
       }
-      await refreshAll();
+      // 用 renderAll() 全量刷新: readings/charges/items/purchases/duty + 所有页面渲染,
+      // 旧的 refreshAll() 只刷 items/purchases,会导致 readings/charges 页面不更新。
+      await renderAll();
     } else {
       // macOS 原生 App: 用目录路径恢复
       const ok = await showModal({
@@ -567,7 +569,8 @@ async function datamgmtRestore() {
         return;
       }
       showAlert(`✅ 已恢复 ${res.restored.length} 个数据文件;恢复前数据已备份到 ${res.pre_backup}`, 'success');
-      await refreshAll();
+      // 同样改用 renderAll() 全量刷新(macOS 路径)
+      await renderAll();
     }
   } catch (e) {
     btn.textContent = original;

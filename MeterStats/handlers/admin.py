@@ -13,7 +13,7 @@ from handlers.settings import (
     get_settings, save_settings, init_settings, verify_password,
     add_user, update_user, delete_user, ROLES,
 )
-from handlers.backup import _get_backup_retention_count
+from handlers.backup import _get_backup_retention_count, _merge_settings_after_restore
 from storage import log
 
 
@@ -586,11 +586,16 @@ def handle_post_restore_upload(handler):
                     restored.append(name)
                     log(f"  恢复 {name} <- {src_file}")
 
-            # 恢复 settings.json
+            # 恢复 settings.json:合并业务字段,保留目标环境的部署字段(backup_dir 等)
             settings_src = extract_dir / "settings.json"
             if settings_src.exists():
-                shutil.copy2(settings_src, target_dir / "settings.json")
-                restored.append("settings.json")
+                try:
+                    import json as _json
+                    src_settings = _json.loads(settings_src.read_text(encoding="utf-8"))
+                    _merge_settings_after_restore(target_dir, src_settings)
+                    restored.append("settings.json")
+                except Exception as e:
+                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
 
         send_json(handler, 200, {
             "ok": True,

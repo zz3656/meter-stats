@@ -14,6 +14,59 @@ from utils import send_json, read_body
 from storage import backup_data, DATA_FILES, log
 
 
+# settings.json 中属于"部署环境配置"的字段,备份时不应包含(避免恢复到其他机器时破坏部署)
+# 这些字段在每台机器/容器上独立配置,不是业务数据
+_BACKUP_EXCLUDED_SETTINGS_KEYS = frozenset({
+    "backup_dir",              # 宿主机绝对路径
+    "backup_retention_count",  # 保留天数
+})
+
+
+def _filter_settings_for_backup(settings: dict) -> dict:
+    """备份 settings 时,移除与部署环境相关的字段(backup_dir 等)。
+
+    目的:手动备份的 zip 可以安全地恢复到任何机器/Docker 容器,而不会破坏目标环境的部署配置。
+    """
+    return {k: v for k, v in settings.items() if k not in _BACKUP_EXCLUDED_SETTINGS_KEYS}
+
+
+def _merge_settings_after_restore(target_dir: Path, src_settings: dict) -> None:
+    """恢复 settings 时,合并而非整体覆盖:保留目标环境独有的部署字段(如 backup_dir)。
+
+    策略:
+    - 目标目录没有 settings.json:直接写入(全新环境)。
+    - 否则,以目标目录现有 settings.json 为准,只覆盖其中**业务字段**,
+      保留 target 中部署相关字段(backup_dir、backup_retention_count 等)。
+    """
+    target_settings_path = target_dir / "settings.json"
+    incoming = _filter_settings_for_backup(src_settings)
+    if not target_settings_path.exists():
+        target_settings_path.write_text(
+            json.dumps(incoming, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        log(f"  [RESTORE] 目标无 settings.json,直接写入(已剥离部署字段)")
+        return
+    try:
+        existing = json.loads(target_settings_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        log(f"  [WARN] 读取目标 settings.json 失败 {e},直接覆盖")
+        target_settings_path.write_text(
+            json.dumps(incoming, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return
+    # 合并:用 incoming 的字段覆盖 existing 中的同名业务字段,
+    # 但保留 existing 中 _BACKUP_EXCLUDED_SETTINGS_KEYS 内的部署字段。
+    for k, v in incoming.items():
+        existing[k] = v
+    target_settings_path.write_text(
+        json.dumps(existing, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    log(f"  [RESTORE] 合并 settings.json:覆盖业务字段,保留部署字段(backup_dir/backup_retention_count)")
+
+
 def _get_data_paths():
     import app_handler as _h
     return _h.DATA_PATHS
@@ -132,13 +185,26 @@ def handle_post_backup(handler):
             if src.exists():
                 shutil.copy2(src, backup_dir / name)
         if settings_src.exists():
-            shutil.copy2(settings_src, backup_dir / "settings.json")
+            # settings.json 仅备份业务字段,不包含部署环境字段(backup_dir 等),
+            # 这样手动备份 zip 可以安全恢复到任何机器/docker 容器,不破坏目标环境配置。
+            try:
+                settings_data = json.loads(settings_src.read_text(encoding="utf-8"))
+                safe_settings = _filter_settings_for_backup(settings_data)
+                (backup_dir / "settings.json").write_text(
+                    json.dumps(safe_settings, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+                log(f"[BACKUP] 手动备份 settings.json 已剥离部署字段: "
+                    f"{_BACKUP_EXCLUDED_SETTINGS_KEYS & set(settings_data.keys())}")
+            except Exception as e:
+                log(f"[WARN] 读取 settings 失败,跳过剥离: {e}")
 
-        # 2. 打包为 ZIP（同时打包临时目录中的数据和 zip 自身）
+        # 2. 打包为 ZIP（只打包数据文件,不包含 zip 自身 0 字节空文件）
         zip_path = backup_dir / zip_filename
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for f in backup_dir.rglob('*'):
-                if f.is_file():
+            for f in sorted(backup_dir.iterdir()):
+                # 只打包数据文件和剥离后的 settings.json,跳过 zip_path 自身
+                if f.is_file() and f != zip_path:
                     zf.write(f, f.name)
 
         # 3. 将 zip 移到备份父目录（避免被 rmtree 误删），再清理临时目录
@@ -207,11 +273,15 @@ def handle_post_restore(handler):
                     restored.append(name)
                     log(f"  恢复 {name} <- {src_file}")
 
-            # 恢复 settings.json
+            # 恢复 settings.json:合并业务字段,保留部署环境字段(backup_dir 等)
             settings_src = extract_dir / "settings.json"
             if settings_src.exists():
-                shutil.copy2(settings_src, target_dir / "settings.json")
-                restored.append("settings.json")
+                try:
+                    src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
+                    _merge_settings_after_restore(target_dir, src_settings)
+                    restored.append("settings.json")
+                except Exception as e:
+                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
 
         send_json(handler, 200, {
             "ok": True,
@@ -277,10 +347,15 @@ def handle_post_upload(handler):
                     shutil.copy2(src, target_dir / name)
                     names.append(name)
                     log(f"  恢复 {name} <- {src}")
+            # settings.json: 合并业务字段,保留部署字段(避免覆盖目标环境的 backup_dir 等)
             settings_src = extract_dir / "settings.json"
             if settings_src.exists():
-                shutil.copy2(settings_src, target_dir / "settings.json")
-                names.append("settings.json")
+                try:
+                    src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
+                    _merge_settings_after_restore(target_dir, src_settings)
+                    names.append("settings.json")
+                except Exception as e:
+                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
         return names
 
     if "multipart/form-data" in content_type:
@@ -337,6 +412,25 @@ def handle_post_upload(handler):
                     continue
             elif fname in DATA_FILES.values() or fname == "settings.json":
                 dest = target_dir / fname
+                # settings.json 走合并分支:保留目标环境的部署字段(backup_dir 等)
+                if fname == "settings.json":
+                    try:
+                        if isinstance(content, (list, dict)):
+                            src_settings = content
+                        elif isinstance(content, str):
+                            src_settings = json.loads(content)
+                        else:
+                            raise ValueError(f"settings.json 内容类型不支持: {type(content)}")
+                        _merge_settings_after_restore(target_dir, src_settings)
+                        log(f"  合并 settings.json → {dest}")
+                    except Exception as e:
+                        log(f"  [WARN] 合并 settings.json 失败,降级为直接覆盖: {e}")
+                        if isinstance(content, (list, dict)):
+                            dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+                        elif isinstance(content, str):
+                            dest.write_text(content, encoding="utf-8")
+                    restored.append("settings.json")
+                    continue
                 if isinstance(content, (list, dict)):
                     dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
                 elif isinstance(content, str):
