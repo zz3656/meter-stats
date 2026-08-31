@@ -66,7 +66,8 @@ jobs:
       # ── 构建 .app ──────────────────────────────────────────
       - name: Build with Swift Package Manager
         run: |
-          echo "${VERSION}" > MeterStats/VERSION
+          # $GITHUB_ENV 写入的是小写 'version',后续 shell 步骤统一用 $version 引用
+          echo "${version}" > MeterStats/VERSION
           find MeterStats -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 
           # 通用二进制(arm64 + x86_64),失败回退宿主架构
@@ -194,7 +195,8 @@ jobs:
       - name: Create DMG
         run: |
           APP="products/${APP_NAME}.app"
-          DMG_NAME="${APP_NAME}-${VERSION}-macos.dmg"
+          # 之前用 ${VERSION} 是空字符串,导致文件名变 MeterStats--macos.dmg;改用 $version
+          DMG_NAME="${APP_NAME}-${version}-macos.dmg"
           STAGING="/tmp/dmg-staging"
           rm -rf "$STAGING"
           mkdir -p "$STAGING"
@@ -220,7 +222,7 @@ jobs:
             echo "⏭️ 未配置 APPLE_NOTARIZATION_APPLE_ID，跳过公证"
             exit 0
           fi
-          DMG="products/${APP_NAME}-${VERSION}-macos.dmg"
+          DMG="products/${APP_NAME}-${version}-macos.dmg"
           echo "📤 提交公证..."
           xcrun notarytool submit "$DMG" \
             --apple-id "$APPLE_ID" --password "$APP_PASSWORD" \
@@ -236,7 +238,7 @@ jobs:
             exit 0
           fi
           APP="products/${APP_NAME}.app"
-          DMG="products/${APP_NAME}-${VERSION}-macos.dmg"
+          DMG="products/${APP_NAME}-${version}-macos.dmg"
           xcrun stapler staple "$APP" 2>&1 || echo "⚠️ 票据附加失败"
           xcrun stapler staple "$DMG" 2>&1 || echo "⚠️ 票据附加失败"
 
@@ -266,7 +268,7 @@ jobs:
         run: |
           set -e
           TAG="latest"
-          echo "==> 发布 Release: $TAG (MeterStats v${VERSION}, commit ${SHA:0:7})"
+          echo "==> 发布 Release: $TAG (MeterStats v${version}, commit ${SHA:0:7})"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "ℹ️ Release $TAG 已存在,删除后重建"
@@ -333,7 +335,7 @@ jobs:
 
           gh release create "$TAG" products/*.dmg \
             --target "$SHA" \
-            --title "MeterStats v${VERSION}" \
+            --title "MeterStats v${version}" \
             --notes "$NOTES" \
             --latest
 
