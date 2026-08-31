@@ -14,6 +14,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SERVER_PY="$SCRIPT_DIR/server.py"
 LOG_FILE="$SCRIPT_DIR/.server.log"
 DATA_DIR="$SCRIPT_DIR/.data"
@@ -165,6 +166,22 @@ cmd_cleanup() {
     rm -rf "$DATA_DIR"
     echo "✅ 已清理"
 }
+
+# ---------- 初始化 ----------
+
+# 设置 commit message 模板(.gitmessage),让 git commit 自动加载 conventional 规范
+# 仓库根的 .gitmessage 含 type/scope/影响范围 完整说明 + 示例
+# 仅第一次生效,后续跳过(已设置就不再提示)
+setup_git_template() {
+    if [ -f "$REPO_ROOT/.gitmessage" ] && [ -d "$REPO_ROOT/.git" ]; then
+        if ! git -C "$REPO_ROOT" config --local --get commit.template >/dev/null 2>&1; then
+            git -C "$REPO_ROOT" config --local commit.template "$REPO_ROOT/.gitmessage"
+            echo "✅ 已设置 commit message 模板: .gitmessage (仅本仓库)"
+        fi
+    fi
+}
+
+setup_git_template
 
 # ---------- 主入口 ----------
 

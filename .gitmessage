@@ -1,0 +1,46 @@
+# <type>(<scope>): <subject>                  ← 必填,第1行(50 字符内)
+#
+# 空一行
+#
+# <body>                                     ← 选填,描述改动的动机和效果
+#
+# 空一行
+#
+# 影响范围(选填,release notes 会解析):
+#   - web: <描述>
+#   - macOS: <描述>
+#   - docker: <描述>
+#   - 三端: <描述>     ← 如果三端都受影响
+#
+# 验证步骤(选填,reviewer 友好):
+#   1. ...
+#   2. ...
+#
+# =================================================================
+# type 必填 ∈ {feat, fix, refactor, perf, docs, chore, ci, build, test}
+# scope 选填 ∈ {web, macos, docker, backend, deploy, ci, repo, ...}
+#         也支持别名: mac → macos, frontend → web, container → docker
+#
+# 注意:第 1 行会被 release notes 抓取作为标题,
+#       body 多行内容会被解析为详细说明,
+#       形如 "- web: ..." / "- macOS: ..." 的行会被识别为影响范围。
+# =================================================================
+#
+# 示例:
+#
+# fix(backup): 手动备份恢复数据到 docker 不生效
+#
+# 根因:datamgmtRestore 恢复后调用 refreshAll() 只刷 items/purchases,
+# 不刷新 readings/charges/图表等页面
+#
+# 修复:
+#   1. 改用 renderAll() 全量刷新
+#   2. 备份时剥除 settings.json 部署字段
+#
+# 影响范围:
+#   - web: 浏览器需要强制刷新
+#   - docker: 需要重启容器拉新镜像
+#
+# 验证步骤:
+#   1. 上传 zip 看是否成功恢复
+#   2. 浏览器刷新看 readings/charges 是否显示

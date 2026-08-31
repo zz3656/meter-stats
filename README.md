@@ -207,7 +207,10 @@ docker compose up -d --build
 ./build-app.sh release --install
 
 # 提交规范:用约定式提交(feat / fix / refactor / docs / style)
-git commit -m "feat: 简述"
+# 仓库根目录的 .gitmessage 是 commit 模板,首次跑 ./MeterStats/run.sh 会自动设置
+# 详细规范见 CONTRIBUTING.md § 提交规范
+git commit  # 自动加载模板,提示 type/scope/影响范围
+git commit -m "feat: 简述"  # 快速提交(跳过模板)
 ```
 
 ## 📝 故障排查

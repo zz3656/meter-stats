@@ -81,16 +81,87 @@ docker compose exec meter-stats bash
 
 ## 提交规范
 
-参考 [Conventional Commits](https://www.conventionalcommits.org/)：
+参考 [Conventional Commits](https://www.conventionalcommits.org/)。
+
+仓库根目录有 `.gitmessage` 模板文件,已配置为 git 的 commit template,
+运行 `git commit` 时会自动加载。模板里有详细说明和示例。
+
+### 格式
 
 ```
-feat: 添加电表充值功能
-fix: 修复月报计算偏移问题
-docs: 更新 README 部署章节
-refactor: 重构路由模块
-test: 添加备份测试
-chore: 更新依赖
+<type>(<scope>): <subject>      ← 必填,首行 ≤ 50 字符
+<空行>
+<body>                          ← 选填,描述改动动机和效果
+<空行>
+影响范围(选填,release notes 会解析):
+  - web: ...
+  - macOS: ...
+  - docker: ...
+  - 三端: ...
 ```
+
+### type 必填
+
+| type | 说明 | 影响 release notes 分类 |
+|---|---|---|
+| `feat` | 新功能 | ✨ feat |
+| `fix` | 问题修复 | 🐛 fix |
+| `perf` | 性能优化 | ⚡ perf |
+| `refactor` | 重构(非功能) | ♻️ refactor |
+| `docs` | 文档 | 📖 docs |
+| `ci` | CI/CD | 🚀 ci |
+| `build` | 构建系统 | 📦 build |
+| `test` | 测试 | ✅ test |
+| `chore` | 其他杂项 | 🔧 chore |
+
+### scope 选填
+
+用于标识改动的影响范围,会让 release notes **按 scope 二级分组**:
+
+| scope | 说明 | release notes 显示 |
+|---|---|---|
+| `web` / `frontend` | Web/Docker 前端 | 🌐 Web/Docker 前端 |
+| `macos` / `mac` / `mac-app` | macOS 原生 App | 🍎 macOS 原生 App |
+| `docker` / `container` | Docker 部署 | 🐳 Docker 部署 |
+| `backend` / `server` | 后端 Python | 📦 backend |
+| `deploy` / `release` | 部署/CDN | 🚀 部署/CDN |
+| `ci` / `workflow` | GitHub Actions | 🚀 CI/CD |
+
+### 示例
+
+```
+feat(charges): 支持批量导入历史充值记录
+
+用户反馈需要从 Excel 批量导入历史充值数据,
+避免手工逐条录入。
+
+修复:
+  1. 新增 POST /api/charges/batch,接受 JSON 数组
+  2. 前端 charges-batch.html 上传 Excel 解析后调用
+
+影响范围:
+  - web: 需要重新加载页面
+  - 三端: 后端 API 升级,需重启服务
+
+验证步骤:
+  1. 准备 5 条 JSON 测试数据
+  2. POST /api/charges/batch 看是否全部写入
+  3. 页面刷新看 charges 列表
+```
+
+### 简写(type only,scope 省略)
+
+不重要的改动可以省略 scope,会落入"未分类"子节:
+
+```
+fix: 拼写错误
+chore: 清理调试代码
+```
+
+### 一次性 type(scope)
+
+`git commit` 没设 hook 时,如果你不想用模板,可以手动写。
+编辑器注释行(`#` 开头)在 commit 时会被 git 自动删除。
 
 ## 报告问题
 
