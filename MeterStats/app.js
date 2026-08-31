@@ -307,15 +307,17 @@ function initAutoBackupToggle() {
   cb.checked = getAutoBackupEnabled();
 }
 
-// 数据管理弹窗
+// 数据管理弹窗(已废弃:数据管理改为独立页面,统一通过 admin.js 实现)
+// 保留函数以防有外部代码还在调用,内部用 null check 防止报错
 function openDataMgmtModal() {
-  // 初始化自动备份开关
   initAutoBackupToggle();
   loadDataMgmtBackupDir();
-  document.getElementById('datamgmt-modal-backdrop').classList.add('show');
+  const backdrop = document.getElementById('datamgmt-modal-backdrop');
+  if (backdrop) backdrop.classList.add('show');
 }
 function closeDataMgmtModal() {
-  document.getElementById('datamgmt-modal-backdrop').classList.remove('show');
+  const backdrop = document.getElementById('datamgmt-modal-backdrop');
+  if (backdrop) backdrop.classList.remove('show');
 }
 
 // 数据管理弹窗: 加载备份目录配置
@@ -368,9 +370,10 @@ async function datamgmtResetBackupDir() {
   }
 }
 
-// 手动备份(从数据管理弹窗调用)
+// 手动备份(从数据管理弹窗调用,已废弃:数据管理改为独立页面,统一走 adminBackup)
 async function datamgmtBackup() {
   const btn = document.getElementById('datamgmt-backup-btn');
+  if (!btn) return;  // 元素不存在(已迁移到独立页面),静默返回
   const original = btn.textContent;
   btn.textContent = '⏳ 备份中…';
   btn.disabled = true;
@@ -509,9 +512,10 @@ function showBrowserFilePicker(mode, callback) {
   input.click();
 }
 
-// 恢复数据(从数据管理弹窗调用)
+// 恢复数据(从数据管理弹窗调用,已废弃:统一走 adminRestore,通过 admin.js 实现)
 async function datamgmtRestore() {
   const btn = document.getElementById('datamgmt-restore-btn');
+  if (!btn) return;  // 元素不存在(已迁移到独立页面),静默返回
   const original = btn.textContent;
   try {
     const dir = await pickBackupDir();

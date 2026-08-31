@@ -531,7 +531,7 @@ async function restoreBackup(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    renderAll && renderAll();
+    if (window.renderAll) window.renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   }
@@ -586,7 +586,7 @@ async function adminRestoreFromZip(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    renderAll && renderAll();
+    if (window.renderAll) window.renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
@@ -640,7 +640,7 @@ async function datamgmtRestoreFromZip(zipName) {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    renderAll && renderAll();
+    if (window.renderAll) window.renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
@@ -695,7 +695,7 @@ async function adminBackup() {
 }
 
 async function adminRestore() {
-  // 弹出文件选择器，选择本地 ZIP 备份文件
+  // 弹出文件选择器(三端统一:macOS 用 Swift 桥,web/docker 用 <input>)
   const zipFile = await pickZipFile();
   if (!zipFile) {
     showAlert('未选择文件', 'info');
@@ -719,8 +719,15 @@ async function adminRestore() {
   if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
 
   try {
+    // base64 zip → 转成 Blob → 用 multipart/form-data 上传(后端 /api/admin/restore-upload 期望 File/Blob)
+    const byteChars = atob(zipFile.content);
+    const bytes = new Uint8Array(byteChars.length);
+    for (let i = 0; i < byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+    const blob = new Blob([bytes], { type: 'application/zip' });
+    const file = new File([blob], zipFile.name, { type: 'application/zip' });
+
     const formData = new FormData();
-    formData.append('zip_file', zipFile);
+    formData.append('zip_file', file);
 
     const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
       method: 'POST',
@@ -735,7 +742,7 @@ async function adminRestore() {
 
     showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
     closeAdminPanel();
-    renderAll && renderAll();
+    if (window.renderAll) window.renderAll();
   } catch (e) {
     showAlert('恢复失败: ' + e.message, 'error');
   } finally {
@@ -743,16 +750,47 @@ async function adminRestore() {
   }
 }
 
-// 选择 ZIP 文件
+// 选择 ZIP 文件(三端统一)
+// - macOS 原生 App: WKWebView + Swift 桥(macOSPickFile)弹 NSOpenPanel 选 zip
+// - Web/Docker: 标准 <input type="file">
+// 返回 Promise<{name, content} | null>;失败/取消 resolve(null)
 function pickZipFile() {
   return new Promise(resolve => {
+    // macOS App: 通过 Swift 桥弹原生文件选择器(避免 WKWebView input.click 静默失败)
+    const hasSwiftBridge = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSPickFile;
+    if (hasSwiftBridge) {
+      window.__macOSFileChosen = info => {
+        window.__macOSFileChosen = null;
+        resolve(info);  // {name, content: base64} 或 null
+      };
+      window.webkit.messageHandlers.macOSPickFile.postMessage({ accept: '.zip' });
+      return;
+    }
+    // Web/Docker: 标准 <input type="file">
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.zip';
-    input.onchange = () => {
-      const file = input.files && input.files[0];
-      resolve(file || null);
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    const cleanup = () => {
+      if (input.parentNode) input.parentNode.removeChild(input);
     };
+    input.addEventListener('change', () => {
+      const file = input.files && input.files[0];
+      cleanup();
+      if (!file) { resolve(null); return; }
+      // 读为 ArrayBuffer → base64,与 macOS 桥返回的格式保持一致
+      const reader = new FileReader();
+      reader.onload = () => {
+        const bytes = new Uint8Array(reader.result);
+        let bin = '';
+        for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+        resolve({ name: file.name, content: btoa(bin) });
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsArrayBuffer(file);
+    });
+    input.addEventListener('cancel', () => { cleanup(); resolve(null); });
     input.click();
   });
 }

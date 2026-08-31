@@ -1,7 +1,7 @@
 import SwiftUI
 import WebKit
 
-// WKWebView 消息处理器:前端请求弹出系统目录选择器(备份用)
+// WKWebView 消息处理器:前端请求弹出系统目录选择器(备份目录设置用)
 final class BackupDirHandler: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
 
@@ -30,6 +30,86 @@ final class BackupDirHandler: NSObject, WKScriptMessageHandler {
         } else {
             // 用户取消 → 回传 null,前端回退默认目录
             webView?.evaluateJavaScript("window.__backupDirChosen && window.__backupDirChosen(null);", completionHandler: nil)
+        }
+    }
+}
+
+// WKWebView 消息处理器:前端请求弹出系统文件选择器(恢复备份选 zip 文件用)
+//
+// 为什么需要这个桥?
+// macOS WKWebView 默认不实现 WKUIDelegate.runOpenPanel,导致 <input type="file"> 的
+// .click() 调用静默失败(用户看不到任何反馈)。实现 WKUIDelegate 是修复方案之一,但
+// 走 Swift 桥调用 NSOpenPanel 更直接、和现有架构一致。
+//
+// 协议: JS postMessage({ accept: ".zip" }),Swift 弹文件选择器,返回
+// { name, content } (base64) 或 null(用户取消)。
+final class PickFileHandler: NSObject, WKScriptMessageHandler {
+    weak var webView: WKWebView?
+
+    init(webView: WKWebView) {
+        self.webView = webView
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "macOSPickFile" else { return }
+        // 解析前端传入的过滤扩展名(默认 .zip)
+        var acceptExts: [String] = ["zip"]
+        if let body = message.body as? [String: Any], let accept = body["accept"] as? String {
+            acceptExts = accept.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: ".", with: "") }
+        }
+
+        let panel = NSOpenPanel()
+        panel.title = "选择备份文件"
+        panel.message = "请选择一个 ZIP 备份文件"
+        panel.prompt = "选择"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = acceptExts.isEmpty ? [.zip] : acceptExts.compactMap { ext in
+            switch ext.lowercased() {
+            case "zip": return .zip
+            case "json": return .json
+            default: return nil
+            }
+        }
+
+        if panel.runModal() == .OK, let url = panel.url {
+            // 读取文件内容 → base64 编码 → 回传 JS
+            // ⚠️ 大文件需要分块读取避免一次性读入内存爆掉;但备份 zip 通常几 MB,
+            // 一次性读取可接受。
+            do {
+                let data = try Data(contentsOf: url)
+                let base64 = data.base64EncodedString()
+                // JSON 序列化:{name, content}
+                let payload: [String: Any] = ["name": url.lastPath, "content": base64]
+                let jsonData = try JSONSerialization.data(withJSONObject: payload, options: [])
+                let jsonStr = String(data: jsonData, encoding: .utf8) ?? "null"
+                webView?.evaluateJavaScript("window.__macOSFileChosen && window.__macOSFileChosen(\(jsonStr));", completionHandler: nil)
+            } catch {
+                webView?.evaluateJavaScript("window.__macOSFileChosen && window.__macOSFileChosen(null);", completionHandler: nil)
+            }
+        } else {
+            // 用户取消
+            webView?.evaluateJavaScript("window.__macOSFileChosen && window.__macOSFileChosen(null);", completionHandler: nil)
+        }
+    }
+}
+
+// 实现 WKUIDelegate: 让 <input type="file"> 也能正常弹原生文件选择器
+// 作为 macOSPickFile Swift 桥的兜底(任何 <input type="file"> 都会走这里)
+final class WebViewUIDelegate: NSObject, WKUIDelegate {
+    func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = parameters.allowsMultipleSelection
+        // 允许 zip / json / 文本类文件
+        panel.allowedContentTypes = [.zip, .json, .plainText, .text]
+
+        if panel.runModal() == .OK {
+            completionHandler(panel.urls)
+        } else {
+            completionHandler(nil)
         }
     }
 }
@@ -225,6 +305,10 @@ struct ContentView: View {
             let wv = WKWebView(frame: .zero, configuration: cfg)
             wv.setValue(false, forKey: "drawsBackground")
             userContentController.add(BackupDirHandler(webView: wv), name: "pickBackupDir")
+            // macOS 选文件桥(恢复数据时选 zip)
+            userContentController.add(PickFileHandler(webView: wv), name: "macOSPickFile")
+            // WKUIDelegate: 让所有 <input type="file"> 也能弹原生选择器(兜底)
+            wv.uiDelegate = WebViewUIDelegate()
             let req = URLRequest(url: URL(string: "http://localhost:8765")!)
             wv.load(req)
             self.webView = wv
