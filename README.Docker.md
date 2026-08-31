@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `1c0f17b` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `c94acca` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -272,8 +272,6 @@ ebde2e)
 
 #### 🚀 CI/CD
 
-- 修复 build-dmg gh release create 行被误删 (1c0f17b)
-
 - build-dmg shell 步骤改用 $version 取版本号($VERSION 为空) (
 c8a474)
   > 之前 $GITHUB_ENV 写入的是 'version=0.1.0' (小写),但 Create DMG/Notarize/
@@ -342,6 +340,23 @@ a2c621)
 bbbcea)
 ### 📖 docs
 
+#### 📦 repo
+
+- 加 commit message 模板(.gitmessage)提升 release notes 质量 (c94acca)
+  > 仓库根添加 .gitmessage 模板,基于 conventional commits 规范,
+  > 含完整 type(scope)/body/影响范围说明和示例。
+  > MeterStats/run.sh 首次启动时自动 git config --local commit.template 设置,
+  > 无需手动配置。
+  > 详细规范文档同步更新到 CONTRIBUTING.md § 提交规范:
+  **影响范围**:
+  - 三端: 无功能变化,仅提升开发体验和 release notes 质量
+  - web: README.md 提交说明更新
+  - macos: .gitmessage 模板对 macOS 开发者同样生效
+  - docker: 不影响容器构建
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+0fd8f0)
+
 - 重写 README + DockerHub 描述;清理冗余文件 (
 3c6afb)
   ## 删除冗余(从仓库移除)
@@ -351,6 +366,9 @@ bbbcea)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+1c0f17b908b780afdb3a8ec40c66b7e06dadff84 ()
+  > fix(ci): 修复 build-dmg gh release create 行被误删
 - 
 547d79ef3985f8398cba0308a0da3a959dfd1ffd ()
   > ci(release): 用结构化 commit 解析生成详细 release notes + 同步 Docker README
@@ -365,5 +383,5 @@ bbbcea)
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...1c0f17b)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...c94acca)
 
