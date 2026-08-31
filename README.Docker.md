@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `1672b66` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `099fb8f` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -314,15 +314,6 @@ e53d93)
   > 修复:
   > 1. Swift 新增 PickFileHandler: macOSPickFile WKScriptMessage,
 
-#### 📦 Release
-
-- 无 git tag 时 release notes 只取最近一个 commit (1672b66)
-  > 之前用 'git rev-list --max-parents=0 HEAD' 找根 commit 作为起点,
-  > 导致没有 tag 的项目,每次 release 都列出所有历史 commits
-  > (几十条),用户体验差。
-  > 改为:无 tag 时 fallback 到 HEAD~1(只取最新一个 commit);
-  > 单 commit 仓库 fallback 到 'HEAD'(全部)。
-
 #### 📦 swift
 
 - url.lastPath → url.lastPathComponent (
@@ -349,6 +340,8 @@ a2c621)
 bbbcea)
 ### 📖 docs
 
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (099fb8f)
+
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 6c20ea)
 
@@ -364,6 +357,9 @@ bbbcea)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+1672b6670f007c3cfa689a1841aeb7062c300595 ()
+  > fix(release): 无 git tag 时 release notes 只取最近一个 commit
 - 
 c94accace30e6e06fde6220cd8db5de14f51419f ()
   > docs(repo): 加 commit message 模板(.gitmessage)提升 release notes 质量
@@ -384,5 +380,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...1672b66)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...099fb8f)
 
