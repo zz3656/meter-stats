@@ -14,6 +14,12 @@ ROOT = Path(__file__).resolve().parent
 # 端口由 server.py 设置
 PORT = 8765
 
+# 静态文件版本 token:启动时由 server.py 计算并设置到这里,
+# 用于在 index.html 注入 ?v=<token> 绕过 CDN 缓存。
+# 注意:存在 app_handler 里而不是 server,因为用 python3 server.py 启动时
+# __main__ 和 sys.modules['server'] 是两个不同模块对象,设到 server 会丢失。
+STATIC_VERSION_TOKEN: str = None
+
 # 数据文件映射 (由 server.py main() 设置)
 DATA_PATHS: dict = {
     "readings": None,
@@ -75,6 +81,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_static(self, method: str):
         path = self.path
+        # 去掉 query string(用于 ?v=<token> 绕过 CDN 缓存)
+        if "?" in path:
+            path = path.split("?", 1)[0]
 
         if path == "/" or path == "":
             path = "/index.html"
@@ -102,10 +111,38 @@ class Handler(BaseHTTPRequestHandler):
         elif file_path.suffix == ".json":
             mime = "application/json; charset=utf-8"
 
-        body = file_path.read_bytes()
+        is_html = file_path.suffix == ".html"
+        is_js_or_css = file_path.suffix in (".js", ".css")
+
+        if is_html:
+            # index.html 走动态注入:把启动时计算的 ?v=<token> 加到 <script>/<link>
+            # 这样 CDN(如 Cloudflare)缓存的旧 app.js 永远用不到,新版本每次都能加载。
+            html = file_path.read_text(encoding="utf-8")
+            if STATIC_VERSION_TOKEN:
+                import re
+                def _add_v(match):
+                    attr = match.group(1)
+                    quote = match.group(2)
+                    src = match.group(3)
+                    if src.startswith(("https://", "http://", "//")):
+                        return match.group(0)
+                    if "?" in src:
+                        return match.group(0)
+                    return f'{attr}={quote}{src}?v={STATIC_VERSION_TOKEN}{quote}'
+                html = re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
+            body = html.encode("utf-8")
+        else:
+            body = file_path.read_bytes()
+
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(body)))
+        # ⚠️ 关键: js/css/html 都不要缓存(避免 CDN/浏览器缓存旧版代码)
+        # Cloudflare 默认会缓存这些静态文件,即使我们没有显式声明 cache-control。
+        if is_html or is_js_or_css:
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
         from utils import CORS
         for k, v in CORS.items():
             self.send_header(k, v)

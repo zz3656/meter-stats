@@ -58,6 +58,53 @@ def _write_pid(data_dir: Path):
     pid_file.write_text(str(os.getpid()), encoding="utf-8")
 
 
+# index.html 里 <script src="app.js"> → <script src="app.js?v=<TOKEN>"> 中的 token
+# 启动时根据 app.js/admin.js/style.css 的内容哈希生成;文件改动 → token 变 →
+# 浏览器/CDN 看到新 URL,绕过缓存回源拉新文件。
+# 这是修复 CDN(如 Cloudflare)缓存导致前端看不到代码修复的关键机制。
+VERSION_TOKEN = None
+
+
+def compute_version_token():
+    """根据 app.js / admin.js / style.css 的内容哈希生成版本 token。"""
+    import hashlib
+    files = ["app.js", "admin.js", "style.css", "index.html"]
+    h = hashlib.sha256()
+    root = Path(__file__).resolve().parent
+    for fname in files:
+        p = root / fname
+        if p.exists():
+            try:
+                h.update(p.read_bytes())
+            except OSError:
+                pass
+    # 取前 8 位 hex(短 token,够用)
+    return h.hexdigest()[:8]
+
+
+def inject_version_to_html(html: str, token: str = None) -> str:
+    """在 index.html 的 <script>/<link> 标签里加 ?v=<TOKEN>,破坏 CDN 缓存。
+
+    重要场景:容器重启后,如果 CDN(如 Cloudflare)缓存了旧 app.js,用户浏览器
+    会一直拿到旧代码导致 bug 修不好。注入版本 token 后,index.html 引用变成
+    app.js?v=abc123,URL 变化 → 浏览器/CDN 必须回源拉新文件。
+    """
+    tok = token or VERSION_TOKEN
+    if not tok:
+        return html
+    import re
+    def _add_v(match):
+        attr = match.group(1)  # src / href
+        quote = match.group(2)
+        src = match.group(3)
+        if src.startswith(("https://", "http://", "//")):
+            return match.group(0)
+        if "?" in src:
+            return match.group(0)
+        return f'{attr}={quote}{src}?v={tok}{quote}'
+    return re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
+
+
 def _remove_pid():
     """清理 PID 文件。"""
     from storage import get_data_dir
@@ -71,6 +118,21 @@ def _remove_pid():
 
 def main():
     data_dir = get_data_dir()
+
+    # 计算版本 token(用于绕过 CDN 缓存,在 app_handler 渲染 index.html 时注入)
+    token = compute_version_token()
+    from storage import log as _log
+    _log(f"  静态资源版本 token: v={token} (启动时根据 JS/CSS/HTML 内容哈希生成)")
+    # 设到 app_handler.STATIC_VERSION_TOKEN(而不是 server 模块的 VERSION_TOKEN)
+    # 因为 python3 server.py 启动时 __main__ 和 sys.modules['server'] 是不同对象。
+    # 同时也设 server 模块(双保险)。
+    global VERSION_TOKEN
+    VERSION_TOKEN = token
+    try:
+        import app_handler as _ah
+        _ah.STATIC_VERSION_TOKEN = token
+    except Exception:
+        pass
 
     # 初始化数据文件并获取文件映射
     data_paths = init_data_files(data_dir)
