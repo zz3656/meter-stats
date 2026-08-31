@@ -81,7 +81,7 @@ final class PickFileHandler: NSObject, WKScriptMessageHandler {
                 let data = try Data(contentsOf: url)
                 let base64 = data.base64EncodedString()
                 // JSON 序列化:{name, content}
-                let payload: [String: Any] = ["name": url.lastPath, "content": base64]
+                let payload: [String: Any] = ["name": url.lastPathComponent, "content": base64]
                 let jsonData = try JSONSerialization.data(withJSONObject: payload, options: [])
                 let jsonStr = String(data: jsonData, encoding: .utf8) ?? "null"
                 webView?.evaluateJavaScript("window.__macOSFileChosen && window.__macOSFileChosen(\(jsonStr));", completionHandler: nil)
