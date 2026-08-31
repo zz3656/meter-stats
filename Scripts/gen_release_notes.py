@@ -13,15 +13,22 @@ def main() -> int:
     sha = os.environ["SHA"]
     sha_short = sha[:7]
 
+    # 解析上次发布点(从哪个 commit 起算新增):
+    # 优先用最新 tag;无 tag 时用 HEAD~1(最近一个 commit),避免把整个历史算进去
     prev_tag = subprocess.run(
         ["git", "describe", "--tags", "--abbrev=0", "HEAD~1"],
         capture_output=True, text=True).stdout.strip()
-    if not prev_tag:
-        prev_tag = subprocess.run(
-            ["git", "rev-list", "--max-parents=0", "HEAD"],
-            capture_output=True, text=True).stdout.strip()
 
-    rng = f"{prev_tag}..HEAD" if prev_tag and prev_tag != "HEAD" else "HEAD"
+    if prev_tag:
+        rng = f"{prev_tag}..HEAD"
+    else:
+        prev_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD~1"],
+            capture_output=True, text=True).stdout.strip()
+        if prev_sha:
+            rng = f"{prev_sha}..HEAD"
+        else:
+            rng = "HEAD"  # 单 commit 仓库
 
     # 用 %B 拿完整 body,commits 之间用 NUL 分隔
     log_raw = subprocess.run(
