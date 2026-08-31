@@ -278,7 +278,11 @@ jobs:
           # 生成结构化更新说明
           # 脚本独立维护在 scripts/gen_release_notes.py,避免 heredoc 嵌套 + YAML 解析问题
           git fetch --prune --unshallow --tags origin 2>/dev/null || git fetch --tags origin 2>/dev/null || true
-          NOTES=$(python3 scripts/gen_release_notes.py)
+          set -x  # 调试:显示 python3 实际输出
+          NOTES=$(python3 scripts/gen_release_notes.py 2>&1)
+          set +x
+          echo "[DEBUG] NOTES length: ${#NOTES}"
+          echo "[DEBUG] NOTES first 200 chars: ${NOTES:0:200}"
 
           gh release create "$TAG" products/*.dmg \
             --target "$SHA" \
