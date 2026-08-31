@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `dc81fe2` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `29b8a79` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -271,6 +271,13 @@ ebde2e)
   > 恢复到 docker 容器会把容器 backup_dir 覆盖为无效路径
 
 #### 🚀 CI/CD
+
+- NOTES=$(...) 不再合并 stderr(2>&1),避免 set -x 调试污染 (29b8a79)
+  > 之前 NOTES=$(python3 scripts/gen_release_notes.py 2>&1) 用 2>&1 把
+  > stderr 也合到 NOTES 变量。配合 set -x 调试,会在 NOTES 里混入:
+  > ++ python3 scripts/gen_release_notes.py
+  > + NOTES='## 📦 ...'
+  > gh release create --notes "$NOTES" 发布时,GitHub 收到的 notes
 
 - build-dmg shell 步骤改用 $version 取版本号($VERSION 为空) (
 c8a474)
@@ -341,6 +348,9 @@ bbbcea)
 ### 📖 docs
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
+2f165f)
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
 e19fdd)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
@@ -356,13 +366,11 @@ e19fdd)
   > - Info.plist(根目录):与 MeterStats/Info.plist 重复(bundle 用的是后者)
   > - DEPLOY_FNOS.md:内容已合并到 README.md
   > - DO-HUB-TOKEN-GUIDE.md:同上
-### 🚀 ci
-
-#### 📦 Release
-
-- 加调试输出确认 NOTES 生成 (dc81fe2)
 ### 📝 其他改动
 
+- 
+dc81fe25cbe447830ed668c6933d7df6fb2f2ed3 ()
+  > ci(release): 加调试输出确认 NOTES 生成
 - 
 1001533d92f6b4594aaac6e05affc8f3bf1b4d03 ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -395,5 +403,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...dc81fe2)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...29b8a79)
 
