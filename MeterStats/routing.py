@@ -7,6 +7,10 @@ from utils import send_json
 from handlers.readings import (
     handle_get_readings, handle_post_readings, handle_put_readings, handle_delete_readings,
 )
+from handlers.readings_water import (
+    handle_get_readings_water, handle_get_readings_water_monthly,
+    handle_post_readings_water, handle_put_readings_water, handle_delete_readings_water,
+)
 from handlers.charges import (
     handle_get_charges, handle_post_charges, handle_put_charges, handle_delete_charges,
 )
@@ -41,6 +45,7 @@ from handlers.admin import (
     handle_post_backup_download, handle_post_backup_delete,
     handle_post_restore_upload,
     handle_get_dir_listing, handle_get_audit_log,
+    handle_get_migrate_status, handle_post_migrate_water,
 )
 
 _GET_ROUTES = {
@@ -51,6 +56,7 @@ _GET_ROUTES = {
     "/api/yearly-report": handle_get_yearly_report,
     "/api/monthly-utilities": handle_get_monthly_utilities,
     "/api/readings": handle_get_readings,
+    "/api/readings-water": handle_get_readings_water,
     "/api/charges": handle_get_charges,
     "/api/items": handle_get_items,
     "/api/purchases": handle_get_purchases,
@@ -65,8 +71,10 @@ _POST_PREFIX = {
     "/api/admin/restore-upload": handle_post_restore_upload,
     "/api/admin/backup-download": handle_post_backup_download,
     "/api/admin/backup-delete": handle_post_backup_delete,
+    "/api/admin/migrate-water": handle_post_migrate_water,
     "/api/charges": handle_post_charges,
     "/api/readings": handle_post_readings,
+    "/api/readings-water": handle_post_readings_water,
     "/api/auth/login": handle_post_login,
     "/api/admin/users": handle_post_users,
     "/api/items": handle_post_items,
@@ -80,6 +88,7 @@ _PUT_PREFIX = {
     "/api/purchases": handle_put_purchases,
     "/api/charges": handle_put_charges,
     "/api/readings": handle_put_readings,
+    "/api/readings-water": handle_put_readings_water,
     "/api/admin/users": handle_put_users,
     "/api/admin/meter": handle_put_meter_settings,
     "/api/admin/auto-backup": handle_put_auto_backup,
@@ -90,6 +99,7 @@ _PUT_PREFIX = {
 
 _DELETE_PREFIX = {
     "/api/readings": handle_delete_readings,
+    "/api/readings-water": handle_delete_readings_water,
     "/api/charges": handle_delete_charges,
     "/api/items": handle_delete_items,
     "/api/purchases": handle_delete_purchases,
@@ -110,6 +120,7 @@ _GET_ADMIN = {
     "/api/admin/backup-config": handle_get_backup_config,
     "/api/admin/dir-listing": handle_get_dir_listing,
     "/api/admin/audit": handle_get_audit_log,
+    "/api/admin/migrate-water": handle_get_migrate_status,
     "/api/admin/data-files": handle_get_data_files,
     "/api/admin/sessions": handle_get_sessions,
     "/api/admin/report-cache": handle_get_report_cache,

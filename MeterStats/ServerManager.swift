@@ -51,7 +51,7 @@ final class ServerManager {
         // (如 0.1.0 内部多次构建修复 UI),否则 runtime 会一直用旧文件。
         // 改为始终按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
 
-        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "index.html", "style.css", "app.js", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
+        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "app.js", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
         for filename in files {
             let src = bundleResources.appendingPathComponent(filename)
             let dst = runtime.appendingPathComponent(filename)

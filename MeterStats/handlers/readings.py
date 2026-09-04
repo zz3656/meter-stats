@@ -33,7 +33,9 @@ def handle_get_readings_monthly(handler):
 # ==================== POST ====================
 
 def handle_post_readings(handler):
-    """POST /api/readings"""
+    """POST /api/readings — 仅处理电表抄表(hall/fire/private_room/ac)。
+    水电表底(总表/分表/水表)已迁移至 /api/readings-water。
+    """
     body = read_body(handler)
     if not body.get("date"):
         send_json(handler, 400, {"error": "日期不能为空"})
@@ -44,29 +46,24 @@ def handle_post_readings(handler):
     fire = opt_float(body, "fire")
     private_room = opt_float(body, "private_room")
     ac = opt_float(body, "ac")
-    main_meter = opt_float(body, "main_meter")
-    sub_meter = opt_float(body, "sub_meter")
-    water = opt_float(body, "water")
     note = body.get("note", "")
 
-    if all(v is None for v in [hall, fire, private_room, ac]) and \
-       all(v is None for v in [main_meter, sub_meter, water]):
-        send_json(handler, 400, {"error": "四表/水电至少填一个"})
+    if all(v is None for v in [hall, fire, private_room, ac]):
+        send_json(handler, 400, {"error": "四表至少填一个"})
         return
 
     readings = _load_readings()
     idx = next((i for i, r in enumerate(readings) if r.get("date") == date), None)
 
     if idx is not None:
-        # 覆盖:表单没填的字段(null)保留旧值 — 补录水电时不会清掉已有 4 表读数
+        # 覆盖:表单没填的字段(null)保留旧值
         old = readings[idx]
         new_row = {
             "date": date,
             "hall": hall, "fire": fire, "private_room": private_room, "ac": ac,
-            "main_meter": main_meter, "sub_meter": sub_meter, "water": water,
             "note": note,
         }
-        for k in ("hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water"):
+        for k in ("hall", "fire", "private_room", "ac", "note"):
             if new_row[k] is None:
                 new_row[k] = old.get(k)
         readings[idx] = new_row
@@ -75,7 +72,6 @@ def handle_post_readings(handler):
         readings.append({
             "date": date,
             "hall": hall, "fire": fire, "private_room": private_room, "ac": ac,
-            "main_meter": main_meter, "sub_meter": sub_meter, "water": water,
             "note": note,
         })
         log(f"  ++ 新增抄表 {date}")
@@ -88,7 +84,9 @@ def handle_post_readings(handler):
 # ==================== PUT ====================
 
 def handle_put_readings(handler, path_clean: str):
-    """PUT /api/readings/{date}"""
+    """PUT /api/readings/{date} — 仅处理电表抄表字段。
+    水电字段不再支持通过此接口修改。
+    """
     date = path_clean[len("/api/readings/"):]
     body = read_body(handler)
     if not date:
@@ -101,10 +99,10 @@ def handle_put_readings(handler, path_clean: str):
         send_json(handler, 404, {"error": f"未找到 {date}"})
         return
 
-    for key in ["hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water", "note"]:
+    for key in ["hall", "fire", "private_room", "ac", "note"]:
         val = body.get(key)
         if val is not None:
-            if key in ("hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water"):
+            if key in ("hall", "fire", "private_room", "ac"):
                 existing[key] = opt_float(body, key)
             else:
                 existing[key] = val

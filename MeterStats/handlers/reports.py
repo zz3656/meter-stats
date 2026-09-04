@@ -60,7 +60,8 @@ def handle_get_export(handler):
     models = [m.strip() for m in models_str.split(",")]
 
     headers_map = {
-        "readings": ["date", "hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water", "note"],
+        "readings": ["date", "hall", "fire", "private_room", "ac", "note"],
+        "readings_water": ["date", "main_meter", "sub_meter", "water", "note"],
         "charges": ["id", "date", "hall", "fire", "private_room", "ac", "note"],
         "items": ["id", "name", "qty", "unit", "note", "created_at"],
         "purchases": ["id", "date", "name", "qty", "unit", "est_price", "supplier", "status", "note"],
@@ -118,21 +119,19 @@ def handle_get_monthly_utilities(handler):
     月度水电:总表/分表/厨房/水表(普通递增表,每月抄一次)。
     总表 ×50、分表 ×40 = 实际用电;厨房 = 总表实际 − 分表实际;
     电费 0.9 元/度,水费 4.5 元/吨。
+
+    水电数据从 readings_water.json 读取,独立于电表抄表数据。
     """
     qs = parse_qs(urlparse(handler.path).query)
     month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
     if not month or len(month) != 7:
         send_json(handler, 400, {"error": "需要 month 参数,格式: 2026-07"})
         return
-    readings = _load("readings")
-    cur_rs = sorted([r for r in readings if str(r.get("date", "")).startswith(month)],
+    # 从独立的水电表底文件读取
+    water_data = _load("readings_water")
+    cur_rs = sorted([r for r in water_data if str(r.get("date", "")).startswith(month)],
                     key=lambda r: r["date"])
-    # 该月是否有水电表底(总表/分表/水表任一);没有 → 提示未录入而非全 — 卡片
-    has_water_data = any(
-        r.get("main_meter") is not None or r.get("sub_meter") is not None or r.get("water") is not None
-        for r in cur_rs
-    )
-    if not cur_rs or not has_water_data:
+    if not cur_rs:
         send_json(handler, 200, {"month": month, "has_data": False,
                                  "msg": "该月未录入水电表底"})
         return
@@ -140,7 +139,7 @@ def handle_get_monthly_utilities(handler):
     y, m = int(month[:4]), int(month[5:7])
     py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
     prev_key = f"{py:04d}-{pm:02d}"
-    prev_rs = sorted([r for r in readings if str(r.get("date", "")).startswith(prev_key)],
+    prev_rs = sorted([r for r in water_data if str(r.get("date", "")).startswith(prev_key)],
                      key=lambda r: r["date"])
     cur = cur_rs[-1]
     has_prev = bool(prev_rs)

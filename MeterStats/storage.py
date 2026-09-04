@@ -21,7 +21,8 @@ from threading import RLock
 
 # 支持的模型: 数据文件映射
 DATA_FILES = {
-    "readings": "readings.json",
+    "readings": "readings.json",           # 电表抄表 (hall/fire/private_room/ac)
+    "readings_water": "readings_water.json", # 水电表底 (main_meter/sub_meter/water)
     "charges": "charges.json",
     "items": "items.json",
     "purchases": "purchases.json",
@@ -30,8 +31,6 @@ DATA_FILES = {
 
 # 每个模型的读写锁,避免 ThreadingHTTPServer 下并发写冲突
 _FILE_LOCKS: Dict[str, threading.Lock] = {name: threading.Lock() for name in DATA_FILES}
-
-
 def get_data_dir() -> Path:
     """确定数据目录。
 
