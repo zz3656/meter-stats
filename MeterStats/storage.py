@@ -12,9 +12,11 @@ import shutil
 import tempfile
 import threading
 import zipfile
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+from functools import lru_cache
+from threading import RLock
 
 
 # 支持的模型: 数据文件映射
@@ -27,7 +29,7 @@ DATA_FILES = {
 }
 
 # 每个模型的读写锁,避免 ThreadingHTTPServer 下并发写冲突
-_file_locks: Dict[str, threading.Lock] = {name: threading.Lock() for name in DATA_FILES}
+_FILE_LOCKS: Dict[str, threading.Lock] = {name: threading.Lock() for name in DATA_FILES}
 
 
 def get_data_dir() -> Path:
@@ -104,7 +106,17 @@ def init_data_files(data_dir: Path) -> dict:
         if not filepath.exists():
             save_json(filepath, [])
         files[model] = filepath
-    backup_data(data_dir)  # 启动时每日自动备份
+
+    # 启动时自动备份：使用后台线程，不阻塞 HTTP 服务。
+    # 如果备份目录在慢速磁盘（NFS、USB）上，ZIP 打包不应阻塞请求处理。
+    try:
+        import threading as _threading
+        t = _threading.Thread(target=backup_data, args=(data_dir,), daemon=True)
+        t.start()
+        log("  [AUTO-BACKUP] 后台线程启动自动备份（不阻塞服务）")
+    except Exception as e:
+        log(f"  [WARN] 启动自动备份后台线程失败: {e}")
+
     return files
 
 
@@ -150,7 +162,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
                 parent = data_dir / "backup"
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
-    utc_now = datetime.utcnow()
+    utc_now = datetime.now(timezone.utc)
     if force:
         stamp = utc_now.strftime("%Y%m%d_%H%M%S")
         backup_dir = parent / stamp
@@ -206,7 +218,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         retention_days = int(json.loads((data_dir / "settings.json").read_text(encoding="utf-8")).get("backup_retention_count", 5))
     except Exception:
         retention_days = 5
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     cutoff_ts = (now - timedelta(days=retention_days)).timestamp()
     for f in parent.rglob("*.zip"):
         if f.is_file() and not f.name.startswith("auto-bak-"):
@@ -243,7 +255,7 @@ def _cleanup_legacy_backups(backup_parent: Path) -> None:
 
 
 def log(msg: str) -> None:
-    utc_now = datetime.utcnow()
+    utc_now = datetime.now(timezone.utc)
     ts = utc_now.strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 
@@ -275,34 +287,107 @@ def _try_restore_from_backup(path: Path):
     return None
 
 
+# ============ JSON 文件缓存 ============
+
+# { path_str: (mtime_ns, data) }
+_json_cache: Dict[str, tuple] = {}
+_json_cache_lock = RLock()
+_JSON_CACHE_SIZE = 20  # 最多缓存 20 个文件
+
+def _cache_get(path_str: str):
+    """从缓存读取。返回 (mtime_ns, data) 或 (None, None)。"""
+    with _json_cache_lock:
+        entry = _json_cache.get(path_str)
+        if entry is not None:
+            return entry  # (mtime_ns, data)
+        return None, None
+
+def _cache_set(path_str: str, mtime_ns: int, data: list) -> None:
+    """写入缓存。LRU 策略：新写入插到末尾，淘汰最老的（字典头部）。"""
+    with _json_cache_lock:
+        _json_cache[path_str] = (mtime_ns, data)
+        # 超出容量时删除字典的第一个条目（最久未写入的）
+        while len(_json_cache) > _JSON_CACHE_SIZE:
+            _json_cache.pop(next(iter(_json_cache)), None)
+
+def _cache_invalidate(path_str: str) -> None:
+    """失效指定路径的缓存。"""
+    with _json_cache_lock:
+        _json_cache.pop(path_str, None)
+
+def _cache_clear() -> None:
+    """清除全部缓存。"""
+    with _json_cache_lock:
+        _json_cache.clear()
+
+
 def load_json(path: Path, default=None):
-    """加载 JSON,文件不存在或损坏时尝试从备份恢复。"""
+    """加载 JSON,文件不存在或损坏时尝试从备份恢复。
+
+    使用基于 mtime 的简单缓存：如果文件修改时间未变，直接返回缓存数据。
+    """
     if default is None:
         default = []
+
+    path_str = str(path.resolve())
+
+    # 优先查缓存
+    entry = _cache_get(path_str)
+    if entry[0] is not None:
+        cache_mtime, data = entry
+        # 验证 mtime
+        try:
+            actual_mtime = path.stat().st_mtime_ns
+            if cache_mtime == actual_mtime:
+                return data
+        except OSError:
+            pass
+
+    # 缓存未命中或文件已更新，从磁盘读取
     if not path.exists():
         restored = _try_restore_from_backup(path)
-        return restored if restored is not None else default
+        if restored is not None:
+            # 写入缓存
+            try:
+                _cache_set(path_str, path.stat().st_mtime_ns, restored)
+            except OSError:
+                pass
+            return restored
+        return default
+
     try:
         with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+        # 写入缓存
+        try:
+            _cache_set(path_str, path.stat().st_mtime_ns, data)
+        except OSError:
+            pass
+        return data
     except (json.JSONDecodeError, OSError) as e:
         log(f"[WARN] 加载 {path.name} 失败: {e},尝试从备份恢复")
         restored = _try_restore_from_backup(path)
-        return restored if restored is not None else default
+        if restored is not None:
+            return restored
+        return default
 
 
 def save_json(path: Path, data) -> None:
-    """原子写入:先写临时文件,再 rename,防止中途崩溃导致损坏。"""
+    """原子写入:先写临时文件,再 rename,防止中途崩溃导致损坏。
+
+    同时失效该路径的缓存。"""
     tmp = path.with_suffix(path.suffix + ".tmp")
     with tmp.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
     tmp.replace(path)
+    # 失效缓存
+    _cache_invalidate(str(path.resolve()))
     log(f"  OK {path.name} 已保存 ({len(data)} 条)")
 
 
 def get_lock(model: str) -> threading.Lock:
     """获取指定模型的读写锁。"""
-    return _file_locks.get(model, _file_locks["readings"])
+    return _FILE_LOCKS.get(model, _FILE_LOCKS["readings"])
 
 
 def get_all_model_names() -> List[str]:

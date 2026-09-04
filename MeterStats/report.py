@@ -2,33 +2,37 @@
 电表统计 — 月报计算引擎
 ================================
 从 readings.json + charges.json 计算月度逐日逐表用电度数。
+
+新增：月报缓存（内存），key = month_str → report_dict，TTL = 5 分钟。
 """
 from __future__ import annotations
 
 from calendar import monthrange
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import RLock
+
+from constants import METER_MULTIPLIERS, ELECTRICITY_PRICE as PRICE
 
 
 # 4 块表定义 (key / 标签 / 倍率)
 TABLES = [
-    {"key": "hall", "label": "1#大厅", "mult": 160},
-    {"key": "fire", "label": "2#消防", "mult": 1},
-    {"key": "private_room", "label": "3#包厢", "mult": 160},
-    {"key": "ac", "label": "4#空调", "mult": 160},
+    {"key": "hall", "label": "1#大厅", "mult": METER_MULTIPLIERS["hall"]},
+    {"key": "fire", "label": "2#消防", "mult": METER_MULTIPLIERS["fire"]},
+    {"key": "private_room", "label": "3#包厢", "mult": METER_MULTIPLIERS["private_room"]},
+    {"key": "ac", "label": "4#空调", "mult": METER_MULTIPLIERS["ac"]},
 ]
-PRICE = 0.9  # 元/度
 
 
 def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     """计算指定月份的逐日逐表用电度数。
 
-    参数:
-        month: "YYYY-MM" 格式
-
-    返回:
-        {"month": str, "days": [...], "summary": {...}}
+    带内存缓存（5 分钟 TTL）：相同月份和数据的请求直接返回缓存。
     """
+    # 尝试缓存
+    cached = _get_cached_report(month)
+    if cached is not None:
+        return cached
     # 解析月份
     year, mon = int(month[:4]), int(month[5:7])
     _, days_in_month = monthrange(year, mon)
@@ -143,7 +147,7 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
 
     month_total_cost = round(month_total_kwh * PRICE, 2)
 
-    return {
+    result = {
         "month": month,
         "days": days,
         "summary": {
@@ -154,17 +158,19 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
             "price": PRICE,
         },
     }
+    _cache_report(month, result)
+    return result
 
 
 def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
     """计算指定年份的月度汇总(12 个月,复用月度报告引擎)。
 
-    参数:
-        year: "2026" 格式(4 位数字)
-
-    返回:
-        {"year": str, "months": [...], "year_total_kwh": float, "year_total_cost": float}
+    带内存缓存（5 分钟 TTL）。
     """
+    cache_key = f"yearly:{year}"
+    cached = _get_cached_report(cache_key)
+    if cached is not None:
+        return cached
     months = []
     year_total_kwh = 0.0
     year_total_cost = 0.0
@@ -184,9 +190,64 @@ def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
             year_total_kwh += s["total_kwh"]
             year_total_cost += s["total_cost"]
 
-    return {
+    result = {
         "year": year,
         "months": months,
         "year_total_kwh": round(year_total_kwh, 1),
         "year_total_cost": round(year_total_cost, 2),
     }
+    _cache_report(cache_key, result)
+    return result
+
+
+# ============ 月报缓存 ============
+
+# { month_str: (cache_time, report_data) }
+_report_cache: dict = {}
+_report_cache_lock = RLock()
+_REPORT_CACHE_TTL = 5 * 60  # 5 分钟
+
+def _cache_report(month: str, report: dict) -> None:
+    """将月报结果写入缓存。"""
+    now = datetime.now(timezone.utc).timestamp()
+    with _report_cache_lock:
+        _report_cache[month] = (now, report)
+
+def _get_cached_report(month: str) -> dict | None:
+    """从缓存获取月报。返回 None 表示缓存未命中或已过期。"""
+    now = datetime.now(timezone.utc).timestamp()
+    with _report_cache_lock:
+        entry = _report_cache.get(month)
+        if entry is None:
+            return None
+        cache_time, data = entry
+        if now - cache_time > _REPORT_CACHE_TTL:
+            del _report_cache[month]
+            return None
+        return data
+
+def _invalidate_report_cache() -> None:
+    """清除月报缓存（数据更新时调用）。"""
+    with _report_cache_lock:
+        _report_cache.clear()
+
+
+def _get_report_cache_stats() -> dict:
+    """获取缓存统计（仅管理员查看）。"""
+    with _report_cache_lock:
+        now = datetime.now(timezone.utc).timestamp()
+        entries = []
+        for month, (cache_time, data) in _report_cache.items():
+            age = now - cache_time
+            entries.append({
+                "month": month,
+                "age_seconds": round(age, 0),
+                "ttl_minutes": _REPORT_CACHE_TTL // 60,
+                "valid": age <= _REPORT_CACHE_TTL,
+            })
+        return {"size": len(entries), "ttl_minutes": _REPORT_CACHE_TTL // 60, "entries": entries}
+
+
+# Public API
+invalidate_report_cache = _invalidate_report_cache
+get_report_cache_stats = _get_report_cache_stats

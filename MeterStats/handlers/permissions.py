@@ -13,7 +13,7 @@
 """
 from __future__ import annotations
 
-from handlers.admin import _SESSIONS, get_settings
+from handlers.admin import get_session, _touch_session
 from handlers.settings import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE
 
 # 角色等级
@@ -38,7 +38,10 @@ def check_permission(operation: str):
         def wrapper(handler, *args, **kwargs):
             # 获取当前用户 session
             token = _get_token(handler)
-            sess = _SESSIONS.get(token) if token else None
+            sess = get_session(token) if token else None
+
+            if sess:
+                _touch_session(token)  # 活跃会话使用 => 重置 TTL
 
             if not sess:
                 from utils import send_json

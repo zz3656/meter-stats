@@ -822,3 +822,65 @@ function getAuthParam() {
 
 // 页面加载时初始化
 initAuth();
+// ===== CSV 数据导入 =====
+async function doImport() {
+  const btn = document.getElementById('import-btn');
+  const resultEl = document.getElementById('import-result');
+  const fileInput = document.getElementById('import-file');
+  const model = document.getElementById('import-model').value;
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 请选择 CSV 文件</span>';
+    return;
+  }
+  if (!token) {
+    resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 未登录</span>';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 导入中...';
+  resultEl.innerHTML = '⏳ 正在解析...';
+
+  const formData = new FormData();
+  formData.append('model', model);
+  formData.append('file', fileInput.files[0]);
+
+  try {
+    const resp = await fetch('/api/import', {
+      method: 'POST',
+      headers: { 'X-Auth-Token': token },
+      body: formData,
+    });
+    const data = await resp.json();
+    btn.disabled = false;
+    btn.textContent = '📤 导入 CSV';
+
+    if (data.ok) {
+      let html = `<span style="color:#22c55e;">✅ 成功导入 ${data.count} 条记录</span>`;
+      if (data.failed > 0) {
+        html += `<br><span style="color:#f59e0b;">⚠️ ${data.failed} 条错误:</span>`;
+        if (data.errors) {
+          data.errors.forEach((e, i) => {
+            html += `<br><span style="color:#f59e0b;">  ${i+1}. ${escapeHtml(e)}</span>`;
+          });
+        }
+      }
+      resultEl.innerHTML = html;
+      // 刷新相关数据
+      loadBackupList();
+    } else {
+      resultEl.innerHTML = `<span style="color:#ef4444;">❌ ${escapeHtml(data.error || '导入失败')}</span>`;
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '📤 导入 CSV';
+    resultEl.innerHTML = `<span style="color:#ef4444;">❌ 网络错误: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}

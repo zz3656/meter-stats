@@ -9,6 +9,8 @@ from __future__ import annotations
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+from utils.api import inject_version_to_html as _inject_version_to_html
+
 ROOT = Path(__file__).resolve().parent
 
 # 端口由 server.py 设置

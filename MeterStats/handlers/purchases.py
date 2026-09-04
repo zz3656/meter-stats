@@ -2,33 +2,34 @@
 from __future__ import annotations
 
 from datetime import datetime
-from urllib.parse import parse_qs, urlparse
-
 from utils import send_json, read_body
-from storage import log, load_json, save_json, get_lock
+
+_now = datetime.now
+from storage import log, load_json, save_json
+from handlers._base import get_data_paths, get_lock
+from report import invalidate_report_cache as _invalidate_report_cache
 
 
-def _get_data_paths():
-    import app_handler as _h
-    return _h.DATA_PATHS
+def _load_purchases() -> list:
+    return load_json(get_data_paths()["purchases"], [])
 
 
-def _get(model: str):
-    return load_json(_get_data_paths().get(model), [])
-
-
-def _save(model: str, data):
-    lock = get_lock(model)
+def _save_purchases(data):
+    lock = get_lock("purchases")
     with lock:
-        save_json(_get_data_paths().get(model), data)
+        save_json(get_data_paths()["purchases"], data)
 
+
+# ==================== GET ====================
 
 def handle_get_purchases(handler):
     """GET /api/purchases"""
-    send_json(handler, 200, _get("purchases"))
+    send_json(handler, 200, _load_purchases())
 
 
-def handle_post_purchases(handler, path_clean: str = ""):
+# ==================== POST ====================
+
+def handle_post_purchases(handler):
     """POST /api/purchases — 添加申购记录"""
     body = read_body(handler)
     name = body.get("name")
@@ -43,10 +44,11 @@ def handle_post_purchases(handler, path_clean: str = ""):
     if est_price < 0:
         send_json(handler, 400, {"error": "预估金额不能为负数"})
         return
-    purchases = _get("purchases")
+    purchases = _load_purchases()
+    now = _now()
     new_purchase = {
-        "id": f"purchase-{int(datetime.now().timestamp() * 1000)}",
-        "date": body.get("date", datetime.now().strftime("%Y-%m-%d")),
+        "id": f"purchase-{int(now.timestamp() * 1000)}",
+        "date": body.get("date", now.strftime("%Y-%m-%d")),
         "name": name,
         "qty": float(qty),
         "unit": body.get("unit", ""),
@@ -56,12 +58,14 @@ def handle_post_purchases(handler, path_clean: str = ""):
         "status": "pending",
     }
     purchases.append(new_purchase)
-    _save("purchases", purchases)
+    _save_purchases(purchases)
     log(f"  OK 新增申购 {name}")
     send_json(handler, 200, {"ok": True, "row": new_purchase})
 
 
-def handle_put_purchases(handler, path_clean: str = ""):
+# ==================== PUT ====================
+
+def handle_put_purchases(handler, path_clean: str):
     """PUT /api/purchases/{id} — 编辑申购记录"""
     iid = path_clean[len("/api/purchases/"):] if path_clean and path_clean != "/api/purchases" else ""
     body = read_body(handler)
@@ -69,24 +73,18 @@ def handle_put_purchases(handler, path_clean: str = ""):
         send_json(handler, 400, {"error": "缺少申购记录 id"})
         return
 
-    purchases = _get("purchases")
+    purchases = _load_purchases()
     found = False
     for purchase in purchases:
         if purchase.get("id") == iid:
-            if "name" in body:
-                purchase["name"] = body["name"]
-            if "qty" in body:
-                purchase["qty"] = float(body["qty"])
-            if "est_price" in body:
-                purchase["est_price"] = float(body["est_price"])
-            if "unit" in body:
-                purchase["unit"] = body["unit"]
-            if "supplier" in body:
-                purchase["supplier"] = body["supplier"]
-            if "note" in body:
-                purchase["note"] = body["note"]
-            if "status" in body:
-                purchase["status"] = body["status"]
+            for key in ("name", "qty", "est_price", "unit", "supplier", "note", "status"):
+                if key in body:
+                    if key in ("qty", "est_price"):
+                        purchase[key] = float(body[key])
+                    elif key == "status":
+                        purchase[key] = body[key]
+                    else:
+                        purchase[key] = body[key]
             found = True
             log(f"  OK 编辑申购 {purchase['name']}")
             break
@@ -95,14 +93,17 @@ def handle_put_purchases(handler, path_clean: str = ""):
         send_json(handler, 404, {"error": f"未找到 {iid}"})
         return
 
-    _save("purchases", purchases)
+    _save_purchases(purchases)
     send_json(handler, 200, {"ok": True, "purchases": purchases})
 
 
+# ==================== 入库 ====================
+
 def handle_put_purchases_stock(handler, path_clean: str):
     """PUT /api/purchases/{id}/stock"""
+    from handlers.items import _load_items, _save_items
     pid = path_clean[len("/api/purchases/"):-len("/stock")]
-    purchases = _get("purchases")
+    purchases = _load_purchases()
     idx = next((i for i, p in enumerate(purchases) if p.get("id") == pid), None)
     if idx is None:
         send_json(handler, 404, {"error": f"未找到 {pid}"})
@@ -111,37 +112,41 @@ def handle_put_purchases_stock(handler, path_clean: str):
     if p["status"] == "stocked":
         send_json(handler, 400, {"error": "已经入库过了"})
         return
-    items = _get("items")
+    now = _now()
+    items = _load_items()
     existing = next((it for it in items if it["name"] == p["name"]), None)
     if existing:
         existing["qty"] = float(existing["qty"]) + float(p["qty"])
         if p.get("unit"):
             existing["unit"] = p["unit"]
-        log(f"  OK 累加 {p['name']}: {p['qty']} -> {existing['qty']} {existing['unit']}")
+        log(f"  OK 累加 {p['name']}: {p['qty']} -> {existing['qty']} {existing.get('unit', '')}")
     else:
         items.append({
-            "id": f"item-{int(datetime.now().timestamp() * 1000)}",
+            "id": f"item-{int(now.timestamp() * 1000)}",
             "name": p["name"],
             "qty": float(p["qty"]),
             "unit": p.get("unit", ""),
             "note": f"从申购 {pid} 自动入库",
-            "created_at": datetime.now().isoformat(),
+            "created_at": now.isoformat(),
         })
         log(f"  OK 新增 {p['name']}: {p['qty']} {p.get('unit', '')}")
     purchases[idx]["status"] = "stocked"
-    _save("items", items)
-    _save("purchases", purchases)
+    _save_items(items)
+    _save_purchases(purchases)
+    _invalidate_report_cache()
     send_json(handler, 200, {"ok": True, "purchase": purchases[idx]})
 
+
+# ==================== DELETE ====================
 
 def handle_delete_purchases(handler, path_clean: str):
     """DELETE /api/purchases/{id}"""
     pid = path_clean[len("/api/purchases/"):]
-    purchases = _get("purchases")
+    purchases = _load_purchases()
     new = [p for p in purchases if p.get("id") != pid]
     if len(new) == len(purchases):
         send_json(handler, 404, {"error": f"未找到 {pid}"})
         return
-    _save("purchases", new)
+    _save_purchases(new)
     log(f"  -- 删除申购 {pid}")
     send_json(handler, 200, {"ok": True})

@@ -3,34 +3,30 @@ from __future__ import annotations
 
 from datetime import datetime
 from urllib.parse import parse_qs, urlparse
-from report import (
-    PRICE as ELECTRICITY_PRICE,
-    calculate_monthly_report,
-    calculate_yearly_report,
-)
+from report import calculate_monthly_report, calculate_yearly_report
+from constants import ELECTRICITY_PRICE as ELECTRICITY_PRICE_CONST, WATER_PRICE, MAIN_METER_MULT, SUB_METER_MULT
 from utils import send_json
-from storage import log, load_json, save_json, DATA_FILES, get_all_model_names, get_lock
+from storage import log, load_json, DATA_FILES, get_all_model_names, get_lock
+from handlers._base import get_data_paths
 
-def _get_data_paths():
-    import app_handler as _h
-    return _h.DATA_PATHS
 
-def _get(model: str):
-    return load_json(_get_data_paths().get(model), [])
+def _load(model: str) -> list:
+    """从 DATA_PATHS 加载指定模型的数据。"""
+    return load_json(get_data_paths().get(model), [])
 
 
 def handle_get_health(handler):
     """GET /api/health"""
-    data_dir = _get_data_paths().get("readings")
+    data_dir = get_data_paths().get("readings")
     counts = {}
     parent = None
     if data_dir:
         parent = data_dir.parent
         for name in get_all_model_names():
-            fp = _get_data_paths().get(name)
+            fp = get_data_paths().get(name)
             if fp:
                 try:
-                    counts[name] = len(load_json(fp))
+                    counts[name] = len(_load(name))
                 except Exception:
                     counts[name] = 0
             else:
@@ -44,7 +40,7 @@ def handle_get_health(handler):
 
 def handle_get_snapshot(handler):
     """GET /api/snapshot — 一次性返回所有模型数据,前端启动时用一次调用代替 5 次 GET。"""
-    paths = _get_data_paths()
+    paths = get_data_paths()
     payload = {}
     for name in get_all_model_names():
         fp = paths.get(name)
@@ -94,8 +90,8 @@ def handle_get_monthly_report(handler):
     """GET /api/monthly-report?month=2026-07"""
     qs = parse_qs(urlparse(handler.path).query)
     month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
-    readings = _get("readings")
-    charges = _get("charges")
+    readings = _load("readings")
+    charges = _load("charges")
     report = calculate_monthly_report(readings, charges, month)
     send_json(handler, 200, report)
 
@@ -104,10 +100,16 @@ def handle_get_yearly_report(handler):
     """GET /api/yearly-report?year=2026"""
     qs = parse_qs(urlparse(handler.path).query)
     year = qs.get("year", [str(datetime.now().year)])[0]
-    readings = _get("readings")
-    charges = _get("charges")
+    readings = _load("readings")
+    charges = _load("charges")
     report = calculate_yearly_report(readings, charges, year)
     send_json(handler, 200, report)
+
+
+def handle_get_report_cache(handler):
+    """GET /api/admin/report-cache — 查看月报缓存状态。"""
+    from report import get_report_cache_stats
+    send_json(handler, 200, get_report_cache_stats())
 
 
 def handle_get_monthly_utilities(handler):
@@ -122,7 +124,7 @@ def handle_get_monthly_utilities(handler):
     if not month or len(month) != 7:
         send_json(handler, 400, {"error": "需要 month 参数,格式: 2026-07"})
         return
-    readings = _get("readings")
+    readings = _load("readings")
     cur_rs = sorted([r for r in readings if str(r.get("date", "")).startswith(month)],
                     key=lambda r: r["date"])
     # 该月是否有水电表底(总表/分表/水表任一);没有 → 提示未录入而非全 — 卡片
@@ -150,14 +152,12 @@ def handle_get_monthly_utilities(handler):
         return round(max(cur_v - prev_v, 0), 1)  # 防负(换表/反装)
 
     # 读数差 × 倍率 = 实际用电(总表 ×50,分表 ×40)
-    MAIN_METER_MULT, SUB_METER_MULT = 50, 40
-    WATER_PRICE = 4.5
     main_raw = _diff(cur.get("main_meter"), prev.get("main_meter") if prev else None)
     sub_raw = _diff(cur.get("sub_meter"), prev.get("sub_meter") if prev else None)
     main_kwh = round(main_raw * MAIN_METER_MULT, 1) if main_raw is not None else None
     sub_kwh = round(sub_raw * SUB_METER_MULT, 1) if sub_raw is not None else None
     kitchen_kwh = round(main_kwh - sub_kwh, 1) if main_kwh is not None and sub_kwh is not None else None
-    kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE, 2) if kitchen_kwh is not None else None
+    kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE_CONST, 2) if kitchen_kwh is not None else None
     water_usage = _diff(cur.get("water"), prev.get("water") if prev else None)
     water_cost = round(water_usage * WATER_PRICE, 2) if water_usage is not None else None
 
@@ -176,7 +176,7 @@ def handle_get_monthly_utilities(handler):
         "kitchen_cost": kitchen_cost,
         "water_usage": water_usage,
         "water_cost": water_cost,
-        "price_electricity": ELECTRICITY_PRICE,
+        "price_electricity": ELECTRICITY_PRICE_CONST,
         "price_water": WATER_PRICE,
         "mult_main": MAIN_METER_MULT,
         "mult_sub": SUB_METER_MULT,

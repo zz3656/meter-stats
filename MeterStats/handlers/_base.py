@@ -10,14 +10,23 @@
     handle_post_items = ItemsHandler.handle_post
 
 如需自定义校验/转换，复写 _validate_post / _to_row 即可。
+
+额外工具:
+    get_data_paths()  — 全局获取 DATA_PATHS
 """
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Callable, Optional
+from typing import Any, Optional
 
 from storage import load_json, save_json, get_lock, log
 from utils import send_json, read_body
+
+
+def get_data_paths() -> dict:
+    """全局获取 DATA_PATHS 映射。"""
+    import app_handler as _h
+    return _h.DATA_PATHS
 
 
 class JsonModelHandler:

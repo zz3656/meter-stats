@@ -118,3 +118,80 @@ def validate_float(value, key: str = ""):
         return float(value)
     except (TypeError, ValueError):
         raise ValueError(f"字段 '{key}' 需要合法数字")
+
+
+# ---- ZIP Bomb 防护 ----
+# 最大解压缩总大小：100 MB
+ZIP_MAX_DECOMPRESSED_SIZE = 100 * 1024 * 1024
+# 最大单个文件名长度（防 Unicode 炸弹）
+ZIP_MAX_FILENAME_LEN = 512
+# 最大文件数量（防存档爆炸）
+ZIP_MAX_FILE_COUNT = 5000
+
+
+def inject_version_to_html(html: str, token: str) -> str:
+    """在 index.html 的 <script>/<link> 标签里加 ?v=<TOKEN>,破坏 CDN/浏览器缓存。
+
+    重要场景:容器重启后,如果 CDN 缓存了旧 app.js,用户浏览器
+    会一直拿到旧代码导致 bug 修不好。注入版本 token 后,index.html 引用变成
+    app.js?v=abc123,URL 变化 → 浏览器/CDN 必须回源拉新文件。
+    """
+    if not token:
+        return html
+    import re
+    def _add_v(match):
+        full = match.group(0)
+        attr = match.group(1)   # src / href
+        quote = match.group(2)  # " / '
+        src = match.group(3)
+        if src.startswith(("https://", "http://", "//")):
+            return full
+        if "?" in src:
+            return full
+        return f'{attr}={quote}{src}?v={token}{quote}'
+    return re.sub(r'(src|href)=("[^"]+"|' + r"'[^']+')" , _add_v, html)
+
+
+def _validate_zip_safely(zip_path, extract_to, max_size: int = ZIP_MAX_DECOMPRESSED_SIZE):
+    """安全解压 ZIP 文件，防止 ZIP Bomb 攻击。
+
+    - 检查每个成员的 uncompressed_size
+    - 累计总大小不超过 max_size
+    - 检查文件名长度
+    - 检查文件数量
+
+    返回: (extracted_dir, error_message | None)
+    """
+    import zipfile as zf_mod
+
+    with zf_mod.ZipFile(zip_path, 'r') as zf:
+        namelist = zf.namelist()
+
+        # 1. 文件数量检查
+        if len(namelist) > ZIP_MAX_FILE_COUNT:
+            return None, f"ZIP 包含 {len(namelist)} 个文件，超过上限 {ZIP_MAX_FILE_COUNT}"
+
+        # 2. 总大小检查
+        total_uncompressed = sum(info.file_size for info in zf.infolist())
+        if total_uncompressed > max_size:
+            return None, (
+                f"ZIP 解压总大小 {total_uncompressed / 1024 / 1024:.1f} MB，"
+                f"超过上限 {max_size / 1024 / 1024:.0f} MB"
+            )
+
+        # 3. 文件名长度检查
+        for name in namelist:
+            if len(name) > ZIP_MAX_FILENAME_LEN:
+                return None, f"文件名过长: {name[:80]}..."
+
+        # 4. 检查目录穿越
+        extract_to_resolved = Path(extract_to).resolve()
+        for name in namelist:
+            member_path = (extract_to_resolved / name).resolve()
+            if not str(member_path).startswith(str(extract_to_resolved)):
+                return None, f"目录穿越检测: {name}"
+
+        # 全部校验通过，安全解压
+        zf.extractall(extract_to)
+
+    return extract_to, None

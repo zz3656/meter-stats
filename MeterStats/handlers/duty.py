@@ -8,6 +8,8 @@ from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock
 from handlers._base import JsonModelHandler
 
+_now = datetime.now
+
 
 class _DutyHandler(JsonModelHandler):
     model = "duty"
@@ -29,10 +31,10 @@ class _DutyHandler(JsonModelHandler):
         # 自动添加时间（如果未提供）
         record_time = body.get("record_time", "").strip()
         if not record_time:
-            record_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            record_time = _now().strftime("%Y-%m-%d %H:%M:%S")
 
         return {
-            "id": datetime.now().strftime("%Y%m%d%H%M%S"),
+            "id": _now().strftime("%Y%m%d%H%M%S"),
             "duty_type": duty_type,
             "record_time": record_time,
             "shift": shift,

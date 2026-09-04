@@ -777,6 +777,24 @@
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">💡 手动备份每次点击都会新建(meter-backup- 前缀)，最多保留 10 个，超出自动删除最旧</div>
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
+          <span>📥 数据导入 (CSV)</span>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <select id="import-model" class="field-control" style="width:100%;">
+            <option value="readings">抄表读数 (readings)</option>
+            <option value="charges">充值记录 (charges)</option>
+            <option value="items">物品 (items)</option>
+            <option value="purchases">采购 (purchases)</option>
+          </select>
+        </div>
+        <div class="field" style="margin-bottom:10px;">
+          <input type="file" id="import-file" accept=".csv" class="field-control">
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="doImport()" style="width:100%;" id="import-btn">📤 导入 CSV</button>
+        <div id="import-result" style="font-size:12px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;min-height:20px;"></div>
+      </div>
+      <div class="settings-panel" style="margin-bottom:0;">
+        <div class="panel-title">
           <span>📁 备份列表</span>
           <button class="btn btn-secondary btn-xs" onclick="loadBackupList()">🔄 刷新</button>
         </div>

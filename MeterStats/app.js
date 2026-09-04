@@ -1,18 +1,47 @@
 
 'use strict';
 
+// ===== 工具函数 =====
+/** 安全获取 DOM 元素，不存在返回 null */
+const el = (id) => document.getElementById(id);
+
 // ===== 数据模型 =====
 // 数据存在后端 server.py,LocalStorage 只作为离线兜底(后端不可用时)
 const STORAGE_KEY_READINGS = 'meter_readings_v1';
 const STORAGE_KEY_CHARGES = 'meter_charges_v1';
-const MULTIPLIER = { hall: 160, fire: 1, private_room: 160, ac: 160 };
-const LABELS = { hall: '大厅', fire: '消防', private_room: '包厢', ac: '空调' };
-const COLORS = {
-  hall: '#2563eb',
-  fire: '#dc2626',
-  private_room: '#059669',
-  ac: '#d97706',
+
+// ===== 元数据（从 /api/meters 动态获取，含 fallback 默认值）=====
+let METER_CONFIG = {
+  hall:   { label: '大厅',   icon: '🎤', multiplier: 160, color: '#2563eb' },
+  fire:   { label: '消防',   icon: '🧯', multiplier: 1,   color: '#dc2626' },
+  private_room: { label: '包厢', icon: '🛋️', multiplier: 160, color: '#059669' },
+  ac:     { label: '空调',   icon: '❄️', multiplier: 160, color: '#d97706' },
 };
+
+// 快捷访问数组（保持顺序不变）
+const METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
+const METER_META = (key) => METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
+const MULTIPLIER = (key) => METER_META(key).multiplier;
+const LABELS = (key) => METER_META(key).label;
+const COLORS = (key) => METER_META(key).color;
+
+// 加载元数据（异步，不阻塞页面加载）
+async function loadMeterConfig() {
+  try {
+    const resp = await fetch('/api/meters', { credentials: 'same-origin' });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.meters) {
+        for (const [key, val] of Object.entries(data.meters)) {
+          METER_CONFIG[key] = { ...METER_CONFIG[key], ...val };
+        }
+        // 更新快捷访问
+      }
+    }
+  } catch (e) {
+    // 静默失败，使用默认值
+  }
+}
 
 // ===== 主题管理 =====
 const THEME_KEY = 'meter_theme_mode';
@@ -239,7 +268,7 @@ async function deleteDutyRemote(id) {
 
 // 同步本地缓存(写入成功后调)
 function realKwh(value, key) {
-  return value * MULTIPLIER[key];
+  return value * MULTIPLIER(key);
 }
 
 // ===== 渲染 =====
@@ -716,7 +745,7 @@ function updateStatusBar(readings, charges) {
   // 预警:剩余天数 < 7 的表数量
   let alertCount = 0;
   for (const m of CHARGE_METERS) {
-    const remaining = last[m.key] * MULTIPLIER[m.key];
+    const remaining = last[m.key] * MULTIPLIER(m.key);
     const usage = calcMonthlyDailyUsage(readings, charges, m.key);
     if (usage && usage.daily > 0 && remaining / usage.daily < 7) alertCount++;
   }
@@ -784,7 +813,7 @@ function calcMonthlyDailyUsage(readings, charges, meterKey) {
     const days = (new Date(b.date) - new Date(a.date)) / 86400000;
     if (days > 0) {
       const charged = sumChargesBetween(charges, meterKey, a.date, b.date);
-      const used = (a[meterKey] - b[meterKey]) * MULTIPLIER[meterKey] + charged;
+      const used = (a[meterKey] - b[meterKey]) * MULTIPLIER(meterKey) + charged;
       if (used > 0) {
         chosen = {
           daily: used / days,
@@ -818,7 +847,7 @@ function calcMonthDailyUsage(rows, charges, meterKey, monthLabel) {
     if (days <= 0) continue;
 
     // 表底差(度数,考虑倍率)
-    const readingDelta = (a[meterKey] - b[meterKey]) * MULTIPLIER[meterKey];
+    const readingDelta = (a[meterKey] - b[meterKey]) * MULTIPLIER(meterKey);
     // 这段时间内的充值度数(用户单独录入的)
     const charged = sumChargesBetween(charges, meterKey, a.date, b.date);
     // 实际用电 = 表底差 + 期间充值
@@ -896,7 +925,7 @@ function renderChargeAlert(readings, charges) {
 
     const latest = readings[readings.length - 1];
     const items = CHARGE_METERS.map(m => {
-      const multiplier = MULTIPLIER[m.key];
+      const multiplier = MULTIPLIER(m.key);
       const remaining = latest[m.key] * multiplier;
       const usage = calcMonthlyDailyUsage(readings, charges, m.key);
       let daysLeft = Infinity, dailyUsage = null, basisLabel = '', hasUsage = false;
@@ -1021,7 +1050,7 @@ function renderStats(readings, charges) {
     const cls = key === 'private_room' ? 'private' : key;
     html += `
       <div class="stat-card ${cls}">
-        <div class="label">${LABELS[key]}(当月)</div>
+        <div class="label">${LABELS(key)}(当月)</div>
         <div class="value">${monthUsage.toFixed(1)}<small>度</small></div>
         <div class="sub">日均 ${(monthUsage / monthDays).toFixed(1)}</div>
         <div class="sub" style="margin-top:6px; padding-top:6px; border-top:1px dashed var(--border-subtle)">
@@ -1308,32 +1337,32 @@ function renderTrendChart(readings, charges) {
 
   // 4 块表折线 + 4 条整月日均虚线 + 1 根充电点状 spike
   const datasets = [
-    { label: '大厅', data: dailyUsage.hall, borderColor: COLORS.hall, backgroundColor: COLORS.hall + '20',
+    { label: LABELS('hall'), data: dailyUsage.hall, borderColor: COLORS('hall'), backgroundColor: COLORS('hall') + '20',
       tension: 0.3, borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 5,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '消防', data: dailyUsage.fire, borderColor: COLORS.fire, backgroundColor: COLORS.fire + '20',
+    { label: LABELS('fire'), data: dailyUsage.fire, borderColor: COLORS('fire'), backgroundColor: COLORS('fire') + '20',
       tension: 0.3, borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 5,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '包厢', data: dailyUsage.private_room, borderColor: COLORS.private_room, backgroundColor: COLORS.private_room + '20',
+    { label: LABELS('private_room'), data: dailyUsage.private_room, borderColor: COLORS('private_room'), backgroundColor: COLORS('private_room') + '20',
       tension: 0.3, borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 5,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '空调', data: dailyUsage.ac, borderColor: COLORS.ac, backgroundColor: COLORS.ac + '20',
+    { label: LABELS('ac'), data: dailyUsage.ac, borderColor: COLORS('ac'), backgroundColor: COLORS('ac') + '20',
       tension: 0.3, borderWidth: 2.5, pointRadius: 2, pointHoverRadius: 5,
       fill: false, spanGaps: true, yAxisID: 'y' },
     { label: '充值', data: dailyCharge, borderColor: 'var(--warn)', backgroundColor: 'var(--warn)',
       borderWidth: 0, pointRadius: 6, pointHoverRadius: 8, pointStyle: 'rectRot',
       showLine: false, yAxisID: 'y2' },
     // 整月日均虚线 — 让短区间波动有参照基准
-    { label: '大厅日均', data: avgLineData(avgLines.hall), borderColor: COLORS.hall,
+    { label: '大厅日均', data: avgLineData(avgLines.hall), borderColor: COLORS('hall'),
       borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '消防日均', data: avgLineData(avgLines.fire), borderColor: COLORS.fire,
+    { label: '消防日均', data: avgLineData(avgLines.fire), borderColor: COLORS('fire'),
       borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '包厢日均', data: avgLineData(avgLines.private_room), borderColor: COLORS.private_room,
+    { label: '包厢日均', data: avgLineData(avgLines.private_room), borderColor: COLORS('private_room'),
       borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0,
       fill: false, spanGaps: true, yAxisID: 'y' },
-    { label: '空调日均', data: avgLineData(avgLines.ac), borderColor: COLORS.ac,
+    { label: '空调日均', data: avgLineData(avgLines.ac), borderColor: COLORS('ac'),
       borderWidth: 1.5, borderDash: [6, 4], pointRadius: 0,
       fill: false, spanGaps: true, yAxisID: 'y' },
   ];
@@ -1405,7 +1434,7 @@ function drawPieChart(canvasId, data, setChart) {
   const ctx = canvas.getContext('2d');
   const labels = ['hall', 'fire', 'private_room', 'ac'].map((k, i) => {
     const pct = data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : 0;
-    return `${LABELS[k]} (${pct}%)`;
+    return `${LABELS(k)} (${pct}%)`;
   });
   const chart = new Chart(ctx, {
     type: 'doughnut',
@@ -1413,7 +1442,7 @@ function drawPieChart(canvasId, data, setChart) {
       labels,
       datasets: [{
         data: data.usage,
-        backgroundColor: [COLORS.hall, COLORS.fire, COLORS.private_room, COLORS.ac],
+        backgroundColor: [COLORS('hall'), COLORS('fire'), COLORS('private_room'), COLORS('ac')],
         borderWidth: 2,
         borderColor: 'rgba(0,0,0,0.08)',
       }],
@@ -1476,10 +1505,10 @@ function renderDailyPie(dateStr) {
   // summary 文字
   const pct = (i) => total > 0 ? (usage[i] / total * 100).toFixed(1) : '0';
   summaryEl.innerHTML = `
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.hall}"></span>大厅 ${usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.fire}"></span>消防 ${usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.private_room}"></span>包厢 ${usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.ac}"></span>空调 ${usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('hall')}"></span>大厅 ${usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('fire')}"></span>消防 ${usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('private_room')}"></span>包厢 ${usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('ac')}"></span>空调 ${usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
   `;
 
   if (dailyPieChart) { dailyPieChart.destroy(); dailyPieChart = null; }
@@ -1503,10 +1532,10 @@ function renderMonthlyPie(monthKey) {
 
   const pct = (i) => data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : '0';
   summaryEl.innerHTML = `
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.hall}"></span>大厅 ${data.usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.fire}"></span>消防 ${data.usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.private_room}"></span>包厢 ${data.usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS.ac}"></span>空调 ${data.usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('hall')}"></span>大厅 ${data.usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('fire')}"></span>消防 ${data.usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('private_room')}"></span>包厢 ${data.usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
+    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('ac')}"></span>空调 ${data.usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
   `;
 
   if (monthlyPieChart) { monthlyPieChart.destroy(); monthlyPieChart = null; }
@@ -2605,8 +2634,8 @@ function calcMonthlyReport(readings, charges, monthKey) {
     totalUsage += usage;
     rows.push({
       meter: key,
-      label: LABELS[key],
-      multiplier: MULTIPLIER[key],
+      label: LABELS(key),
+      multiplier: MULTIPLIER(key),
       firstReading: first[key],
       lastReading: last[key],
       chargedKwh: charged,
@@ -3043,10 +3072,10 @@ function renderYearlyReport(data) {
     data: {
       labels: data.months.map(m => m.month.slice(5)),
       datasets: [
-        { label: '1#大厅', data: data.months.map(m => m.by_meter.hall), backgroundColor: COLORS.hall },
-        { label: '2#消防', data: data.months.map(m => m.by_meter.fire), backgroundColor: COLORS.fire },
-        { label: '3#包厢', data: data.months.map(m => m.by_meter.private_room), backgroundColor: COLORS.private_room },
-        { label: '4#空调', data: data.months.map(m => m.by_meter.ac), backgroundColor: COLORS.ac },
+        { label: '1#' + LABELS('hall'), data: data.months.map(m => m.by_meter.hall), backgroundColor: COLORS('hall') },
+        { label: '2#' + LABELS('fire'), data: data.months.map(m => m.by_meter.fire), backgroundColor: COLORS('fire') },
+        { label: '3#' + LABELS('private_room'), data: data.months.map(m => m.by_meter.private_room), backgroundColor: COLORS('private_room') },
+        { label: '4#' + LABELS('ac'), data: data.months.map(m => m.by_meter.ac), backgroundColor: COLORS('ac') },
       ],
     },
     options: {
@@ -3156,7 +3185,7 @@ function refreshChargeTopupSummary() {
   let items = [];
 
   for (const m of CHARGE_METERS) {
-    const multiplier = MULTIPLIER[m.key];
+    const multiplier = MULTIPLIER(m.key);
     const remaining = latest[m.key] * multiplier;
     const usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
     let daysLeft = Infinity;
@@ -3216,7 +3245,7 @@ function openTopupForMeter(meterKey) {
     const resultEl = document.getElementById('topup-result-modal');
     if (!daysEl || !resultEl) return;
     // 找到对应表的输入框
-    const meterInput = resultEl.querySelector(`.topup-meter[data-mult="${MULTIPLIER[meterKey]}"]`);
+    const meterInput = resultEl.querySelector(`.topup-meter[data-mult="${MULTIPLIER(meterKey)}"]`);
     if (meterInput) {
       meterInput.focus();
       meterInput.select();
@@ -3241,13 +3270,13 @@ function recalcTopup() {
     const usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
     const daily = usage ? usage.daily : 0;  // 实际度数/天
     const actualKwh = daily * days;          // 实际度数(读数 × 倍率)
-    const meterVal = actualKwh / MULTIPLIER[m.key];  // 表读数(充值录入值)
+    const meterVal = actualKwh / MULTIPLIER(m.key);  // 表读数(充值录入值)
     const yuan = actualKwh * ELECTRICITY_PRICE;
     totalMeter += meterVal;
     totalActual += actualKwh;
     totalYuan += yuan;
     const basis = usage ? `<span style="opacity:.7">${usage.basisLabel || '本月日均'}</span>` : '暂无日均数据';
-    const mult = MULTIPLIER[m.key];
+    const mult = MULTIPLIER(m.key);
     const daysLeft = daily > 0 ? (actualKwh / daily) : 0;
     return `
       <div class="topup-meter-card" data-daily="${daily.toFixed(4)}">
@@ -3801,7 +3830,9 @@ document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
 // 初始化:默认显示抄表记录
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme();
-  loadMonthlyReport();
+  loadMeterConfig().then(() => {
+    loadMonthlyReport();
+  });
   switchSection('reading-record');
 });
 

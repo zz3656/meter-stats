@@ -8,6 +8,8 @@ from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock
 from handlers._base import JsonModelHandler
 
+_now = datetime.now
+
 
 class _ItemsHandler(JsonModelHandler):
     model = "items"
@@ -20,12 +22,12 @@ class _ItemsHandler(JsonModelHandler):
         if qty is not None and qty < 0:
             return None, "数量不能为负数"
         return {
-            "id": f"item-{int(datetime.now().timestamp() * 1000)}",
+            "id": f"item-{int(_now().timestamp() * 1000)}",
             "name": name,
             "qty": float(qty) if qty is not None else 0,
             "unit": body.get("unit", ""),
             "note": body.get("note", ""),
-            "created_at": datetime.now().isoformat(),
+            "created_at": _now().isoformat(),
         }, None
 
 
@@ -61,10 +63,10 @@ def _load_items():
     return load_json(_h._path(), [])
 
 
-def _save_items(items):
+def _save_items(data):
     lock = get_lock("items")
     with lock:
-        save_json(_h._path(), items)
+        save_json(_h._path(), data)
 
 
 def handle_put_items_lend(handler, path_clean: str):
@@ -103,10 +105,10 @@ def handle_put_items_lend(handler, path_clean: str):
         item["lend_records"] = []
 
     lend_record = {
-        "id": f"lend-{int(datetime.now().timestamp() * 1000)}",
+        "id": f"lend-{int(_now().timestamp() * 1000)}",
         "borrower": borrower,
         "qty": qty,
-        "lend_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "lend_date": _now().strftime("%Y-%m-%d %H:%M:%S"),
         "return_date": None,
         "status": "lent",
         "note": note,
@@ -167,7 +169,7 @@ def handle_put_items_return(handler, path_clean: str):
         remaining -= ret_from_this
         if record_qty <= ret_from_this:
             record["status"] = "returned"
-            record["return_date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            record["return_date"] = _now().strftime("%Y-%m-%d %H:%M:%S")
             if note:
                 record["return_note"] = note
 
@@ -180,16 +182,20 @@ def handle_put_items_return(handler, path_clean: str):
 # ==================== 权限检查 ====================
 def _check_delete(handler):
     """检查删除权限（仅管理员和主管）。无 token 时放行(前端兼容)。"""
-    from handlers.permissions import _get_token, _SESSIONS
+    from handlers.permissions import check_delete_permission, _get_token
+    from handlers.admin import get_session, _touch_session
     from handlers.settings import ROLE_ADMIN, ROLE_SUPERVISOR
+    from utils import send_json
 
     token = _get_token(handler)
     if not token:
-        return
-    sess = _SESSIONS.get(token) if token else None
-    if not sess:
+        return  # 无 token 时放行
+    sess = get_session(token)
+    if sess:
+        _touch_session(token)  # 重置 TTL
+        if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
+            send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
+            return
+    else:
         send_json(handler, 401, {"error": "未登录"})
-        return
-    if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
-        send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
         return

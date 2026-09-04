@@ -4,6 +4,8 @@ from __future__ import annotations
 import datetime
 import os
 import secrets
+import threading
+import time
 import zipfile
 import tempfile
 import shutil
@@ -12,19 +14,173 @@ from utils import send_json, read_body
 from handlers.settings import (
     get_settings, save_settings, init_settings, verify_password,
     add_user, update_user, delete_user, ROLES,
+    _needs_migration,
 )
 from handlers.backup import _get_backup_retention_count, _merge_settings_after_restore
 from storage import log
+from handlers._base import get_data_paths as _get_data_paths
+from utils.api import _validate_zip_safely
 
+# ============ 会话管理（带 TTL 自动清理） ============
 
-def _get_data_paths():
-    import app_handler as _h
-    return _h.DATA_PATHS
+# 会话超时：30 分钟无活动自动过期
+SESSION_TIMEOUT_SECONDS = 30 * 60  # 30 分钟
+# 清理间隔：每 5 分钟清理一次过期会话
+SESSION_CLEANUP_INTERVAL = 5 * 60  # 5 分钟
 
-
-# 会话存储: session_id -> {user_id, username, role, name}
+# 会话存储: token -> {user_id, username, role, name, created_at, last_access}
 _SESSIONS: dict = {}
-SESSION_SECRET = secrets.token_hex(32)
+_SESSIONS_LOCK = threading.Lock()
+
+# 上次清理时间戳（用于懒清理）
+_last_cleanup_time: float = 0
+
+# 登录速率限制
+_LOGIN_ATTEMPTS: dict = {}  # username -> [{timestamp, success}]
+_LOGIN_ATTEMPTS_LOCK = threading.Lock()
+_LOGIN_MAX_ATTEMPTS = 10  # 窗口内最大尝试次数
+_LOGIN_WINDOW_SECONDS = 5 * 60  # 5 分钟滑动窗口
+_LOGIN_COOLDOWN_SECONDS = 2 * 60  # 超限后冷却 2 分钟
+
+
+def _cleanup_expired_sessions():
+    """清理所有过期的会话。"""
+    global _last_cleanup_time
+    now = time.time()
+    if now - _last_cleanup_time < SESSION_CLEANUP_INTERVAL:
+        return  # 未到清理时间
+    _last_cleanup_time = now
+
+    expired = []
+    with _SESSIONS_LOCK:
+        for token, sess in _SESSIONS.items():
+            last_access = sess.get("_access_time", 0)
+            if now - last_access > SESSION_TIMEOUT_SECONDS:
+                expired.append(token)
+        for token in expired:
+            del _SESSIONS[token]
+
+    if expired:
+        log(f"  [AUTH] 清理 {len(expired)} 个过期会话")
+
+
+# ============ 登录速率限制 ============
+
+def _check_login_rate_limit(username: str) -> tuple[bool, str]:
+    """检查登录尝试是否超过速率限制。
+
+    使用滑动窗口算法：
+    - 5 分钟内最多尝试 10 次
+    - 超限后进入 2 分钟冷却期
+    - 只记录密码错误的尝试
+
+    返回: (allowed, message)
+    """
+    now = time.time()
+    with _LOGIN_ATTEMPTS_LOCK:
+        attempts = _LOGIN_ATTEMPTS.get(username, [])
+
+        # 清理过期记录（只保留窗口内）
+        window_start = now - _LOGIN_WINDOW_SECONDS
+        attempts = [a for a in attempts if a["timestamp"] > window_start]
+        _LOGIN_ATTEMPTS[username] = attempts
+
+        # 检查是否处于冷却期
+        failed_attempts = [a for a in attempts if not a["success"]]
+        if failed_attempts:
+            last_failure = max(failed_attempts, key=lambda a: a["timestamp"])["timestamp"]
+            cooldown_remaining = _LOGIN_COOLDOWN_SECONDS - (now - last_failure)
+            if cooldown_remaining > 0:
+                remaining_min = int(cooldown_remaining / 60) + 1
+                return False, f"尝试次数过多，请在 {remaining_min} 分钟后再试"
+
+        # 检查窗口内总尝试次数
+        if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+            return False, f"尝试次数过多，请在 {_LOGIN_WINDOW_SECONDS // 60} 分钟后再试"
+
+    return True, ""
+
+
+def _record_login_attempt(username: str, success: bool) -> None:
+    """记录登录尝试（仅记录密码错误的）。"""
+    if success:
+        # 成功登录，清理该用户的所有历史记录（防止旧失败记录累积）
+        with _LOGIN_ATTEMPTS_LOCK:
+            _LOGIN_ATTEMPTS[username] = []
+        return
+
+    now = time.time()
+    with _LOGIN_ATTEMPTS_LOCK:
+        attempts = _LOGIN_ATTEMPTS.get(username, [])
+        attempts.append({"timestamp": now, "success": success})
+        # 只保留窗口内
+        attempts = [a for a in attempts if now - a["timestamp"] <= _LOGIN_WINDOW_SECONDS]
+        _LOGIN_ATTEMPTS[username] = attempts
+
+
+def _touch_session(token: str):
+    """更新会话的最后访问时间。"""
+    with _SESSIONS_LOCK:
+        if token in _SESSIONS:
+            _SESSIONS[token]["_access_time"] = time.time()
+
+
+def get_session(token: str) -> dict | None:
+    """获取会话（同时检查过期和懒清理）。
+
+    过期检查是立即进行的：即使全局清理间隔（5 分钟）未到，单个过期
+    session 也会被返回 None 并从字典中移除。这保证：
+    - 用户在 TTL 后访问立即被踢出（不需等清理任务）。
+    - 过期会话不在内存中堆积（被读取时立即清理）。
+    """
+    if not token:
+        return None
+    _cleanup_expired_sessions()
+    now = time.time()
+    with _SESSIONS_LOCK:
+        sess = _SESSIONS.get(token)
+        if sess is None:
+            return None
+        last_access = sess.get("_access_time", 0)
+        if now - last_access > SESSION_TIMEOUT_SECONDS:
+            # 过期会话：读完即扔
+            del _SESSIONS[token]
+            return None
+        return sess
+
+
+def create_session(user: dict) -> str:
+    """创建新会话，返回 token。"""
+    _cleanup_expired_sessions()
+    token = secrets.token_hex(32)
+    now = time.time()
+    with _SESSIONS_LOCK:
+        _SESSIONS[token] = {
+            "user_id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "name": user["name"],
+            "created_at": datetime.datetime.fromtimestamp(now).isoformat(),
+            "_access_time": now,
+        }
+    return token
+
+
+def destroy_session(token: str) -> None:
+    """销毁会话。"""
+    with _SESSIONS_LOCK:
+        _SESSIONS.pop(token, None)
+
+
+def get_active_session_count() -> int:
+    """获取当前活跃会话数（不含已清理的）。"""
+    _cleanup_expired_sessions()
+    with _SESSIONS_LOCK:
+        return len(_SESSIONS)
+
+
+# 向后兼容: 保留全局 _SESSIONS 引用供 permissions.py 导入
+# 但新代码应使用 get_session/destroy_session 函数
 
 
 def handle_post_login(handler):
@@ -37,26 +193,48 @@ def handle_post_login(handler):
         send_json(handler, 200, {"ok": False, "error": "用户名和密码不能为空"})
         return
 
+    # 检查登录速率限制
+    allowed, msg = _check_login_rate_limit(username)
+    if not allowed:
+        send_json(handler, 200, {"ok": False, "error": msg})
+        return
+
     settings = get_settings()
     users = settings.get("users", [])
     user = next((u for u in users if u["username"] == username), None)
 
     if not user or not user.get("enabled", True):
+        _record_login_attempt(username, False)
         send_json(handler, 200, {"ok": False, "error": "用户不存在或已禁用"})
         return
 
     if not verify_password(password, user["password"]):
+        _record_login_attempt(username, False)
         send_json(handler, 200, {"ok": False, "error": "密码错误"})
         return
 
-    token = secrets.token_hex(32)
-    _SESSIONS[token] = {
-        "user_id": user["id"],
+    # 登录成功，记录并清理旧失败记录
+    _record_login_attempt(username, True)
+
+    # 检测到旧版 sha256: 哈希 → 登录成功后静默升级为 pbkdf2
+    if _needs_migration(user["password"]):
+        users = settings.get("users", [])
+        for u in users:
+            if u["id"] == user["id"]:
+                from handlers.settings import _hash_pass
+                u["password"] = _hash_pass(password)
+                save_settings(settings)
+                log(f"  [AUTH] 用户 {username} 密码已自动升级为 pbkdf2")
+                break
+
+    # 创建新会话（含 TTL）
+    user_info = {
+        "id": user["id"],
         "username": user["username"],
         "role": user["role"],
         "name": user["name"],
-        "created_at": __import__("datetime").datetime.now().isoformat(),
     }
+    token = create_session(user_info)
 
     send_json(handler, 200, {
         "ok": True,
@@ -75,8 +253,7 @@ def handle_get_logout(handler):
     from urllib.parse import parse_qs, urlparse
     qs = parse_qs(urlparse(handler.path).query)
     token = qs.get("token", [None])[0]
-    if token and token in _SESSIONS:
-        del _SESSIONS[token]
+    destroy_session(token)
     send_json(handler, 200, {"ok": True})
 
 
@@ -86,16 +263,61 @@ def handle_get_me(handler):
     qs = parse_qs(urlparse(handler.path).query)
     token = qs.get("token", [None])[0]
 
-    if token and token in _SESSIONS:
-        sess = _SESSIONS[token]
-        send_json(handler, 200, {"user": {
-            "id": sess["user_id"],
-            "username": sess["username"],
-            "name": sess["name"],
-            "role": sess["role"],
-        }})
-    else:
-        send_json(handler, 200, {"user": None})
+    if token:
+        _touch_session(token)  # 延长活跃会话
+        sess = get_session(token)
+        if sess:
+            send_json(handler, 200, {"user": {
+                "id": sess["user_id"],
+                "username": sess["username"],
+                "name": sess["name"],
+                "role": sess["role"],
+            }})
+            return
+    send_json(handler, 200, {"user": None})
+
+
+def handle_get_sessions(handler):
+    """GET /api/admin/sessions?token=xxx → {ok, count, timeout_sec, sessions: [...]}
+
+    仅管理员可见，用于查看当前在线用户和会话状态。
+    """
+    from urllib.parse import parse_qs, urlparse
+    qs = parse_qs(urlparse(handler.path).query)
+    token = qs.get("token", [None])[0]
+    sess = get_session(token) if token else None
+    if not sess or sess.get("role") != "admin":
+        send_json(handler, 403, {"error": "仅管理员可访问"})
+        return
+
+    # 先清理过期会话再统计
+    _cleanup_expired_sessions()
+    now = time.time()
+    active = []
+    with _SESSIONS_LOCK:
+        for t, s in _SESSIONS.items():
+            age = now - s.get("_access_time", now)
+            active.append({
+                "token_prefix": t[:8] + "...",
+                "user_id": s["user_id"],
+                "username": s["username"],
+                "name": s["name"],
+                "role": s["role"],
+                "created_at": s["created_at"],
+                "last_access": datetime.datetime.fromtimestamp(
+                    s.get("_access_time", 0)
+                ).isoformat(),
+                "age_seconds": round(age, 0),
+                "timeout_minutes": SESSION_TIMEOUT_SECONDS // 60,
+            })
+    active.sort(key=lambda s: s["last_access"], reverse=True)
+
+    send_json(handler, 200, {
+        "ok": True,
+        "count": len(active),
+        "timeout_sec": SESSION_TIMEOUT_SECONDS,
+        "sessions": active,
+    })
 
 
 # ============ 用户管理 CRUD ============
@@ -187,6 +409,15 @@ def handle_get_meter_settings(handler):
     settings = get_settings()
     send_json(handler, 200, {
         "meter": settings.get("meter", {}),
+        "config": settings.get("config", {}),
+    })
+
+
+def handle_get_meters_public(handler):
+    """GET /api/meters → {meters, config} （非管理员也可访问）"""
+    settings = get_settings()
+    send_json(handler, 200, {
+        "meters": settings.get("meter", {}),
         "config": settings.get("config", {}),
     })
 
@@ -305,7 +536,20 @@ def handle_get_backup_status(handler):
 
 
 def handle_get_backup_download(handler):
-    """GET /api/admin/backup-download?zip_name=meter-backup-20250101_120000.zip → 下载 .zip 文件"""
+    """GET /api/admin/backup-download?zip_name=xxx → 下载 .zip 文件
+
+    ⚠️ 已弃用: 推荐使用 POST /api/admin/backup-download
+    GET 下载可能被浏览器预取/爬虫意外触发。保留 GET 兼容性。
+    """
+    return handle_post_backup_download(handler, use_get=True)
+
+
+def handle_post_backup_download(handler):
+    """POST /api/admin/backup-download {zip_name} → 下载 .zip 文件
+
+    使用 POST 而非 GET，防止浏览器预取/SEO 爬虫意外下载备份文件。
+    请求体: { "zip_name": "meter-backup-20250101_120000.zip" }
+    """
     from storage import get_data_dir
     from handlers.backup import _resolve_backup_parent
     from urllib.parse import parse_qs, urlparse
@@ -313,21 +557,35 @@ def handle_get_backup_download(handler):
     data_dir = get_data_dir()
     backup_dir = _resolve_backup_parent(data_dir)
 
-    qs = parse_qs(urlparse(handler.path).query)
-    zip_name = qs.get("zip_name", [None])[0]
+    # 获取 zip_name（POST body 或 query）
+    is_get = False
+    try:
+        body = read_body(handler)
+        zip_name = (body or {}).get("zip_name", "")
+    except Exception:
+        # GET 兼容路径
+        is_get = True
+        qs = parse_qs(urlparse(handler.path).query)
+        zip_name = qs.get("zip_name", [None])[0]
+        if not zip_name:
+            dir_name = qs.get("dir", [None])[0]
+            if dir_name:
+                zip_name = f"meter-backup-{dir_name}.zip"
 
     if not zip_name:
-        # 兼容旧版 dir 参数
-        dir_name = qs.get("dir", [None])[0]
-        if dir_name:
-            zip_name = f"meter-backup-{dir_name}.zip"
-        else:
-            send_json(handler, 400, {"error": "缺少 zip_name 参数"})
-            return
+        send_json(handler, 400, {"error": "缺少 zip_name 参数"})
+        return
 
     zip_path = backup_dir / zip_name
     if not zip_path.is_file():
         send_json(handler, 404, {"error": f"备份文件不存在: {zip_name}"})
+        return
+
+    # 安全校验: 防止目录穿越
+    real_backup = backup_dir.resolve()
+    real_zip = zip_path.resolve()
+    if not str(real_zip).startswith(str(real_backup)):
+        send_json(handler, 403, {"error": "非法备份文件名"})
         return
 
     zip_data = zip_path.read_bytes()
@@ -336,32 +594,65 @@ def handle_get_backup_download(handler):
     handler.send_header("Content-Type", "application/zip")
     handler.send_header("Content-Disposition", f'attachment; filename="{zip_name}"')
     handler.send_header("Content-Length", str(len(zip_data)))
+    handler.send_header("Cache-Control", "no-store")
     from utils import CORS
     for k, v in CORS.items():
         handler.send_header(k, v)
+    if is_get:
+        handler.send_header("X-API-Migration", "已弃用: 请使用 POST /api/admin/backup-download")
     handler.end_headers()
     handler.wfile.write(zip_data)
 
 
 def handle_get_backup_delete(handler):
-    """GET /api/admin/backup-delete?zip_name=meter-backup-20250101_120000.zip → 删除备份"""
+    """GET /api/admin/backup-delete?zip_name=xxx → 删除备份
+
+    ⚠️ 已弃用: 推荐使用 POST /api/admin/backup-delete
+    GET 删除可被浏览器预取/预连接/SEO 爬虫意外触发删除。保留 GET 兼容性。
+    """
+    return handle_post_backup_delete(handler, use_get=True)
+
+
+def handle_post_backup_delete(handler):
+    """POST /api/admin/backup-delete {zip_name} → 删除备份
+
+    使用 POST 而非 GET，防止浏览器预取意外删除。
+    请求体: { "zip_name": "meter-backup-20250101_120000.zip" }
+    Content-Type 必须为 application/json（防止 CSRF）。
+    """
     from storage import get_data_dir
     from handlers.backup import _resolve_backup_parent
     from urllib.parse import parse_qs, urlparse
 
-    data_dir = get_data_dir()
-    backup_dir = _resolve_backup_parent(data_dir)
+    # 检查 Content-Type 防止 CSRF
+    content_type = handler.headers.get("Content-Type", handler.headers.get("content-type", ""))
+    is_get = "application/json" not in content_type
 
-    qs = parse_qs(urlparse(handler.path).query)
-    zip_name = qs.get("zip_name", [None])[0]
+    if is_get:
+        # GET 兼容路径
+        qs = parse_qs(urlparse(handler.path).query)
+        zip_name = qs.get("zip_name", [None])[0]
+    else:
+        body = read_body(handler)
+        zip_name = (body or {}).get("zip_name", "")
 
     if not zip_name:
         send_json(handler, 400, {"ok": False, "error": "缺少 zip_name 参数"})
         return
 
+    data_dir = get_data_dir()
+    backup_dir = _resolve_backup_parent(data_dir)
     zip_path = backup_dir / zip_name
+
     if not zip_path.is_file():
         send_json(handler, 404, {"ok": False, "error": f"备份文件不存在: {zip_name}"})
+        return
+
+    # 安全校验: 防止目录穿越
+    real_backup = backup_dir.resolve()
+    real_zip = zip_path.resolve()
+    if not str(real_zip).startswith(str(real_backup)):
+        send_json(handler, 403, {"ok": False, "error": "非法备份文件名"})
         return
 
     try:
@@ -504,6 +795,8 @@ def handle_post_restore_upload(handler):
     """
     import zipfile as zf_mod
 
+    from handlers._base import get_data_paths as _get_data_paths
+
     data_dir = _get_data_paths().get("readings")
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
@@ -557,18 +850,25 @@ def handle_post_restore_upload(handler):
     pre_backup = backup_data(target_dir, force=True)
 
     try:
-        # 解压 ZIP 到临时目录
+        # 解压到临时目录
         with tempfile.TemporaryDirectory() as tmp_dir:
             zip_buffer = __import__('io').BytesIO(zip_content)
-            with zf_mod.ZipFile(zip_buffer, 'r') as zf:
-                # 校验：必须是有效的 ZIP 且包含数据文件
+            zip_path = Path(tmp_dir) / "restore_upload.zip"
+            zip_path.write_bytes(zip_buffer.read())
+
+            # 校验：ZIP Bomb 防护
+            safe_dir, error = _validate_zip_safely(zip_path, tmp_dir)
+            if error:
+                send_json(handler, 200, {"ok": False, "error": f"ZIP 文件不安全: {error}"})
+                return
+
+            # 校验：必须是有效的 ZIP 且包含数据文件
+            with zipfile.ZipFile(zip_buffer, 'r') as zf:
                 namelist = zf.namelist()
                 has_readings = any("readings.json" in n for n in namelist)
                 if not has_readings:
                     send_json(handler, 200, {"ok": False, "error": "ZIP 文件不包含 readings.json，不是有效的备份文件"})
                     return
-
-                zf.extractall(tmp_dir)
 
             # 找到数据目录（可能是 YYYYMMDD_HHMMSS/ 子目录或根目录）
             extract_dir = Path(tmp_dir)
@@ -611,9 +911,32 @@ def handle_post_restore_upload(handler):
 
 
 def handle_get_dir_listing(handler):
-    """GET /api/admin/dir-listing?path=/data → { ok, path, entries: [{name, is_dir, is_file, size}] }"""
-    from urllib.parse import parse_qs, urlparse
+    """GET /api/admin/dir-listing?path=/data → { ok, path, entries: [...] }
 
+    安全限制:
+    - 必须登录（需 token）
+    - 仅管理员/主管可见
+    - 仅允许浏览 data_dir 和 backup_dir 下的内容（白名单）
+    - 防止目录穿越（resolve 后校验）
+    """
+    from urllib.parse import parse_qs, urlparse
+    from handlers.admin import get_session
+
+    # 1. 鉴权
+    qs = parse_qs(urlparse(handler.path).query)
+    token = qs.get("token", [None])[0] or qs.get("path", [None])[0]  # 兼容两种传参方式
+
+    sess = get_session(token) if token else None
+    if not sess:
+        send_json(handler, 401, {"error": "未登录，请先登录"})
+        return
+
+    # 2. 权限检查（仅 admin/supervisor）
+    if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
+        send_json(handler, 403, {"error": "权限不足: 仅管理员和主管可访问"})
+        return
+
+    # 3. 获取并校验 path 参数
     qs = parse_qs(urlparse(handler.path).query)
     target_path = qs.get("path", [None])[0]
 
@@ -621,10 +944,23 @@ def handle_get_dir_listing(handler):
         send_json(handler, 400, {"error": "缺少 path 参数"})
         return
 
+    # 4. 白名单校验：仅允许 data_dir 和 backup_dir
     try:
+        from storage import get_data_dir
+        from handlers.backup import _resolve_backup_parent
+        data_dir = get_data_dir()
+        backup_dir = _resolve_backup_parent(data_dir)
+
+        allowed_root = data_dir.resolve()
+        # 获取请求路径的解析结果
         p = Path(target_path).resolve()
+
+        # 允许浏览 data_dir 及其子目录
+        if not str(p).startswith(str(allowed_root)):
+            send_json(handler, 403, {"error": f"不允许浏览该路径（仅允许访问 {data_dir}）"})
+            return
     except Exception:
-        send_json(handler, 400, {"error": f"无效路径: {target_path}"})
+        send_json(handler, 403, {"error": "无法验证路径权限"})
         return
 
     if not p.exists():
@@ -654,3 +990,13 @@ def handle_get_dir_listing(handler):
         return
 
     send_json(handler, 200, {"path": target_path, "entries": entries})
+
+
+def handle_get_audit_log(handler):
+    """GET /api/admin/audit?count=100 → {logs: [...]}"""
+    from urllib.parse import parse_qs, urlparse
+    qs = parse_qs(urlparse(handler.path).query)
+    count = int(qs.get("count", ["100"])[0])
+    from utils.audit import get_audit_log
+    logs = get_audit_log(count)
+    send_json(handler, 200, {"logs": logs})

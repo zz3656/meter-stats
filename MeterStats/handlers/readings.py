@@ -1,40 +1,30 @@
 """抄表相关 API handler。"""
 from __future__ import annotations
 
-from datetime import datetime
 from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, opt_float, read_body
-from storage import log, load_json, save_json, get_lock
-
-def _get_data_paths():
-    """从 app_handler 模块读取 DATA_PATHS。"""
-    import app_handler as _h
-    return _h.DATA_PATHS
+from storage import log, load_json, save_json
+from handlers._base import get_data_paths, get_lock
+from report import invalidate_report_cache as _invalidate_report_cache
 
 
-def _get(model: str):
-    return load_json(_get_data_paths().get(model), [])
-
-
-def _save(model: str, data):
-    lock = get_lock(model)
-    with lock:
-        save_json(_get_data_paths().get(model), data)
+def _load_readings() -> list:
+    return load_json(get_data_paths()["readings"], [])
 
 
 # ==================== GET ====================
 
 def handle_get_readings(handler):
     """GET /api/readings"""
-    send_json(handler, 200, _get("readings"))
+    send_json(handler, 200, _load_readings())
 
 
 def handle_get_readings_monthly(handler):
     """GET /api/readings/monthly?month=2026-07"""
     qs = parse_qs(urlparse(handler.path).query)
     month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
-    readings = _get("readings")
+    readings = _load_readings()
     filtered = [r for r in readings if r.get("date", "").startswith(month)]
     filtered.sort(key=lambda r: r["date"])
     send_json(handler, 200, filtered)
@@ -64,7 +54,7 @@ def handle_post_readings(handler):
         send_json(handler, 400, {"error": "四表/水电至少填一个"})
         return
 
-    readings = _get("readings")
+    readings = _load_readings()
     idx = next((i for i, r in enumerate(readings) if r.get("date") == date), None)
 
     if idx is not None:
@@ -90,7 +80,8 @@ def handle_post_readings(handler):
         })
         log(f"  ++ 新增抄表 {date}")
 
-    _save("readings", readings)
+    _save_readings(readings)
+    _invalidate_report_cache()
     send_json(handler, 200, {"ok": True, "row": readings[idx] if idx is not None else readings[-1]})
 
 
@@ -104,7 +95,7 @@ def handle_put_readings(handler, path_clean: str):
         send_json(handler, 400, {"error": "日期不能为空"})
         return
 
-    readings = _get("readings")
+    readings = _load_readings()
     existing = next((r for r in readings if r.get("date") == date), None)
     if not existing:
         send_json(handler, 404, {"error": f"未找到 {date}"})
@@ -117,8 +108,9 @@ def handle_put_readings(handler, path_clean: str):
                 existing[key] = opt_float(body, key)
             else:
                 existing[key] = val
-    _save("readings", readings)
+    _save_readings(readings)
     log(f"  OK 更新抄表 {date}")
+    _invalidate_report_cache()
     send_json(handler, 200, {"ok": True, "row": existing})
 
 
@@ -127,11 +119,18 @@ def handle_put_readings(handler, path_clean: str):
 def handle_delete_readings(handler, path_clean: str):
     """DELETE /api/readings/{date}"""
     date = path_clean[len("/api/readings/"):]
-    readings = _get("readings")
+    readings = _load_readings()
     new = [r for r in readings if r.get("date") != date]
     if len(new) == len(readings):
         send_json(handler, 404, {"error": f"未找到 {date}"})
         return
-    _save("readings", new)
+    _save_readings(new)
     log(f"  -- 删除抄表 {date}")
+    _invalidate_report_cache()
     send_json(handler, 200, {"ok": True})
+
+
+def _save_readings(data):
+    lock = get_lock("readings")
+    with lock:
+        save_json(get_data_paths()["readings"], data)

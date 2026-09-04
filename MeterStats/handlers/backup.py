@@ -12,6 +12,8 @@ from pathlib import Path
 
 from utils import send_json, read_body
 from storage import backup_data, DATA_FILES, log
+from handlers._base import get_data_paths
+from utils.api import _validate_zip_safely
 
 
 # settings.json 中属于"部署环境配置"的字段,备份时不应包含(避免恢复到其他机器时破坏部署)
@@ -67,10 +69,6 @@ def _merge_settings_after_restore(target_dir: Path, src_settings: dict) -> None:
     log(f"  [RESTORE] 合并 settings.json:覆盖业务字段,保留部署字段(backup_dir/backup_retention_count)")
 
 
-def _get_data_paths():
-    import app_handler as _h
-    return _h.DATA_PATHS
-
 
 def handle_get_data_files(handler):
     """GET /api/admin/data-files — 浏览器备份: 获取所有数据文件的当前内容。
@@ -78,7 +76,7 @@ def handle_get_data_files(handler):
     返回 { ok: true, files: { "readings.json": "<JSON字符串>", ... } }
     用于 Docker/浏览器环境下的备份（无需 Swift 桥接）。
     """
-    data_dir = _get_data_paths().get("readings")
+    data_dir = get_data_paths().get("readings")
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
@@ -160,7 +158,7 @@ def handle_post_backup(handler):
     """
     import datetime
 
-    data_dir = _get_data_paths().get("readings")
+    data_dir = get_data_paths().get("readings")
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
@@ -248,13 +246,15 @@ def handle_post_restore(handler):
         return
 
     # 恢复前自动备份当前数据(可回滚)
-    pre_backup = backup_data(data_dir.parent, force=True) if (data_dir := _get_data_paths().get("readings")) else None
+    pre_backup = backup_data(data_dir.parent, force=True) if (data_dir := get_data_paths().get("readings")) else None
 
     try:
         # 解压到临时目录
         with tempfile.TemporaryDirectory() as tmp_dir:
-            with zipfile.ZipFile(zip_file, 'r') as zf:
-                zf.extractall(tmp_dir)
+            safe_dir, error = _validate_zip_safely(zip_file, tmp_dir)
+            if error:
+                send_json(handler, 400, {"ok": False, "error": f"ZIP 文件不安全: {error}"})
+                return
 
             target_dir = (data_dir.parent if data_dir else Path("/data"))
 
@@ -315,7 +315,7 @@ def handle_post_upload(handler):
     import tempfile
     import os
 
-    data_dir = _get_data_paths().get("readings")
+    data_dir = get_data_paths().get("readings")
     if not data_dir:
         send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
         return
@@ -328,114 +328,125 @@ def handle_post_upload(handler):
     # 恢复前自动备份当前数据(可回滚)
     pre_backup = backup_data(target_dir, force=True)
 
-    def _extract_zip_to_target(zip_bytes: bytes) -> list:
-        """解压 zip 到 target_dir,返回解压出的数据文件名列表。"""
+    def _extract_zip_to_target(zip_bytes: bytes, tmp_dir: str) -> list:
+        """解压 zip 到 target_dir,返回解压出的数据文件名列表。
+
+        tmp_dir 由调用方传入(整个 handler 共享一个临时目录,避免 JSON 分支
+        之前出现的 NameError:局部变量未定义)。
+        """
         names = []
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            zip_path = Path(tmp_dir) / "upload.zip"
-            zip_path.write_bytes(zip_bytes)
-            with zipfile.ZipFile(zip_path, 'r') as zf:
-                zf.extractall(tmp_dir)
-            extract_dir = Path(tmp_dir)
-            # zip 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录
-            children = list(extract_dir.iterdir())
-            if len(children) == 1 and children[0].is_dir():
-                extract_dir = children[0]
-            for name in DATA_FILES.values():
-                src = extract_dir / name
-                if src.exists():
-                    shutil.copy2(src, target_dir / name)
-                    names.append(name)
-                    log(f"  恢复 {name} <- {src}")
-            # settings.json: 合并业务字段,保留部署字段(避免覆盖目标环境的 backup_dir 等)
-            settings_src = extract_dir / "settings.json"
-            if settings_src.exists():
-                try:
-                    src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
-                    _merge_settings_after_restore(target_dir, src_settings)
-                    names.append("settings.json")
-                except Exception as e:
-                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
+        zip_path = Path(tmp_dir) / "upload.zip"
+        zip_path.write_bytes(zip_bytes)
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            zf.extractall(tmp_dir)
+        extract_dir = Path(tmp_dir)
+        # zip 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录
+        children = list(extract_dir.iterdir())
+        if len(children) == 1 and children[0].is_dir():
+            extract_dir = children[0]
+        for name in DATA_FILES.values():
+            src = extract_dir / name
+            if src.exists():
+                shutil.copy2(src, target_dir / name)
+                names.append(name)
+                log(f"  恢复 {name} <- {src}")
+        # settings.json: 合并业务字段,保留部署字段(避免覆盖目标环境的 backup_dir 等)
+        settings_src = extract_dir / "settings.json"
+        if settings_src.exists():
+            try:
+                src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
+                _merge_settings_after_restore(target_dir, src_settings)
+                names.append("settings.json")
+            except Exception as e:
+                log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
         return names
 
-    if "multipart/form-data" in content_type:
-        # multipart/form-data 上传
-        boundary = content_type.split("boundary=", 1)[1]
-        if not boundary:
-            send_json(handler, 200, {"ok": False, "error": "无法解析 multipart boundary"})
-            return
+    # 把 tmp_dir 提到 handler 顶层,两个分支( multipart / JSON body)共享同一个临时目录
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        if "multipart/form-data" in content_type:
+            # multipart/form-data 上传
+            boundary = content_type.split("boundary=", 1)[1]
+            if not boundary:
+                send_json(handler, 200, {"ok": False, "error": "无法解析 multipart boundary"})
+                return
 
-        data = handler.rfile.read(int(handler.headers.get("Content-Length", "0")))
-        # 解析每个 part
-        parts = data.split(boundary.encode())
-        for raw in parts:
-            raw_str = raw.decode("utf-8", errors="replace")
-            fname_match = re.search(r'filename="([^"]+)"', raw_str)
-            if not fname_match:
-                continue
-            fname = fname_match.group(1)
-            content_parts = raw.split(b"\r\n\r\n", 1)
-            if len(content_parts) != 2:
-                continue
-            file_content = content_parts[1].rstrip(b"\r\n")
-            if fname == "--":
-                continue
-            uploaded.append(fname)
-            if fname.lower().endswith('.zip'):
-                try:
-                    restored.extend(_extract_zip_to_target(file_content))
-                except zipfile.BadZipFile:
-                    log(f"[WARN] 上传的 {fname} 不是有效的 ZIP")
-                except Exception as e:
-                    log(f"[WARN] 解压 {fname} 失败: {e}")
-            elif fname in DATA_FILES.values() or fname == "settings.json":
-                (target_dir / fname).write_bytes(file_content)
-                log(f"  上传 {fname} → {target_dir / fname}")
-
-    else:
-        # JSON body: { "files": { "<filename>": <json|base64 zip wrapper> } }
-        body = read_body(handler)
-        files = (body or {}).get("files")
-        if not files:
-            send_json(handler, 200, {"ok": False, "error": "请提供 files 字段"})
-            return
-
-        for fname, content in files.items():
-            uploaded.append(fname)
-            # ZIP 文件(以 base64 wrapper 形式传入)
-            if isinstance(content, dict) and "__zip_b64" in content:
-                try:
-                    zip_bytes = base64.b64decode(content["__zip_b64"])
-                    restored.extend(_extract_zip_to_target(zip_bytes))
-                except Exception as e:
-                    log(f"[WARN] 解码/解压 {fname} 失败: {e}")
+            data = handler.rfile.read(int(handler.headers.get("Content-Length", "0")))
+            # 解析每个 part
+            parts = data.split(boundary.encode())
+            for raw in parts:
+                raw_str = raw.decode("utf-8", errors="replace")
+                fname_match = re.search(r'filename="([^"]+)"', raw_str)
+                if not fname_match:
                     continue
-            elif fname in DATA_FILES.values() or fname == "settings.json":
-                dest = target_dir / fname
-                # settings.json 走合并分支:保留目标环境的部署字段(backup_dir 等)
-                if fname == "settings.json":
+                fname = fname_match.group(1)
+                content_parts = raw.split(b"\r\n\r\n", 1)
+                if len(content_parts) != 2:
+                    continue
+                file_content = content_parts[1].rstrip(b"\r\n")
+                if fname == "--":
+                    continue
+                uploaded.append(fname)
+                if fname.lower().endswith('.zip'):
                     try:
-                        if isinstance(content, (list, dict)):
-                            src_settings = content
-                        elif isinstance(content, str):
-                            src_settings = json.loads(content)
-                        else:
-                            raise ValueError(f"settings.json 内容类型不支持: {type(content)}")
-                        _merge_settings_after_restore(target_dir, src_settings)
-                        log(f"  合并 settings.json → {dest}")
+                        restored.extend(_extract_zip_to_target(file_content, tmp_dir))
+                    except zipfile.BadZipFile:
+                        log(f"[WARN] 上传的 {fname} 不是有效的 ZIP")
                     except Exception as e:
-                        log(f"  [WARN] 合并 settings.json 失败,降级为直接覆盖: {e}")
-                        if isinstance(content, (list, dict)):
-                            dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
-                        elif isinstance(content, str):
-                            dest.write_text(content, encoding="utf-8")
-                    restored.append("settings.json")
-                    continue
-                if isinstance(content, (list, dict)):
-                    dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
-                elif isinstance(content, str):
-                    dest.write_text(content, encoding="utf-8")
-                log(f"  上传 {fname} → {dest}")
+                        log(f"[WARN] 解压 {fname} 失败: {e}")
+                elif fname in DATA_FILES.values() or fname == "settings.json":
+                    (target_dir / fname).write_bytes(file_content)
+                    log(f"  上传 {fname} → {target_dir / fname}")
+
+        else:
+            # JSON body: { "files": { "<filename>": <json|base64 zip wrapper> } }
+            body = read_body(handler)
+            files = (body or {}).get("files")
+            if not files:
+                send_json(handler, 200, {"ok": False, "error": "请提供 files 字段"})
+                return
+
+            for i, (fname, content) in enumerate(files.items()):
+                uploaded.append(fname)
+                # ZIP 文件(以 base64 wrapper 形式传入)
+                if isinstance(content, dict) and "__zip_b64" in content:
+                    try:
+                        zip_bytes = base64.b64decode(content["__zip_b64"])
+                        zip_tmp = Path(tmp_dir) / f"upload_{i}.zip"
+                        zip_tmp.write_bytes(zip_bytes)
+                        safe_dir, error = _validate_zip_safely(zip_tmp, tmp_dir)
+                        if error:
+                            log(f"[WARN] 上传的 ZIP 不安全: {error}")
+                            continue
+                        restored.extend(_extract_zip_to_target(zip_bytes, tmp_dir))
+                    except Exception as e:
+                        log(f"[WARN] 解码/解压 {fname} 失败: {e}")
+                        continue
+                elif fname in DATA_FILES.values() or fname == "settings.json":
+                    dest = target_dir / fname
+                    # settings.json 走合并分支:保留目标环境的部署字段(backup_dir 等)
+                    if fname == "settings.json":
+                        try:
+                            if isinstance(content, (list, dict)):
+                                src_settings = content
+                            elif isinstance(content, str):
+                                src_settings = json.loads(content)
+                            else:
+                                raise ValueError(f"settings.json 内容类型不支持: {type(content)}")
+                            _merge_settings_after_restore(target_dir, src_settings)
+                            log(f"  合并 settings.json → {dest}")
+                        except Exception as e:
+                            log(f"  [WARN] 合并 settings.json 失败,降级为直接覆盖: {e}")
+                            if isinstance(content, (list, dict)):
+                                dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+                            elif isinstance(content, str):
+                                dest.write_text(content, encoding="utf-8")
+                        restored.append("settings.json")
+                        continue
+                    if isinstance(content, (list, dict)):
+                        dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+                    elif isinstance(content, str):
+                        dest.write_text(content, encoding="utf-8")
+                    log(f"  上传 {fname} → {dest}")
 
     send_json(handler, 200, {
         "ok": True,
