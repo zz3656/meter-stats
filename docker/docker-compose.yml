@@ -29,6 +29,8 @@ services:
       - METER_BIND=0.0.0.0
       # 初始管理员密码（⚠️ 请修改！）
       - METER_INITIAL_PASS=admin123
+      # 标记 Docker 环境（禁用 UI 修改备份目录；entrypoint.sh 也通过 /.dockerenv 自动检测）
+      - METER_DOCKER=1
       # 备份目录（相对于 /data 的相对路径，留空则使用 /data/backup）
       # - METER_BACKUP_DIR=backup
     healthcheck:

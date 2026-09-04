@@ -49,7 +49,10 @@ from pathlib import Path
 from storage import get_data_dir, init_data_files, log
 
 PORT = int(os.environ.get("METER_PORT", "8765"))
-VERSION = "0.1.0"
+# 从 VERSION 文件读取版本号（支持打包 app 中 version 打包到资源）
+# 注意:Python 3.13 才给 Path.read_text 加 strip 参数,3.11/3.12 都没有。
+# 这里用 .strip() 手动处理,兼容所有 Python 版本。
+VERSION = (Path(__file__).resolve().parent / "VERSION").read_text(encoding="utf-8").strip()
 
 
 def _write_pid(data_dir: Path):
@@ -62,9 +65,6 @@ def _write_pid(data_dir: Path):
 # 启动时根据 app.js/admin.js/style.css 的内容哈希生成;文件改动 → token 变 →
 # 浏览器/CDN 看到新 URL,绕过缓存回源拉新文件。
 # 这是修复 CDN(如 Cloudflare)缓存导致前端看不到代码修复的关键机制。
-VERSION_TOKEN = None
-
-
 def compute_version_token():
     """根据 app.js / admin.js / style.css 的内容哈希生成版本 token。"""
     import hashlib
@@ -82,27 +82,8 @@ def compute_version_token():
     return h.hexdigest()[:8]
 
 
-def inject_version_to_html(html: str, token: str = None) -> str:
-    """在 index.html 的 <script>/<link> 标签里加 ?v=<TOKEN>,破坏 CDN 缓存。
-
-    重要场景:容器重启后,如果 CDN(如 Cloudflare)缓存了旧 app.js,用户浏览器
-    会一直拿到旧代码导致 bug 修不好。注入版本 token 后,index.html 引用变成
-    app.js?v=abc123,URL 变化 → 浏览器/CDN 必须回源拉新文件。
-    """
-    tok = token or VERSION_TOKEN
-    if not tok:
-        return html
-    import re
-    def _add_v(match):
-        attr = match.group(1)  # src / href
-        quote = match.group(2)
-        src = match.group(3)
-        if src.startswith(("https://", "http://", "//")):
-            return match.group(0)
-        if "?" in src:
-            return match.group(0)
-        return f'{attr}={quote}{src}?v={tok}{quote}'
-    return re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
+# inject_version_to_html 已迁移至 utils.api;保留此别名供 app_handler.py 向后兼容
+from utils.api import inject_version_to_html
 
 
 def _remove_pid():
@@ -123,11 +104,9 @@ def main():
     token = compute_version_token()
     from storage import log as _log
     _log(f"  静态资源版本 token: v={token} (启动时根据 JS/CSS/HTML 内容哈希生成)")
-    # 设到 app_handler.STATIC_VERSION_TOKEN(而不是 server 模块的 VERSION_TOKEN)
-    # 因为 python3 server.py 启动时 __main__ 和 sys.modules['server'] 是不同对象。
-    # 同时也设 server 模块(双保险)。
-    global VERSION_TOKEN
-    VERSION_TOKEN = token
+    # 设到 app_handler.STATIC_VERSION_TOKEN，供请求时静态文件服务读取。
+    # 注意:python3 server.py 启动时 __main__ 和 sys.modules['server'] 是不同对象，
+    # 因此不能依赖模块级 global，必须直接设 app_handler 属性。
     try:
         import app_handler as _ah
         _ah.STATIC_VERSION_TOKEN = token

@@ -5,6 +5,14 @@ set -e
 # 设置时区（POSIX 标准 TZ 环境变量，默认 Asia/Shanghai）
 export TZ="${TZ:-Asia/Shanghai}"
 
+# 标记 Docker 环境(handlers/admin.py 据此禁用 backup_dir UI 编辑)。
+# 优先用显式环境变量,否则用 /.dockerenv 检测(更稳,无需用户正确设 env)。
+if [ -z "$METER_DOCKER" ]; then
+    if [ -f /.dockerenv ]; then
+        export METER_DOCKER=1
+    fi
+fi
+
 # 修复 /data 目录权限
 if [ -d /data ]; then
     chown -R app:app /data 2>/dev/null || true
