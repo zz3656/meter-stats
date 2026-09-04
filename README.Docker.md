@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `29b8a79` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `39ba440` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -272,13 +272,6 @@ ebde2e)
 
 #### 🚀 CI/CD
 
-- NOTES=$(...) 不再合并 stderr(2>&1),避免 set -x 调试污染 (29b8a79)
-  > 之前 NOTES=$(python3 scripts/gen_release_notes.py 2>&1) 用 2>&1 把
-  > stderr 也合到 NOTES 变量。配合 set -x 调试,会在 NOTES 里混入:
-  > ++ python3 scripts/gen_release_notes.py
-  > + NOTES='## 📦 ...'
-  > gh release create --notes "$NOTES" 发布时,GitHub 收到的 notes
-
 - build-dmg shell 步骤改用 $version 取版本号($VERSION 为空) (
 c8a474)
   > 之前 $GITHUB_ENV 写入的是 'version=0.1.0' (小写),但 Create DMG/Notarize/
@@ -302,6 +295,13 @@ a30640)
   > 触发改为 push branches main(paths-ignore 文档/CI 文件)+手动触发,
 
 #### 🚀 部署/CDN
+
+- 修复 VERSION 读取/Docker 构建/ZIP 上传/Docker 检测 4 个 bug (39ba440)
+  > Bug 1: server.py 用 read_text(strip=True) 读 VERSION 文件,TypeError
+  > 根因:Path.read_text 的 strip 参数是 Python 3.13 才加,3.11/3.12 都没有
+  > 修复:改成 read_text(encoding="utf-8").strip(),兼容所有 Python 3.x
+  > 影响:Docker 镜像(python:3.11-slim)和 macOS 系统 Python 都能正常启动
+  > Bug 2: docker/Dockerfile 漏 COPY VERSION 文件
 
 - 注入 ?v=<token> 绕过 Cloudflare CDN 缓存旧版 app.js (
 e53d93)
@@ -345,7 +345,25 @@ a2c621)
 
 - 完善 build-dmg.yml 版本判断逻辑 (
 bbbcea)
+### ♻️ refactor
+
+#### 📦 backend
+
+- 拆分 handlers/ + utils/, 引入认证/会话/CORS/PBKDF2 (
+95a4ef)
+  > 把原 server.py 内联的所有 handler 拆到 handlers/ 子模块(每个 model 一个
+  > 文件),通用工具( send_json / send_csv / read_body / ZIP 校验)抽到
+  > utils/api.py,审计日志抽到 utils/audit.py,业务常量抽到 constants.py,
+  > 消除原本 1000+ 行单文件带来的维护痛点。
+  > 新增能力:
+  **影响范围**:
+  - web: 后端接口拆分,前端无 API 路径变化,兼容性保持
+  - docker: 镜像结构无变化,镜像内 Python 路径相同
+  - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+f4d646)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 2f165f)
@@ -368,6 +386,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+29b8a793546fafc128d10b064641e4a84992a04f ()
+  > fix(ci): NOTES=$(...) 不再合并 stderr(2>&1),避免 set -x 调试污染
 - 
 dc81fe25cbe447830ed668c6933d7df6fb2f2ed3 ()
   > ci(release): 加调试输出确认 NOTES 生成
@@ -403,5 +424,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...29b8a79)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...39ba440)
 
