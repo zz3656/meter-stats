@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `39ba440` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `fff03f2` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,13 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 分离水电表底数据到独立文件,支持在线迁移 (fff03f2)
+  > - 新增 readings_water.json 独立存储总表/分表/水表数据
+  > - 电表抄表(readings.json)与水电表底完全分离,可独立增删
+  > - 新增 /api/admin/migrate-water 端点,启动时自动检测旧格式数据
+  > - 前端自动检测弹窗,用户确认后一键执行数据分离迁移
+  > - 迁移自动备份+完整性验证,失败可回滚
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -296,13 +303,6 @@ a30640)
 
 #### 🚀 部署/CDN
 
-- 修复 VERSION 读取/Docker 构建/ZIP 上传/Docker 检测 4 个 bug (39ba440)
-  > Bug 1: server.py 用 read_text(strip=True) 读 VERSION 文件,TypeError
-  > 根因:Path.read_text 的 strip 参数是 Python 3.13 才加,3.11/3.12 都没有
-  > 修复:改成 read_text(encoding="utf-8").strip(),兼容所有 Python 3.x
-  > 影响:Docker 镜像(python:3.11-slim)和 macOS 系统 Python 都能正常启动
-  > Bug 2: docker/Dockerfile 漏 COPY VERSION 文件
-
 - 注入 ?v=<token> 绕过 Cloudflare CDN 缓存旧版 app.js (
 e53d93)
   > 根因:Cloudflare CDN 默认缓存 .js/.css/.html 静态文件 4 小时(max-age=14400)。
@@ -363,6 +363,9 @@ bbbcea)
 ### 📖 docs
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
+7b88f1)
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
 f4d646)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
@@ -386,6 +389,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+39ba440d100e35706c178dd2f3b2845e3d8da8de ()
+  > fix(deploy): 修复 VERSION 读取/Docker 构建/ZIP 上传/Docker 检测 4 个 bug
 - 
 29b8a793546fafc128d10b064641e4a84992a04f ()
   > fix(ci): NOTES=$(...) 不再合并 stderr(2>&1),避免 set -x 调试污染
@@ -424,5 +430,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...39ba440)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...fff03f2)
 
