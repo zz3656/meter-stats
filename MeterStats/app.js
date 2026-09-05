@@ -2238,6 +2238,9 @@ async function enterEditMode(date) {
   const waterAll = await fetchWaterReadings();
   const waterRow = waterAll.find(w => w.date === date) || {};
 
+  // 记录编辑前是否已有水电记录（用于区分"删除"和"不创建"）
+  const hasExistingWater = waterRow.main_meter != null || waterRow.sub_meter != null || waterRow.water != null;
+
   const tr = document.querySelector(`#history-table tbody tr[data-date="${date}"]`);
   if (!tr) return;
 
@@ -2276,24 +2279,22 @@ async function enterEditMode(date) {
     const subMeter = numE('#edit-sub_meter');
     const waterVal = numE('#edit-water');
 
-    if (!newDate) { showAlert('日期不能为空', 'error'); return; }
-
-    // 抄表校验：至少填一个四表
-    const editVals = [newHall, newFire, newPrivate, newAc];
-    const allEmpty = editVals.every(v => v === null) && mainMeter === null && subMeter === null && waterVal === null;
-    if (allEmpty) {
-      showAlert('至少填写一块表的读数', 'error'); return;
-    }
-
     // 水电字段校验
-    const waterVals = [mainMeter, subMeter, waterVal];
-    const waterInputEmpty = waterVals.every(v => v === null);
-    const waterInputInvalid = waterVals.some(v => v !== null && isNaN(v));
+    const waterInputEmpty = [mainMeter, subMeter, waterVal].every(v => v === null);
+    const waterInputInvalid = [mainMeter, subMeter, waterVal].some(v => v !== null && isNaN(v));
     if (waterInputInvalid) {
       showAlert('读数必须是数字', 'error'); return;
     }
 
-    // 如果改了日期,检查新日期是否已存在
+    if (!newDate) { showAlert('日期不能为空', 'error'); return; }
+
+    // 抄表校验：四表必须至少填一个（水电字段不参与此校验，因为它们独立）
+    const editVals = [newHall, newFire, newPrivate, newAc];
+    if (editVals.every(v => v === null)) {
+      showAlert('至少填写一块电表的读数', 'error'); return;
+    }
+
+    // 如果改了日期,检查新日期是否已存在抄表记录
     if (newDate !== date) {
       const all = await fetchReadings();
       const conflict = all.find(r => r.date === newDate);
@@ -2313,7 +2314,7 @@ async function enterEditMode(date) {
     }
 
     try {
-      // 更新抄表记录（仅四表）
+      // 1. 更新抄表记录（仅四表，完全独立于水电表底）
       const fourMeterData = {};
       for (const k of ['hall', 'fire', 'private_room', 'ac']) {
         const v = { hall: newHall, fire: newFire, private_room: newPrivate, ac: newAc }[k];
@@ -2323,34 +2324,44 @@ async function enterEditMode(date) {
       fourMeterData.note = newNote;
       await updateReadingRemote(date, fourMeterData);
 
-      // 更新水电表底（仅当至少有一个水电字段有值时）
-      if (!waterInputEmpty) {
-        // 检查新日期是否已有水电记录
-        const waterAll = await fetchWaterReadings();
-        const existingWater = waterAll.find(w => w.date === newDate);
-        if (existingWater) {
-          const ok = await showModal({
-            title: '覆盖已有水电数据',
-            icon: '⚠️',
-            iconKind: 'warn',
-            body: `<strong>${newDate}</strong> 已有水电表底,是否覆盖?<br><br>
-              <span style="opacity:0.7">现有:</span> 总表 ${existingWater.main_meter ?? '—'} · 分表 ${existingWater.sub_meter ?? '—'} · 水表 ${existingWater.water ?? '—'}<br>
-              <span style="opacity:0.7">新数据:</span> 总表 ${mainMeter ?? '—'} · 分表 ${subMeter ?? '—'} · 水表 ${waterVal ?? '—'}`,
-            confirmText: '覆盖',
-            confirmKind: 'primary',
-          });
-          if (!ok) return;
-          // 先删除旧水电记录
-          await deleteWaterReadingRemote(existingWater.date);
+      // 2. 独立更新水电表底（与抄表记录互不干扰）
+      if (hasExistingWater) {
+        // 原来有水电记录
+        if (waterInputEmpty) {
+          // 用户清空了所有水电字段 → 删除该水电记录
+          await deleteWaterReadingRemote(date);
+        } else {
+          // 用户修改了水电字段 → 覆盖更新
+          const waterAll = await fetchWaterReadings();
+          const existingWater = waterAll.find(w => w.date === date);
+          if (existingWater && existingWater.date !== newDate) {
+            // 日期变了，先删旧再新建
+            await deleteWaterReadingRemote(existingWater.date);
+          }
+          const waterData = {
+            date: newDate,
+            main_meter: mainMeter,
+            sub_meter: subMeter,
+            water: waterVal,
+            note: newNote,
+          };
+          // POST 会自动处理覆盖
+          await saveWaterReadingRemote(waterData);
         }
-        const waterData = {
-          date: newDate,
-          main_meter: mainMeter,
-          sub_meter: subMeter,
-          water: waterVal,
-          note: newNote,
-        };
-        await saveWaterReadingRemote(waterData);
+      } else {
+        // 原来没有水电记录
+        if (!waterInputEmpty) {
+          // 用户新增填入了水电字段 → 创建新记录
+          const waterData = {
+            date: newDate,
+            main_meter: mainMeter,
+            sub_meter: subMeter,
+            water: waterVal,
+            note: newNote,
+          };
+          await saveWaterReadingRemote(waterData);
+        }
+        // 用户也没填 → 什么都不做（正确行为）
       }
 
       showAlert(`✓ ${date} 已更新为 ${newDate}`, 'success');
