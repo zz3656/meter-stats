@@ -3989,6 +3989,7 @@ document.getElementById('btn-export-word').addEventListener('click', exportRepor
 
 document.getElementById('report-month').addEventListener('change', loadMonthlyReport);
 document.getElementById('history-month').addEventListener('change', () => renderHistory(CURRENT_READINGS));
+document.getElementById('water-history-month').addEventListener('change', () => renderHistory(CURRENT_WATER_READINGS));
 document.getElementById('charge-month').addEventListener('change', () => renderChargeLog(CURRENT_CHARGES));
 
 // 侧栏切换
