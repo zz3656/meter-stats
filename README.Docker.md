@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `eb3bb8b` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `175a5d8` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,8 +228,6 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
-
-- 登录页面增加主题和大字模式切换按钮，全局一致体验 (eb3bb8b)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -362,6 +360,8 @@ bbbcea)
   - web: 后端接口拆分,前端无 API 路径变化,兼容性保持
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
+
+- 登录页控制按钮与全局 header 按钮统一样式 (175a5d8)
 ### 📖 docs
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
@@ -412,6 +412,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+cb0afde95cc15b3eba8687ceba2551c5797b8b22 ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+eb3bb8b5f093a56a875c581dbd32e8dc62636070 ()
+  > feat: 登录页面增加主题和大字模式切换按钮，全局一致体验
 - 
 64b9231fdf8143bd03e32e84e58c513883d78db6 ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -492,5 +498,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...eb3bb8b)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...175a5d8)
 
