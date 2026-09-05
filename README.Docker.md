@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `3a628c0` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `4b17820` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,13 +228,6 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
-
-- split readings table into two independent tables (3a628c0)
-  > Separate 抄表记录 (four-meter electricity readings) and 水电表底
-  > (total/sub/water water meter readings) into two completely independent
-  > tables with separate headers, month selectors, and edit/delete actions.
-  > Before: one combined table with 8 data columns (4 meters + 3 water +
-  > note + actions). Editing one affected the other because they shared
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -338,6 +331,10 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
+- 水表表底月份选择后不刷新表格 (4b17820)
+  > 给 #water-history-month 下拉框添加 change 事件监听，
+  > 选择月份后触发 renderHistory() 重新渲染水电表底数据。
+
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -368,6 +365,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+e4da33)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 00f098)
@@ -411,6 +411,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+3a628c0e58c79ea394f632498facc2b2b5e80efe ()
+  > feat: split readings table into two independent tables
 - 
 af48094e29edff6ffa4ab9ca8f8263758838d7d3 ()
   > fix: display water-only records in history table + fix delete for water-only dates
@@ -467,5 +470,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...3a628c0)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...4b17820)
 
