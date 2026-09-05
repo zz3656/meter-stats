@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `2620d4b` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `9b322b6` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -229,7 +229,7 @@ a5b123)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
 
-- 工作记录未处理项添加处理按钮,支持处理时间/班次/方案/备注 (2620d4b)
+- 工作记录表格增加处理方案列,待处理记录显示醒目横幅 (9b322b6)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -419,6 +419,12 @@ e19fdd)
 ### 📝 其他改动
 
 - 
+0fc29b7cd1ca703720eaa632cb5edd7a6180b34b ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+2620d4b9adfa531affaa3084d3926446b03dc035 ()
+  > feat: 工作记录未处理项添加处理按钮,支持处理时间/班次/方案/备注
+- 
 f5cd0daf3c05a6a9112aafaae11ff1007116fdbd ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
 - 
@@ -528,5 +534,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...2620d4b)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...9b322b6)
 
