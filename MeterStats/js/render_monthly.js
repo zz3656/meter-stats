@@ -214,6 +214,7 @@ async function submitDutyHandle() {
   let handle_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
+    // 1) 将原始记录标记为已处理
     await api('PUT', `/api/duty/${id}`, {
       status: '已处理',
       handle_time,

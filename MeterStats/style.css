@@ -1871,6 +1871,39 @@
     background: var(--reminder-btn-hover);
 }
 
+/* 工作记录待处理横幅 — 比抄表提醒更显眼 */
+#duty-reminder {
+    margin-bottom: 16px;
+    padding: 14px 16px;
+    border: 2px solid var(--danger);
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    align-items: center;
+    justify-content: space-between;
+    background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(239,68,68,0.03));
+    box-shadow: 0 2px 12px rgba(239,68,68,0.15);
+    animation: duty-reminder-pulse 2s ease-in-out infinite;
+}
+[data-theme="dark"] #duty-reminder {
+    background: linear-gradient(135deg, rgba(239,68,68,0.15), rgba(239,68,68,0.05));
+    box-shadow: 0 2px 12px rgba(239,68,68,0.25);
+}
+#duty-reminder #duty-reminder-text {
+    color: var(--danger);
+    font-weight: 600;
+}
+#duty-reminder .meter-reminder-close {
+    color: var(--danger);
+}
+#duty-reminder .meter-reminder-close:hover {
+    background: rgba(239,68,68,0.15);
+}
+@keyframes duty-reminder-pulse {
+    0%, 100% { box-shadow: 0 2px 12px rgba(239,68,68,0.15); }
+    50% { box-shadow: 0 2px 20px rgba(239,68,68,0.3); }
+}
+
 /* ==================== 充电计算弹窗(桌面 4 列,移动 2 列/卡片) ==================== */
 .topup-meter-card {
   background: var(--bg-subtle);

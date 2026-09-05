@@ -60,6 +60,13 @@ if (dutyTimeEl) {
   if (CURRENT_READINGS.length === 0 && CURRENT_CHARGES.length === 0) {
     showAlert('👋 欢迎!先录入今天的抄表数据开始。', 'info');
   }
+  // 待处理工作记录横幅
+  const unhandledDuty = CURRENT_DUTY?.filter(d => d.status === '未处理') || [];
+  if (unhandledDuty.length > 0) {
+    const el = document.getElementById('duty-reminder');
+    document.getElementById('duty-reminder-text').textContent = `⚠️ 还有 ${unhandledDuty.length} 条工作记录待处理,请尽快处理`;
+    el.style.display = 'flex';
+  }
 })();
 
 // 把关键函数暴露到 window,让 admin.js(strict mode 单独作用域)能调用恢复后刷新整个页面

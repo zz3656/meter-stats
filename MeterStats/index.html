@@ -583,6 +583,11 @@
             <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录">➕ 新增记录</button>
           </div>
         </div>
+        <!-- 班次遗留未处理记录横幅 -->
+        <div id="duty-reminder" class="meter-reminder" style="display:none;">
+          <span id="duty-reminder-text">⚠️ 有待处理工作记录</span>
+          <button type="button" class="meter-reminder-close" onclick="document.getElementById('duty-reminder').style.display='none'">✕</button>
+        </div>
         <div style="overflow-x:auto;">
           <table class="history-table" id="duty-table">
             <thead>
@@ -592,6 +597,7 @@
                 <th>班次</th>
                 <th>故障区域</th>
                 <th>状态</th>
+                <th>处理方案</th>
                 <th>备注</th>
                 <th></th>
               </tr>
