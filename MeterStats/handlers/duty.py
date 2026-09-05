@@ -85,3 +85,64 @@ def handle_put_duty(handler, path_clean: str):
 def handle_delete_duty(handler, path_clean: str):
     """DELETE /api/duty/{id}"""
     _h.handle_delete(handler, path_clean)
+
+
+def handle_post_duty_handle(handler, path_clean: str):
+    """POST /api/duty/{id}/handle — 处理一条未处理的工作记录。
+
+    两步操作：
+    1. 将原始报修记录标记为"已处理"，记录 handle_record_id 关联
+    2. 创建一条新的处理记录（duty_type="处理"），携带处理时间、班次、方案、备注
+    """
+    # 提取 id: /api/duty/xxx/handle → xxx
+    parts = path_clean.split("/")
+    # 期望: ["", "api", "duty", "<id>", "handle"]
+    if len(parts) < 5 or parts[-1] != "handle":
+        from utils import send_json
+        send_json(handler, 400, {"error": "路径不正确"})
+        return
+    rid = parts[3]
+    body = read_body(handler)
+
+    handle_time = body.get("handle_time", "").strip()
+    handle_shift = body.get("handle_shift", "").strip()
+    handle_method = body.get("handle_method", "").strip()
+    note = body.get("note", "").strip()
+
+    if not handle_shift or not handle_method:
+        send_json(handler, 400, {"error": "处理班次和处理方案不能为空"})
+        return
+
+    if not handle_time:
+        handle_time = _now().strftime("%Y-%m-%d %H:%M:%S")
+
+    data = _h._load()
+    existing, idx = _h._find_by_id(data, rid)
+    if existing is None:
+        send_json(handler, 404, {"error": f"未找到 {rid}"})
+        return
+
+    # 1) 标记原始记录为已处理
+    existing["status"] = "已处理"
+    handle_id = _h._gen_id("HL")
+    existing["handle_record_id"] = handle_id
+    data[idx] = existing
+
+    # 2) 创建处理记录
+    handle_row = {
+        "id": handle_id,
+        "duty_type": "处理",
+        "record_time": handle_time,
+        "shift": handle_shift,
+        "status": "已处理",
+        "fault_area": existing.get("fault_area", ""),
+        "note": handle_method,
+        "original_id": rid,
+    }
+    if note:
+        handle_row["note"] = f"{handle_method}\n备注: {note}"
+    data.append(handle_row)
+
+    _h._save(data)
+    log(f"  OK 处理工作记录 {rid} → 新记录 {handle_id}")
+    send_json(handler, 200, {"ok": True, "handle_id": handle_id})

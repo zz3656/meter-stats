@@ -271,14 +271,19 @@ function renderDutyTable(dutyList, filterMonth) {
 
   tbody.innerHTML = sorted.map(d => {
     const statusColor = d.status === '已处理' ? 'var(--success)' : 'var(--warn)';
-    return `<tr>
+    // 处理记录的显示逻辑
+    const isHandle = d.duty_type === '处理';
+    const displayType = isHandle ? '🔧 处理记录' : escapeHtml(d.duty_type || '—');
+    const displayHandle = isHandle ? escapeHtml(d.note || '—') : escapeHtml(d.handle_method || '—');
+    const displayNote = isHandle ? '' : escapeHtml(d.note || '—');
+    return `<tr class="${isHandle ? 'handle-row' : ''}">
       <td>${d.record_time || '—'}</td>
-      <td>${escapeHtml(d.duty_type || '—')}</td>
+      <td>${displayType}</td>
       <td>${escapeHtml(d.shift || '—')}</td>
       <td>${escapeHtml(d.fault_area || '—')}</td>
       <td><span style="color:${statusColor};font-weight:510;">${escapeHtml(d.status || '—')}</span></td>
-      <td>${escapeHtml(d.handle_method || '—')}</td>
-      <td>${escapeHtml(d.note || '—')}</td>
+      <td>${displayHandle}</td>
+      <td>${displayNote}</td>
       <td>
         ${d.status === '未处理' ? `<button class="save-btn" data-action="handle-duty" data-id="${d.id}">处理</button>` : ''}
         <button class="del-btn" data-action="del-duty" data-id="${d.id}">删除</button>

@@ -684,6 +684,16 @@
   .history-table tr.edit-row { background: rgba(113, 112, 255, 0.08); }
   .history-table tr.edit-row:hover { background: rgba(113, 112, 255, 0.12); }
   .history-table tr.edit-row td { padding: 4px 6px; }
+  /* 处理记录行 — 浅蓝色背景区分于报修记录 */
+  .history-table tr.handle-row {
+    background: rgba(37, 99, 235, 0.05);
+  }
+  .history-table tr.handle-row:hover {
+    background: var(--bg-hover);
+  }
+  [data-theme="dark"] .history-table tr.handle-row {
+    background: rgba(37, 99, 235, 0.12);
+  }
   /* 编辑行 input 固定宽度 — 和普通行数字文本同宽,点编辑时列宽不跳变(date input 默认 ~160px 会把列撑爆) */
   .history-table tr.edit-row .cell-input { width: 60px; }
   .history-table tr.edit-row #edit-date { width: 118px; }

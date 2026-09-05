@@ -214,15 +214,13 @@ async function submitDutyHandle() {
   let handle_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
-    // 1) 将原始记录标记为已处理
-    await api('PUT', `/api/duty/${id}`, {
-      status: '已处理',
+    await api('POST', `/api/duty/${id}/handle`, {
       handle_time,
       handle_shift,
       handle_method,
       note: note || '',
     });
-    showAlert('✓ 记录已处理', 'success');
+    showAlert('✓ 记录已处理,已生成处理记录', 'success');
     closeDutyHandleModal();
     await refreshDuty();
   } catch (e) {

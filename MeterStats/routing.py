@@ -23,6 +23,7 @@ from handlers.purchases import (
 )
 from handlers.duty import (
     handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty,
+    handle_post_duty_handle,
 )
 from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
@@ -182,6 +183,10 @@ def _route(method: str, handler, path: str) -> bool:
 
     # POST
     if method == "POST":
+        # 特殊路径: /api/duty/{id}/handle
+        if path_clean.startswith("/api/duty/") and path_clean.endswith("/handle"):
+            _dispatch_fn(handle_post_duty_handle, "POST", handler, path_clean)
+            return True
         handler_fn = _match_prefix(_POST_PREFIX, path_clean)
         if handler_fn:
             _dispatch_fn(handler_fn, "POST", handler)
