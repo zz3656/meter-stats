@@ -47,6 +47,14 @@ def get_data_dir() -> Path:
     if env_dir:
         d = Path(env_dir).expanduser().resolve()
         d.mkdir(parents=True, exist_ok=True)
+        # Docker 环境日志：告诉用户数据目录和需要持久化的位置
+        has_data = any(d.glob("*.json"))
+        print(f"[METER] 数据目录(来自 METER_DATA_DIR): {d}", flush=True)
+        if not has_data:
+            print(f"[METER] [注意] {d} 下没有找到 .json 数据文件。请确认:")
+            print(f"[METER]   1. docker-compose.yml 中 volumes: ./data:/data 的 ./data 目录是否包含旧数据")
+            print(f"[METER]   2. 或检查旧备份: ~/Library/Application Support/com.meter.stats/")
+            print(f"[METER]   3. 或检查旧位置: ~/Documents/electricity-stats/data/")
         return d
 
     # 2. macOS 标准位置

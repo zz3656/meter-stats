@@ -23,8 +23,11 @@ PORT = 8765
 STATIC_VERSION_TOKEN: str = None
 
 # 数据文件映射 (由 server.py main() 设置)
+# 注意：必须与 storage.DATA_FILES 的 key 保持一致，
+# 否则在 server.py 完成替换前，handler 可能因 KeyError 崩溃。
 DATA_PATHS: dict = {
     "readings": None,
+    "readings_water": None,  # 水电表底 (main_meter/sub_meter/water)
     "charges": None,
     "items": None,
     "purchases": None,
