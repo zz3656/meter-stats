@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `2ed66ef` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `0986d4f` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,8 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 工作记录新增记录和处理时增加图片上传功能,表格中展示图片缩略图 (0986d4f)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -331,8 +333,6 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 处理工作记录 API 增加详细错误日志 (2ed66ef)
-
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -418,6 +418,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+30d5d8287a59e7c62630391c9a18d5e90d4a0a00 ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+2ed66efab98977497df309e9cbf0d181ef5b41a9 ()
+  > fix: 处理工作记录 API 增加详细错误日志
 - 
 2630d6f17ed4e7c0f578d7c1948952b30b17c39a ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -546,5 +552,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...2ed66ef)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...0986d4f)
 
