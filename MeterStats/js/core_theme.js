@@ -22,6 +22,8 @@ function updateThemeIcon() {
   const icon = ICONS[getPreferredTheme()] || ICONS.auto;
   const btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = icon;
+  const loginBtn = document.getElementById('login-theme-btn');
+  if (loginBtn) loginBtn.textContent = icon;
 }
 function setTheme(mode) {
   localStorage.setItem(THEME_KEY, mode);
