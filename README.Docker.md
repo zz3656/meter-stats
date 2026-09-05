@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `98fd375` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `f19ba49` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -331,12 +331,7 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- expose global variables across JS modules for browser script loading (98fd375)
-  > - Export all cross-module variables/functions via window object
-  > - Fix: CURRENT_READINGS, CURRENT_CHARGES, STORAGE_KEY_* declared
-  > - Fix: ELECTRICITY_PRICE, CHARGE_METERS exported from data_helpers
-  > - Fix: METER_CONFIG, MULTIPLIER, LABELS, COLORS exported from core_meterConfig
-  > - Fix: CURRENT_ITEMS, CURRENT_PURCHASES, CURRENT_DUTY from core_accessibility
+- login page theme button now matches post-login (3-state cycle) (f19ba49)
 
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
@@ -423,6 +418,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+d5503e56e2c38a36eb4fa00ab9ff0bc31c85c69c ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+98fd375104572ad3e671bca3a4b55514099a6917 ()
+  > fix: expose global variables across JS modules for browser script loading
 - 
 d557162b42463c217630713772ed77f946f761bc ()
   > fix: Dockerfile 复制 js/ 子目录以包含所有模块化文件
@@ -521,5 +522,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...98fd375)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...f19ba49)
 
