@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `4b17820` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `f3de412` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -331,9 +331,11 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 水表表底月份选择后不刷新表格 (4b17820)
-  > 给 #water-history-month 下拉框添加 change 事件监听，
-  > 选择月份后触发 renderHistory() 重新渲染水电表底数据。
+- 修复水表表底月份选择后抄表记录消失 (f3de412)
+  > 之前给 water-history-month 的 change 监听传入了 CURRENT_WATER_READINGS
+  > 导致 renderHistory 用用水表数据去过滤电表表格，使抄表记录变空。
+  > 现在统一传入 CURRENT_READINGS，水电表底在 renderHistory 内部
+  > 直接从 CURRENT_WATER_READINGS 全局变量读取。
 
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
@@ -365,6 +367,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+c99e0e)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 e4da33)
@@ -411,6 +416,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+4b178201f1e94d887f8d1d2c5ffff61d18a140a3 ()
+  > fix: 水表表底月份选择后不刷新表格
 - 
 3a628c0e58c79ea394f632498facc2b2b5e80efe ()
   > feat: split readings table into two independent tables
@@ -470,5 +478,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...4b17820)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...f3de412)
 
