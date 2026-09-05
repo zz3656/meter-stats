@@ -25,6 +25,8 @@ COPY MeterStats/*.py ./
 COPY MeterStats/*.html ./
 COPY MeterStats/*.css ./
 COPY MeterStats/*.js ./
+# 复制模块化 JS 文件
+COPY MeterStats/js/ js/
 COPY MeterStats/*.svg ./
 COPY MeterStats/*.png ./
 # VERSION 文件无后缀,glob 不匹配,单独复制(server.py 启动时需要)
