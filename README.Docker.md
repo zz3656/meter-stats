@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `175a5d8` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `a5e5f2b` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -361,8 +361,16 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 
-- 登录页控制按钮与全局 header 按钮统一样式 (175a5d8)
+- 模块化重构前端 JS，将 app.js 拆分为 29 个功能模块 (a5e5f2b)
+  > - js/core/: 元数据、主题管理、大字醒目模式
+  > - js/data/: 数据存储、API 调用、数据迁移
+  > - js/ui/: Toast、Modal 组件
+  > - js/render/: 汇总渲染、表格渲染、图表渲染、记录渲染、编辑模式
+  > - js/features/: 充值计算、月度水电
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+9099f5)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 c99e0e)
@@ -412,6 +420,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+175a5d846481c3dd36b422329dad1560de02e25b ()
+  > refactor: 登录页控制按钮与全局 header 按钮统一样式
 - 
 cb0afde95cc15b3eba8687ceba2551c5797b8b22 ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -498,5 +509,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...175a5d8)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...a5e5f2b)
 
