@@ -2029,41 +2029,69 @@ function renderHistory(readings) {
   const monthSel = document.getElementById('history-month');
   const month = monthSel ? monthSel.value : '';
   const filtered = month ? readings.filter(r => r.date.startsWith(month)) : readings;
-  if (filtered.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    empty.textContent = `${month} 暂无抄表记录`;
-    return;
-  }
-  empty.style.display = 'none';
-  const sorted = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 
-  // 合并水电数据用于显示
+  // 合并抄表和水电表底数据用于显示
+  // 水电表底和抄表记录是独立存储的，分别按日期键控
   const waterByDate = {};
   for (const w of (CURRENT_WATER_READINGS || [])) {
     waterByDate[w.date] = w;
   }
 
-  tbody.innerHTML = sorted.map(r => {
-    const waterRow = waterByDate[r.date] || {};
+  // 合并所有有数据的日期：抄表记录 + 水电表底（独立、互不干扰）
+  const allDates = new Set();
+  for (const r of filtered) allDates.add(r.date);
+  for (const w of CURRENT_WATER_READINGS || []) {
+    if (waterByDate[w.date] && filtered.some(fr => fr.date === w.date)) {
+      // 水电日期有对应抄表记录 → 抄表记录行中已包含水电列
+    } else if (!filtered.some(fr => fr.date === w.date)) {
+      // 水电日期没有对应抄表记录 → 补充为只含水电的虚拟行
+      const waterRow = waterByDate[w.date];
+      allDates.add(w.date);
+    }
+  }
+  const sorted = [...allDates].sort((a, b) => b.localeCompare(a));
+
+  if (sorted.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    empty.textContent = `${month ? month : '全部'} 暂无任何数据`;
+    return;
+  }
+  empty.style.display = 'none';
+
+  // 渲染日期列表
+  tbody.innerHTML = sorted.map(date => {
+    const r = readings.find(x => x.date === date);
+    const waterRow = waterByDate[date] || {};
+    const hasElectric = !!r;
+    const hasWater = waterRow.main_meter != null || waterRow.sub_meter != null || waterRow.water != null;
+    if (!hasElectric && !hasWater) return ''; // 双空，跳过
+
+    // 抄表数据（可能不存在）
+    const h = r?.hall ?? null, f = r?.fire ?? null, pr = r?.private_room ?? null, ac = r?.ac ?? null;
+    const note = r?.note || '';
+
+    // 水电表底
+    const mm = waterRow.main_meter, sm = waterRow.sub_meter, wt = waterRow.water;
+
     return `
-      <tr data-date="${r.date}">
-        <td>${r.date}</td>
-        <td>${r.hall == null ? '—' : r.hall.toFixed(2)}</td>
-        <td>${r.fire == null ? '—' : r.fire.toFixed(2)}</td>
-        <td>${r.private_room == null ? '—' : r.private_room.toFixed(2)}</td>
-        <td>${r.ac == null ? '—' : r.ac.toFixed(2)}</td>
-        <td>${waterRow.main_meter == null ? '—' : waterRow.main_meter.toFixed(1)}</td>
-        <td>${waterRow.sub_meter == null ? '—' : waterRow.sub_meter.toFixed(1)}</td>
-        <td>${waterRow.water == null ? '—' : waterRow.water.toFixed(1)}</td>
-        <td style="color:var(--text-muted);font-size:12px;">${r.note || '—'}</td>
+      <tr data-date="${date}" style="${!hasElectric ? 'background:var(--bg-surface);' : ''}">
+        <td>${date}</td>
+        <td>${h == null ? '—' : h.toFixed(2)}</td>
+        <td>${f == null ? '—' : f.toFixed(2)}</td>
+        <td>${pr == null ? '—' : pr.toFixed(2)}</td>
+        <td>${ac == null ? '—' : ac.toFixed(2)}</td>
+        <td>${mm == null ? '—' : mm.toFixed(1)}</td>
+        <td>${sm == null ? '—' : sm.toFixed(1)}</td>
+        <td>${wt == null ? '—' : wt.toFixed(1)}</td>
+        <td style="color:var(--text-muted);font-size:12px;">${note || '—'}</td>
         <td>
-          <button class="edit-btn" data-action="edit" data-date="${r.date}">编辑</button>
-          <button class="delete-btn" data-action="delete" data-date="${r.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
+          <button class="edit-btn" data-action="edit" data-date="${date}">编辑</button>
+          <button class="delete-btn" data-action="delete" data-date="${date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
         </td>
       </tr>
     `;
-  }).join('');
+  }).filter(Boolean).join('');
 
   // 编辑
   tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
@@ -2074,9 +2102,9 @@ function renderHistory(readings) {
     btn.addEventListener('click', async () => {
       const date = btn.dataset.date;
       const ok = await showModal({
-        title: '删除抄表记录',
+        title: '删除数据',
         icon: '🗑️',
-        body: `确认删除 <strong>${date}</strong> 的抄表记录?<br><span style="opacity:0.7">此操作不可恢复。</span>`,
+        body: `确认删除 <strong>${date}</strong> 的记录?<br><span style="opacity:0.7">此操作不可恢复。</span>`,
         confirmText: '删除',
       });
       if (!ok) return;
@@ -2085,7 +2113,10 @@ function renderHistory(readings) {
         if (CURRENT_WATER_READINGS.some(w => w.date === date)) {
           await deleteWaterReadingRemote(date);
         }
-        await deleteReadingRemote(date);
+        // 同时删除抄表记录(如果存在)
+        if (CURRENT_READINGS.some(r => r.date === date)) {
+          await deleteReadingRemote(date);
+        }
         showAlert(`已删除 ${date}`, 'success');
         await refreshAndRender();
       } catch (err) {
