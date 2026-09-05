@@ -81,6 +81,29 @@ function cycleTheme() {
   setTheme(next);
 }
 
+// ===== 大字醒目模式(辅助功能) =====
+const ACCESSIBILITY_KEY = 'meter_accessibility_on';
+function getAccessibilityState() {
+  return localStorage.getItem(ACCESSIBILITY_KEY) === 'on';
+}
+function applyAccessibility() {
+  const on = getAccessibilityState();
+  document.documentElement.setAttribute('data-accessibility', on ? 'on' : '');
+  const btn = document.getElementById('accessibility-btn');
+  if (btn) {
+    btn.classList.toggle('active', on);
+    btn.textContent = on ? '✅ 大字' : '🔤 大字';
+  }
+}
+function toggleAccessibility() {
+  const current = getAccessibilityState();
+  const next = !current;
+  localStorage.setItem(ACCESSIBILITY_KEY, next ? 'on' : 'off');
+  applyAccessibility();
+  // 切换后重新渲染图表
+  renderCharts();
+}
+
 // 重新渲染图表(颜色可能受影响)
 function renderCharts() {
   const isDark = getEffectiveTheme() === 'dark';
@@ -4125,6 +4148,7 @@ document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
 // 初始化:默认显示抄表记录
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme();
+  applyAccessibility();
   loadMeterConfig().then(() => {
     loadMonthlyReport();
   });
