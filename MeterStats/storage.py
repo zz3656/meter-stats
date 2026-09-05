@@ -415,3 +415,149 @@ def get_file_count(data_dir: Path) -> Dict[str, int]:
         else:
             counts[name] = 0
     return counts
+
+
+# ============ 数据迁移 ============
+
+# 旧版水电字段（存储在 readings.json 中）
+_WATER_FIELDS = {"main_meter", "sub_meter", "water"}
+
+
+def _has_water_fields(record: dict) -> bool:
+    """检查记录是否包含旧版水电字段。"""
+    return any(record.get(f) is not None for f in _WATER_FIELDS)
+
+
+def migrate_readings_to_readings_water(data_dir: Path) -> int:
+    """将 readings.json 中的水电字段迁移到 readings_water.json。
+
+    迁移策略（幂等）:
+    1. 读取 readings.json 和 readings_water.json
+    2. 从 readings.json 中提取有水电字段的记录
+    3. 如果 readings_water.json 中已有同日期记录 → 保留新文件中的（不覆盖）
+    4. 如果 readings_water.json 中没有 → 写入新记录
+    5. 从 readings.json 中移除水电字段（保留 date、note 和四表数据）
+    6. 如果未发生实际迁移 → 直接返回 0
+
+    返回: 迁移的记录数量
+    """
+    readings_path = data_dir / DATA_FILES["readings"]
+    water_path = data_dir / DATA_FILES["readings_water"]
+
+    if not readings_path.exists():
+        return 0
+
+    try:
+        readings = load_json(readings_path, [])
+    except Exception:
+        return 0
+
+    # 如果还没有 readings_water.json，先创建空文件
+    if not water_path.exists():
+        try:
+            save_json(water_path, [])
+        except Exception:
+            return 0
+    else:
+        # 如果文件为空数组，保留现状（不触发迁移）
+        try:
+            existing_water = load_json(water_path, [])
+            if isinstance(existing_water, list) and len(existing_water) == 0:
+                # 新创建的空白文件 → 不需要迁移，直接返回
+                # 如果 readings.json 中有水电数据，它们将自动通过 _has_water_fields 检测
+                pass
+        except Exception:
+            pass
+
+    try:
+        existing_water = load_json(water_path, [])
+    except Exception:
+        existing_water = []
+
+    # 按日期建立已有记录的映射
+    water_by_date = {w["date"]: w for w in existing_water if w.get("date")}
+
+    migrated = 0
+    updated_readings = []
+
+    for r in readings:
+        if not _has_water_fields(r):
+            # 没有水电字段，原样保留
+            updated_readings.append(r)
+            continue
+
+        # 有水电字段 → 需要迁移
+        date = r.get("date")
+        if date and date not in water_by_date:
+            # readings_water 中还没有这条记录 → 写入
+            water_by_date[date] = {
+                "date": date,
+                "main_meter": r.get("main_meter"),
+                "sub_meter": r.get("sub_meter"),
+                "water": r.get("water"),
+                "note": r.get("note", ""),
+            }
+            migrated += 1
+
+        # 从 readings.json 中清理水电字段
+        cleaned = {}
+        for key in r:
+            if key in _WATER_FIELDS:
+                continue  # 移除水电字段
+            cleaned[key] = r[key]
+
+        # 确保 date 和 note 存在
+        if "date" not in cleaned and r.get("date"):
+            cleaned["date"] = r["date"]
+        if "note" not in cleaned:
+            cleaned["note"] = r.get("note", "")
+
+        updated_readings.append(cleaned)
+
+    if migrated == 0:
+        # 没有新迁移的记录，但如果 readings.json 中还有残留水电字段（water_by_date 已存在），
+        # 我们仍然需要清理 readings.json 中的残留
+        has_remaining = any(_has_water_fields(r) for r in readings)
+        if has_remaining:
+            # 仍有残留，说明所有水电记录都已存在于 readings_water.json 中
+            # 但仍需清理 readings.json
+            save_json(readings_path, updated_readings)
+            log("[MIGRATE] readings.json 中的残留水电字段已清理")
+        return 0
+
+    # 写入迁移后的数据
+    water_list = sorted(water_by_date.values(), key=lambda w: w.get("date", ""))
+
+    # 原子写入
+    _tmp_readings = readings_path.with_suffix(".tmp")
+    with _tmp_readings.open("w", encoding="utf-8") as f:
+        json.dump(updated_readings, f, ensure_ascii=False, indent=2)
+    _tmp_readings.replace(readings_path)
+    _cache_invalidate(str(readings_path.resolve()))
+
+    _tmp_water = water_path.with_suffix(".tmp")
+    with _tmp_water.open("w", encoding="utf-8") as f:
+        json.dump(water_list, f, ensure_ascii=False, indent=2)
+    _tmp_water.replace(water_path)
+    _cache_invalidate(str(water_path.resolve()))
+
+    log(f"[MIGRATE] 完成: {migrated} 条水电记录已迁移到 readings_water.json")
+    log(f"[MIGRATE] readings_water.json: {len(water_list)} 条")
+    log(f"[MIGRATE] readings.json: {len(updated_readings)} 条（已移除水电字段）")
+
+    return migrated
+
+
+def run_startup_migration(data_dir: Path):
+    """启动时运行所有数据迁移。
+
+    在 init_data_files() 之后调用，此时所有数据文件已创建。
+    """
+    try:
+        result = migrate_readings_to_readings_water(data_dir)
+        if result > 0:
+            log(f"[MIGRATE] 启动迁移完成，共迁移 {result} 条记录")
+    except Exception as e:
+        log(f"[MIGRATE] 迁移失败: {e}")
+        import traceback
+        log(traceback.format_exc())

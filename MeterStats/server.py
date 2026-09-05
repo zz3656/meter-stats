@@ -113,8 +113,12 @@ def main():
     except Exception:
         pass
 
-    # 初始化数据文件并获取文件映射
+    # 初始化数据文件并获取文件映射（会自动创建不存在的空数据文件）
     data_paths = init_data_files(data_dir)
+
+    # 运行启动时数据迁移（将旧版 readings.json 中的水电字段迁移到 readings_water.json）
+    from storage import run_startup_migration as _run_startup_migration
+    _run_startup_migration(data_dir)
 
     # 写入 PID 文件
     _write_pid(data_dir)
