@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `6a21ca2` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `eb3bb8b` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,8 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 登录页面增加主题和大字模式切换按钮，全局一致体验 (eb3bb8b)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -331,8 +333,6 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 大字模式在登录界面即可显示，提前初始化避免闪烁 (6a21ca2)
-
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -413,6 +413,12 @@ e19fdd)
 ### 📝 其他改动
 
 - 
+64b9231fdf8143bd03e32e84e58c513883d78db6 ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+6a21ca2ee8d569c4b638e4274dbe1b7d5a98c07e ()
+  > fix: 大字模式在登录界面即可显示，提前初始化避免闪烁
+- 
 4738ace1c42b478a222eadbcddc7ac11d81a7818 ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
 - 
@@ -486,5 +492,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...6a21ca2)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...eb3bb8b)
 
