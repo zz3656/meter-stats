@@ -2228,23 +2228,29 @@ async function enterChargeEditMode(id) {
   });
 }
 
-// 进入行内编辑模式(抄表)
-// 注意：水电表底(总表/分表/水表)已独立存储，不在此编辑。
-// 如需修改水电表底，使用侧栏"水电录入"或弹窗的"水电"tab。
+// 进入行内编辑模式(抄表 + 水电表底)
 async function enterEditMode(date) {
   const allData = await fetchReadings();
   const row = allData.find(r => r.date === date);
   if (!row) return;
+
+  // 加载关联的水电表底数据
+  const waterAll = await fetchWaterReadings();
+  const waterRow = waterAll.find(w => w.date === date) || {};
+
   const tr = document.querySelector(`#history-table tbody tr[data-date="${date}"]`);
   if (!tr) return;
 
   tr.classList.add('edit-row');
   tr.innerHTML = `
     <td><input type="date" class="cell-input" id="edit-date" value="${row.date}" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-hall" value="${row.hall ?? ''}" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-fire" value="${row.fire ?? ''}" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-private_room" value="${row.private_room ?? ''}" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-ac" value="${row.ac ?? ''}" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-hall" value="${row.hall ?? ''}" placeholder="大厅" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-fire" value="${row.fire ?? ''}" placeholder="消防" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-private_room" value="${row.private_room ?? ''}" placeholder="包厢" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-ac" value="${row.ac ?? ''}" placeholder="空调" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-main_meter" value="${waterRow.main_meter ?? ''}" placeholder="总表" title="总表" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-sub_meter" value="${waterRow.sub_meter ?? ''}" placeholder="分表" title="分表" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-water" value="${waterRow.water ?? ''}" placeholder="水表" title="水表" /></td>
     <td><input type="text" class="cell-input" id="edit-note" value="${row.note || ''}" placeholder="备注" /></td>
     <td>
       <button class="save-btn" data-action="save" data-old-date="${date}">保存</button>
@@ -2265,13 +2271,26 @@ async function enterEditMode(date) {
     const newAc = numE('#edit-ac');
     const newNote = tr.querySelector('#edit-note').value.trim();
 
+    // 水电表底字段
+    const mainMeter = numE('#edit-main_meter');
+    const subMeter = numE('#edit-sub_meter');
+    const waterVal = numE('#edit-water');
+
     if (!newDate) { showAlert('日期不能为空', 'error'); return; }
+
+    // 抄表校验：至少填一个四表
     const editVals = [newHall, newFire, newPrivate, newAc];
-    if (editVals.some(v => v !== null && isNaN(v))) {
-      showAlert('读数必须是数字', 'error'); return;
-    }
-    if (editVals.every(v => v === null)) {
+    const allEmpty = editVals.every(v => v === null) && mainMeter === null && subMeter === null && waterVal === null;
+    if (allEmpty) {
       showAlert('至少填写一块表的读数', 'error'); return;
+    }
+
+    // 水电字段校验
+    const waterVals = [mainMeter, subMeter, waterVal];
+    const waterInputEmpty = waterVals.every(v => v === null);
+    const waterInputInvalid = waterVals.some(v => v !== null && isNaN(v));
+    if (waterInputInvalid) {
+      showAlert('读数必须是数字', 'error'); return;
     }
 
     // 如果改了日期,检查新日期是否已存在
@@ -2294,14 +2313,46 @@ async function enterEditMode(date) {
     }
 
     try {
-      await updateReadingRemote(date, {
-        date: newDate,
-        hall: newHall,
-        fire: newFire,
-        private_room: newPrivate,
-        ac: newAc,
-        note: newNote,
-      });
+      // 更新抄表记录（仅四表）
+      const fourMeterData = {};
+      for (const k of ['hall', 'fire', 'private_room', 'ac']) {
+        const v = { hall: newHall, fire: newFire, private_room: newPrivate, ac: newAc }[k];
+        fourMeterData[k] = v === null ? undefined : v;
+      }
+      fourMeterData.date = newDate;
+      fourMeterData.note = newNote;
+      await updateReadingRemote(date, fourMeterData);
+
+      // 更新水电表底（仅当至少有一个水电字段有值时）
+      if (!waterInputEmpty) {
+        // 检查新日期是否已有水电记录
+        const waterAll = await fetchWaterReadings();
+        const existingWater = waterAll.find(w => w.date === newDate);
+        if (existingWater) {
+          const ok = await showModal({
+            title: '覆盖已有水电数据',
+            icon: '⚠️',
+            iconKind: 'warn',
+            body: `<strong>${newDate}</strong> 已有水电表底,是否覆盖?<br><br>
+              <span style="opacity:0.7">现有:</span> 总表 ${existingWater.main_meter ?? '—'} · 分表 ${existingWater.sub_meter ?? '—'} · 水表 ${existingWater.water ?? '—'}<br>
+              <span style="opacity:0.7">新数据:</span> 总表 ${mainMeter ?? '—'} · 分表 ${subMeter ?? '—'} · 水表 ${waterVal ?? '—'}`,
+            confirmText: '覆盖',
+            confirmKind: 'primary',
+          });
+          if (!ok) return;
+          // 先删除旧水电记录
+          await deleteWaterReadingRemote(existingWater.date);
+        }
+        const waterData = {
+          date: newDate,
+          main_meter: mainMeter,
+          sub_meter: subMeter,
+          water: waterVal,
+          note: newNote,
+        };
+        await saveWaterReadingRemote(waterData);
+      }
+
       showAlert(`✓ ${date} 已更新为 ${newDate}`, 'success');
       await refreshAndRender();
     } catch (err) {
@@ -2640,6 +2691,7 @@ function refreshMonthSelectors() {
       : uMonths.map(m => `<option value="${m}">${m}</option>`).join('');
     const prev = utilSel.value;
     utilSel.innerHTML = uopts;
+    // 默认选择最新有数据的月份
     const newVal = prev && uMonths.includes(prev) ? prev : (uMonths.length > 0 ? uMonths[uMonths.length - 1] : '');
     if (utilSel.value !== newVal) {
       utilSel.value = newVal;
