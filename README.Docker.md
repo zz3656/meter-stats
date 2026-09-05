@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `fff03f2` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `3c67f2a` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,13 +228,6 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
-
-- 分离水电表底数据到独立文件,支持在线迁移 (fff03f2)
-  > - 新增 readings_water.json 独立存储总表/分表/水表数据
-  > - 电表抄表(readings.json)与水电表底完全分离,可独立增删
-  > - 新增 /api/admin/migrate-water 端点,启动时自动检测旧格式数据
-  > - 前端自动检测弹窗,用户确认后一键执行数据分离迁移
-  > - 迁移自动备份+完整性验证,失败可回滚
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -338,6 +331,20 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
+- auto-migrate water data on startup (3c67f2a)
+  > When Docker rebuilds, readings_water.json may not exist, causing
+  > init_data_files() to create an empty file. This adds automatic
+  > migration at startup to extract legacy main_meter/sub_meter/water
+  > fields from readings.json into the independent readings_water.json,
+  > preventing data loss on redeploy.
+
+- ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
+6c8ae6)
+  > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
+  > Prevents KeyError if handler reads DATA_PATHS before server.py completes replacement
+  > - Add diagnostic logs in storage.get_data_dir() when METER_DATA_DIR has no data files
+  > Helps users locate lost data after Docker image update/redeploy
+
 - 修复 build-dmg.yml 工作流 (
 6a6eaa)
   > - 移除已弃用的 altool 引用
@@ -361,6 +368,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+858c3f)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 7b88f1)
@@ -389,6 +399,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+fff03f218bf5b201d29d27b46862ae94bcdd5e71 ()
+  > feat: 分离水电表底数据到独立文件,支持在线迁移
 - 
 39ba440d100e35706c178dd2f3b2845e3d8da8de ()
   > fix(deploy): 修复 VERSION 读取/Docker 构建/ZIP 上传/Docker 检测 4 个 bug
@@ -430,5 +443,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...fff03f2)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...3c67f2a)
 
