@@ -2018,106 +2018,117 @@ function populateDutyMonthSelector() {
 // 历史表格(抄表记录)
 // 渲染历史表格(抄表记录 + 水电表底合并显示)
 function renderHistory(readings) {
-  const tbody = document.querySelector('#history-table tbody');
-  const empty = document.getElementById('history-empty');
-  if (!readings || readings.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    return;
-  }
-  // 按选中的月份过滤(下拉框只有有数据的月份,默认最后月)
+  // ==================== 抄表记录表（仅四表，不含水电） ====================
+  const readTbody = document.querySelector('#history-table tbody');
+  const readEmpty = document.getElementById('history-empty');
+  if (!readTbody) return;
+
+  // 按选中的月份过滤
   const monthSel = document.getElementById('history-month');
   const month = monthSel ? monthSel.value : '';
   const filtered = month ? readings.filter(r => r.date.startsWith(month)) : readings;
 
-  // 合并抄表和水电表底数据用于显示
-  // 水电表底和抄表记录是独立存储的，分别按日期键控
-  const waterByDate = {};
-  for (const w of (CURRENT_WATER_READINGS || [])) {
-    waterByDate[w.date] = w;
-  }
-
-  // 合并所有有数据的日期：抄表记录 + 水电表底（独立、互不干扰）
-  const allDates = new Set();
-  for (const r of filtered) allDates.add(r.date);
-  for (const w of CURRENT_WATER_READINGS || []) {
-    if (waterByDate[w.date] && filtered.some(fr => fr.date === w.date)) {
-      // 水电日期有对应抄表记录 → 抄表记录行中已包含水电列
-    } else if (!filtered.some(fr => fr.date === w.date)) {
-      // 水电日期没有对应抄表记录 → 补充为只含水电的虚拟行
-      const waterRow = waterByDate[w.date];
-      allDates.add(w.date);
-    }
-  }
-  const sorted = [...allDates].sort((a, b) => b.localeCompare(a));
-
-  if (sorted.length === 0) {
-    tbody.innerHTML = '';
-    empty.style.display = 'block';
-    empty.textContent = `${month ? month : '全部'} 暂无任何数据`;
+  if (!filtered || filtered.length === 0) {
+    readTbody.innerHTML = '';
+    readEmpty.style.display = 'block';
+    readEmpty.textContent = `${month ? month : '全部'} 暂无抄表记录`;
     return;
   }
-  empty.style.display = 'none';
+  readEmpty.style.display = 'none';
+  const sortedReadings = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 
-  // 渲染日期列表
-  tbody.innerHTML = sorted.map(date => {
-    const r = readings.find(x => x.date === date);
-    const waterRow = waterByDate[date] || {};
-    const hasElectric = !!r;
-    const hasWater = waterRow.main_meter != null || waterRow.sub_meter != null || waterRow.water != null;
-    if (!hasElectric && !hasWater) return ''; // 双空，跳过
+  readTbody.innerHTML = sortedReadings.map(r => `
+    <tr data-date="${r.date}" data-type="reading">
+      <td>${r.date}</td>
+      <td>${r.hall == null ? '—' : r.hall.toFixed(2)}</td>
+      <td>${r.fire == null ? '—' : r.fire.toFixed(2)}</td>
+      <td>${r.private_room == null ? '—' : r.private_room.toFixed(2)}</td>
+      <td>${r.ac == null ? '—' : r.ac.toFixed(2)}</td>
+      <td style="color:var(--text-muted);font-size:12px;">${r.note || '—'}</td>
+      <td>
+        <button class="edit-btn" data-action="edit-reading" data-date="${r.date}">编辑</button>
+        <button class="delete-btn" data-action="delete-reading" data-date="${r.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
+      </td>
+    </tr>
+  `).join('');
 
-    // 抄表数据（可能不存在）
-    const h = r?.hall ?? null, f = r?.fire ?? null, pr = r?.private_room ?? null, ac = r?.ac ?? null;
-    const note = r?.note || '';
-
-    // 水电表底
-    const mm = waterRow.main_meter, sm = waterRow.sub_meter, wt = waterRow.water;
-
-    return `
-      <tr data-date="${date}" style="${!hasElectric ? 'background:var(--bg-surface);' : ''}">
-        <td>${date}</td>
-        <td>${h == null ? '—' : h.toFixed(2)}</td>
-        <td>${f == null ? '—' : f.toFixed(2)}</td>
-        <td>${pr == null ? '—' : pr.toFixed(2)}</td>
-        <td>${ac == null ? '—' : ac.toFixed(2)}</td>
-        <td>${mm == null ? '—' : mm.toFixed(1)}</td>
-        <td>${sm == null ? '—' : sm.toFixed(1)}</td>
-        <td>${wt == null ? '—' : wt.toFixed(1)}</td>
-        <td style="color:var(--text-muted);font-size:12px;">${note || '—'}</td>
-        <td>
-          <button class="edit-btn" data-action="edit" data-date="${date}">编辑</button>
-          <button class="delete-btn" data-action="delete" data-date="${date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
-        </td>
-      </tr>
-    `;
-  }).filter(Boolean).join('');
-
-  // 编辑
-  tbody.querySelectorAll('[data-action="edit"]').forEach(btn => {
-    btn.addEventListener('click', () => enterEditMode(btn.dataset.date));
+  // 抄表编辑
+  readTbody.querySelectorAll('[data-action="edit-reading"]').forEach(btn => {
+    btn.addEventListener('click', () => enterEditMode(btn.dataset.date, 'reading'));
   });
-  // 删除
-  tbody.querySelectorAll('[data-action="delete"]').forEach(btn => {
+  // 抄表删除
+  readTbody.querySelectorAll('[data-action="delete-reading"]').forEach(btn => {
     btn.addEventListener('click', async () => {
       const date = btn.dataset.date;
       const ok = await showModal({
-        title: '删除数据',
+        title: '删除抄表记录',
         icon: '🗑️',
-        body: `确认删除 <strong>${date}</strong> 的记录?<br><span style="opacity:0.7">此操作不可恢复。</span>`,
+        body: `确认删除 <strong>${date}</strong> 的抄表记录?<br><span style="opacity:0.7">此操作不可恢复。</span>`,
         confirmText: '删除',
       });
       if (!ok) return;
       try {
-        // 同时删除关联的水电表底(如果存在)
-        if (CURRENT_WATER_READINGS.some(w => w.date === date)) {
-          await deleteWaterReadingRemote(date);
-        }
-        // 同时删除抄表记录(如果存在)
-        if (CURRENT_READINGS.some(r => r.date === date)) {
-          await deleteReadingRemote(date);
-        }
-        showAlert(`已删除 ${date}`, 'success');
+        await deleteReadingRemote(date);
+        showAlert(`已删除抄表 ${date}`, 'success');
+        await refreshAndRender();
+      } catch (err) {
+        showAlert(`删除失败: ${err.message}`, 'error');
+      }
+    });
+  });
+
+  // ==================== 水电表底表（仅总表/分表/水表，不含四表） ====================
+  const waterTbody = document.querySelector('#water-history-table tbody');
+  const waterEmpty = document.getElementById('water-history-empty');
+  if (!waterTbody) return;
+
+  const waterHistoryMonthSel = document.getElementById('water-history-month');
+  const waterMonth = waterHistoryMonthSel ? waterHistoryMonthSel.value : '';
+  const waterFiltered = waterMonth
+    ? (CURRENT_WATER_READINGS || []).filter(w => w.date.startsWith(waterMonth))
+    : (CURRENT_WATER_READINGS || []);
+
+  if (!waterFiltered || waterFiltered.length === 0) {
+    waterTbody.innerHTML = '';
+    waterEmpty.style.display = 'block';
+    waterEmpty.textContent = `${waterMonth ? waterMonth : '全部'} 暂无水电表底记录`;
+    return;
+  }
+  waterEmpty.style.display = 'none';
+  const sortedWater = [...waterFiltered].sort((a, b) => b.date.localeCompare(a.date));
+
+  waterTbody.innerHTML = sortedWater.map(w => `
+    <tr data-date="${w.date}" data-type="water">
+      <td>${w.date}</td>
+      <td>${w.main_meter == null ? '—' : w.main_meter.toFixed(1)}</td>
+      <td>${w.sub_meter == null ? '—' : w.sub_meter.toFixed(1)}</td>
+      <td>${w.water == null ? '—' : w.water.toFixed(1)}</td>
+      <td style="color:var(--text-muted);font-size:12px;">${w.note || '—'}</td>
+      <td>
+        <button class="edit-btn" data-action="edit-water" data-date="${w.date}">编辑</button>
+        <button class="delete-btn" data-action="delete-water" data-date="${w.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
+      </td>
+    </tr>
+  `).join('');
+
+  // 水电编辑
+  waterTbody.querySelectorAll('[data-action="edit-water"]').forEach(btn => {
+    btn.addEventListener('click', () => enterWaterEditMode(btn.dataset.date));
+  });
+  // 水电删除
+  waterTbody.querySelectorAll('[data-action="delete-water"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const date = btn.dataset.date;
+      const ok = await showModal({
+        title: '删除水电表底',
+        icon: '🗑️',
+        body: `确认删除 <strong>${date}</strong> 的水电表底记录?<br><span style="opacity:0.7">此操作不可恢复。</span>`,
+        confirmText: '删除',
+      });
+      if (!ok) return;
+      try {
+        await deleteWaterReadingRemote(date);
+        showAlert(`已删除水电表底 ${date}`, 'success');
         await refreshAndRender();
       } catch (err) {
         showAlert(`删除失败: ${err.message}`, 'error');
@@ -2259,20 +2270,12 @@ async function enterChargeEditMode(id) {
   });
 }
 
-// 进入行内编辑模式(抄表 + 水电表底)
-async function enterEditMode(date) {
-  const allData = await fetchReadings();
-  const row = allData.find(r => r.date === date);
+// 进入行内编辑模式(抄表 — 仅四表)
+async function enterEditMode(date, type = 'reading') {
+  const row = CURRENT_READINGS.find(r => r.date === date);
   if (!row) return;
 
-  // 加载关联的水电表底数据
-  const waterAll = await fetchWaterReadings();
-  const waterRow = waterAll.find(w => w.date === date) || {};
-
-  // 记录编辑前是否已有水电记录（用于区分"删除"和"不创建"）
-  const hasExistingWater = waterRow.main_meter != null || waterRow.sub_meter != null || waterRow.water != null;
-
-  const tr = document.querySelector(`#history-table tbody tr[data-date="${date}"]`);
+  const tr = document.querySelector(`#history-table tbody tr[data-date="${date}"][data-type="reading"]`);
   if (!tr) return;
 
   tr.classList.add('edit-row');
@@ -2282,9 +2285,6 @@ async function enterEditMode(date) {
     <td><input type="number" step="0.01" class="cell-input" id="edit-fire" value="${row.fire ?? ''}" placeholder="消防" /></td>
     <td><input type="number" step="0.01" class="cell-input" id="edit-private_room" value="${row.private_room ?? ''}" placeholder="包厢" /></td>
     <td><input type="number" step="0.01" class="cell-input" id="edit-ac" value="${row.ac ?? ''}" placeholder="空调" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-main_meter" value="${waterRow.main_meter ?? ''}" placeholder="总表" title="总表" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-sub_meter" value="${waterRow.sub_meter ?? ''}" placeholder="分表" title="分表" /></td>
-    <td><input type="number" step="0.01" class="cell-input" id="edit-water" value="${waterRow.water ?? ''}" placeholder="水表" title="水表" /></td>
     <td><input type="text" class="cell-input" id="edit-note" value="${row.note || ''}" placeholder="备注" /></td>
     <td>
       <button class="save-btn" data-action="save" data-old-date="${date}">保存</button>
@@ -2305,70 +2305,118 @@ async function enterEditMode(date) {
     const newAc = numE('#edit-ac');
     const newNote = tr.querySelector('#edit-note').value.trim();
 
-    // 水电表底字段
-    const mainMeter = numE('#edit-main_meter');
-    const subMeter = numE('#edit-sub_meter');
-    const waterVal = numE('#edit-water');
-
-    // 水电字段校验
-    const waterInputEmpty = [mainMeter, subMeter, waterVal].every(v => v === null);
-    const waterInputInvalid = [mainMeter, subMeter, waterVal].some(v => v !== null && isNaN(v));
-    if (waterInputInvalid) {
-      showAlert('读数必须是数字', 'error'); return;
-    }
-
     if (!newDate) { showAlert('日期不能为空', 'error'); return; }
-
-    // 抄表校验：四表必须至少填一个（水电字段不参与此校验，因为它们独立）
     const editVals = [newHall, newFire, newPrivate, newAc];
     if (editVals.every(v => v === null)) {
       showAlert('至少填写一块电表的读数', 'error'); return;
     }
+    if (editVals.some(v => v !== null && isNaN(v))) {
+      showAlert('读数必须是数字', 'error'); return;
+    }
 
     // 如果改了日期,检查新日期是否已存在抄表记录
     if (newDate !== date) {
-      const all = await fetchReadings();
-      const conflict = all.find(r => r.date === newDate);
+      const conflict = CURRENT_READINGS.find(r => r.date === newDate);
       if (conflict) {
         const ok = await showModal({
           title: '覆盖已有数据',
           icon: '⚠️',
           iconKind: 'warn',
-          body: `<strong>${newDate}</strong> 已存在数据,合并(覆盖)它吗?`,
+          body: `<strong>${newDate}</strong> 已存在抄表记录,合并(覆盖)它吗?`,
           confirmText: '覆盖',
           confirmKind: 'primary',
         });
         if (!ok) return;
-        // 删除冲突的旧行
         await deleteReadingRemote(newDate);
       }
     }
 
     try {
-      // 1. 更新抄表记录（仅四表，完全独立于水电表底）
-      const fourMeterData = {};
-      for (const k of ['hall', 'fire', 'private_room', 'ac']) {
-        const v = { hall: newHall, fire: newFire, private_room: newPrivate, ac: newAc }[k];
-        fourMeterData[k] = v === null ? undefined : v;
-      }
-      fourMeterData.date = newDate;
-      fourMeterData.note = newNote;
-      await updateReadingRemote(date, fourMeterData);
+      await updateReadingRemote(date, {
+        date: newDate,
+        hall: newHall === null ? undefined : newHall,
+        fire: newFire === null ? undefined : newFire,
+        private_room: newPrivate === null ? undefined : newPrivate,
+        ac: newAc === null ? undefined : newAc,
+        note: newNote,
+      });
+      showAlert(`✓ ${date} 抄表已更新为 ${newDate}`, 'success');
+      await refreshAndRender();
+    } catch (err) {
+      showAlert(`更新失败: ${err.message}`, 'error');
+    }
+  });
 
-      // 2. 独立更新水电表底（与抄表记录互不干扰）
+  // 取消
+  tr.querySelector('[data-action="cancel"]').addEventListener('click', () => {
+    renderAll();
+  });
+
+  // 键盘快捷键:Enter 保存,Esc 取消
+  tr.querySelectorAll('.cell-input').forEach(input => {
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        tr.querySelector('[data-action="save"]').click();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        tr.querySelector('[data-action="cancel"]').click();
+      }
+    });
+  });
+}
+
+// 进入行内编辑模式(水电表底 — 仅总表/分表/水表)
+async function enterWaterEditMode(date) {
+  const waterAll = await fetchWaterReadings();
+  const waterRow = waterAll.find(w => w.date === date);
+  if (!waterRow) return;
+
+  // 记录编辑前是否已有水电记录（用于区分"删除"和"不创建"）
+  const hasExistingWater = waterRow.main_meter != null || waterRow.sub_meter != null || waterRow.water != null;
+
+  const tr = document.querySelector(`#water-history-table tbody tr[data-date="${date}"][data-type="water"]`);
+  if (!tr) return;
+
+  tr.classList.add('edit-row');
+  tr.innerHTML = `
+    <td><input type="date" class="cell-input" id="edit-date" value="${waterRow.date}" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-main_meter" value="${waterRow.main_meter ?? ''}" placeholder="总表" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-sub_meter" value="${waterRow.sub_meter ?? ''}" placeholder="分表" /></td>
+    <td><input type="number" step="0.01" class="cell-input" id="edit-water" value="${waterRow.water ?? ''}" placeholder="水表" /></td>
+    <td><input type="text" class="cell-input" id="edit-note" value="${waterRow.note || ''}" placeholder="备注" /></td>
+    <td>
+      <button class="save-btn" data-action="save" data-old-date="${date}">保存</button>
+      <button class="cancel-btn" data-action="cancel">取消</button>
+    </td>
+  `;
+
+  // 保存
+  tr.querySelector('[data-action="save"]').addEventListener('click', async () => {
+    const numE = (id) => {
+      const v = tr.querySelector(id).value;
+      return v === '' ? null : parseFloat(v);
+    };
+    const newDate = tr.querySelector('#edit-date').value;
+    const mainMeter = numE('#edit-main_meter');
+    const subMeter = numE('#edit-sub_meter');
+    const waterVal = numE('#edit-water');
+    const newNote = tr.querySelector('#edit-note').value.trim();
+
+    const waterInputEmpty = [mainMeter, subMeter, waterVal].every(v => v === null);
+    const waterInputInvalid = [mainMeter, subMeter, waterVal].some(v => v !== null && isNaN(v));
+    if (waterInputInvalid) {
+      showAlert('读数必须是数字', 'error'); return;
+    }
+    if (!newDate) { showAlert('日期不能为空', 'error'); return; }
+
+    try {
       if (hasExistingWater) {
-        // 原来有水电记录
         if (waterInputEmpty) {
-          // 用户清空了所有水电字段 → 删除该水电记录
+          // 清空了所有水电字段 → 删除该水电记录
           await deleteWaterReadingRemote(date);
         } else {
-          // 用户修改了水电字段 → 覆盖更新
-          const waterAll = await fetchWaterReadings();
-          const existingWater = waterAll.find(w => w.date === date);
-          if (existingWater && existingWater.date !== newDate) {
-            // 日期变了，先删旧再新建
-            await deleteWaterReadingRemote(existingWater.date);
-          }
+          // 修改了水电字段 → 覆盖更新
           const waterData = {
             date: newDate,
             main_meter: mainMeter,
@@ -2376,13 +2424,11 @@ async function enterEditMode(date) {
             water: waterVal,
             note: newNote,
           };
-          // POST 会自动处理覆盖
           await saveWaterReadingRemote(waterData);
         }
       } else {
-        // 原来没有水电记录
+        // 原来没有水电记录，用户新增了 → 创建
         if (!waterInputEmpty) {
-          // 用户新增填入了水电字段 → 创建新记录
           const waterData = {
             date: newDate,
             main_meter: mainMeter,
@@ -2392,10 +2438,9 @@ async function enterEditMode(date) {
           };
           await saveWaterReadingRemote(waterData);
         }
-        // 用户也没填 → 什么都不做（正确行为）
       }
 
-      showAlert(`✓ ${date} 已更新为 ${newDate}`, 'success');
+      showAlert(`✓ ${date} 水电表底已更新`, 'success');
       await refreshAndRender();
     } catch (err) {
       showAlert(`更新失败: ${err.message}`, 'error');
@@ -2703,6 +2748,23 @@ function refreshMonthSelectors() {
     const newVal = prev && months.includes(prev) ? prev : (months.length > 0 ? months[months.length - 1] : '');
     if (histSel.value !== newVal) {
       histSel.value = newVal;
+      renderHistory(CURRENT_READINGS);
+    }
+  }
+
+  // 水电表底月份筛选下拉,默认最后月;值变化时重新渲染(复用renderHistory)
+  const waterHistSel = document.getElementById('water-history-month');
+  if (waterHistSel) {
+    const wMonths = [...new Set((CURRENT_WATER_READINGS || [])
+      .map(r => r.date.slice(0, 7)))].sort();
+    const wopts = wMonths.length === 0
+      ? '<option value="">(暂无数据)</option>'
+      : wMonths.map(m => `<option value="${m}">${m}</option>`).join('');
+    const prev = waterHistSel.value;
+    waterHistSel.innerHTML = wopts;
+    const newVal = prev && wMonths.includes(prev) ? prev : (wMonths.length > 0 ? wMonths[wMonths.length - 1] : '');
+    if (waterHistSel.value !== newVal) {
+      waterHistSel.value = newVal;
       renderHistory(CURRENT_READINGS);
     }
   }
