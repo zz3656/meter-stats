@@ -126,9 +126,9 @@ async function fetchCharges() {
   }
 }
 
-let CURRENT_ITEMS = [];
-let CURRENT_PURCHASES = [];
-let CURRENT_DUTY = [];
+window.CURRENT_ITEMS = [];
+window.CURRENT_PURCHASES = [];
+window.CURRENT_DUTY = [];
 
 async function fetchItems() {
   try {

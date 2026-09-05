@@ -1,5 +1,5 @@
 // ===== 元数据（从 /api/meters 动态获取，含 fallback 默认值）=====
-let METER_CONFIG = {
+window.METER_CONFIG = {
   hall:   { label: '大厅',   icon: '🎤', multiplier: 160, color: '#2563eb' },
   fire:   { label: '消防',   icon: '🧯', multiplier: 1,   color: '#dc2626' },
   private_room: { label: '包厢', icon: '🛋️', multiplier: 160, color: '#059669' },
@@ -7,11 +7,11 @@ let METER_CONFIG = {
 };
 
 // 快捷访问数组（保持顺序不变）
-const METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
-const METER_META = (key) => METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
-const MULTIPLIER = (key) => METER_META(key).multiplier;
-const LABELS = (key) => METER_META(key).label;
-const COLORS = (key) => METER_META(key).color;
+window.METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
+window.METER_META = (key) => window.METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
+window.MULTIPLIER = (key) => window.METER_META(key).multiplier;
+window.LABELS = (key) => window.METER_META(key).label;
+window.COLORS = (key) => window.METER_META(key).color;
 
 // 加载元数据（异步，不阻塞页面加载）
 async function loadMeterConfig() {

@@ -11,7 +11,7 @@ async function fetchYearlyReport(year) {
   }
 }
 
-let _yearlyChart = null;  // 年度柱状图实例(切换年份前必须 destroy)
+window._yearlyChart = null;  // 年度柱状图实例(切换年份前必须 destroy)
 
 function renderYearlyReport(data) {
   const box = document.getElementById('yearly-result');

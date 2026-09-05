@@ -1,3 +1,10 @@
+// ===== 图表实例（全局变量） =====
+let trendChart = null;
+let pieChart = null;
+let dailyPieChart = null;
+let _monthlyPieChart = null;
+let monthlyPieChart = null;
+
 function refreshDayCopySelect(readings, charges) {
   const sel = document.getElementById('day-copy-date');
   if (!sel) return;

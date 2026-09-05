@@ -81,9 +81,9 @@ function renderMonthlyReport(data) {
   `;
 }
 
-let _reportLoadToken = 0;
-let _currentReport = null;  // 缓存当前月份的报告数据(供"复制表格"使用)
-let _monthCopyData = null;  // 缓存当前月/上月用电数据(供"每月用电"复制按钮使用)
+window._reportLoadToken = 0;
+window._currentReport = null;  // 缓存当前月份的报告数据(供"复制表格"使用)
+window._monthCopyData = null;  // 缓存当前月/上月用电数据(供"每月用电"复制按钮使用)
 
 // 上一个月键:2026-08 → 2026-07
 function prevMonthKey(monthKey) {

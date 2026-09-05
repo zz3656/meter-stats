@@ -1,5 +1,5 @@
 // ===== 水电数据迁移 =====
-let MIGRATION_CHECKED = false;
+window.MIGRATION_CHECKED = false;
 
 async function checkMigrateStatus() {
   try {

@@ -7,9 +7,9 @@ function todayStr() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }
-document.getElementById('date').value = todayStr();
-document.getElementById('charge-date').value = todayStr();
-document.getElementById('utility-date').value = todayStr();
+const _dateEl = document.getElementById('date'); if (_dateEl) _dateEl.value = todayStr();
+const _chargeDateEl = document.getElementById('charge-date'); if (_chargeDateEl) _chargeDateEl.value = todayStr();
+const _utilityDateEl = document.getElementById('utility-date'); if (_utilityDateEl) _utilityDateEl.value = todayStr();
 
 // 设置值班时间字段为当前时间
 function nowDateTimeStr() {

@@ -63,7 +63,7 @@ function doLogin() {
     }
     ADMIN_TOKEN = res.token;
     setLoggedIn(res.user);
-    loadData();
+    if (window.renderAll) window.renderAll();
   }).catch(e => {
     errEl.textContent = '网络错误: ' + e.message;
     errEl.style.display = 'block';
@@ -828,6 +828,7 @@ async function doImport() {
   const resultEl = document.getElementById('import-result');
   const fileInput = document.getElementById('import-file');
   const model = document.getElementById('import-model').value;
+  const token = localStorage.getItem('meter_token');
 
   if (!fileInput.files || fileInput.files.length === 0) {
     resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 请选择 CSV 文件</span>';

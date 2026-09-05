@@ -1,4 +1,8 @@
 // ===== 全局数据 =====
+window.STORAGE_KEY_READINGS = 'meter_readings_cache';
+window.STORAGE_KEY_CHARGES = 'meter_charges_cache';
+let CURRENT_READINGS = []; // 抄表数据
+let CURRENT_CHARGES = []; // 充值数据
 let CURRENT_WATER_READINGS = []; // 水电表底数据 (main_meter/sub_meter/water)
 
 async function fetchWaterReadings() {
@@ -50,6 +54,6 @@ async function deleteDutyRemote(id) {
 }
 
 // 同步本地缓存(写入成功后调)
-function realKwh(value, key) {
+window.realKwh = function realKwh(value, key) {
   return value * MULTIPLIER(key);
-}
+};

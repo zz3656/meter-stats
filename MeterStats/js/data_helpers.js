@@ -8,8 +8,8 @@ async function refreshAll() {
 }
 
 // 充值预警 — 4 块表都做
-const ELECTRICITY_PRICE = 0.9; // 元/度
-const CHARGE_METERS = [
+window.ELECTRICITY_PRICE = 0.9; // 元/度
+window.CHARGE_METERS = [
   { key: 'hall', label: '大厅', icon: '🎤', meterNo: '1#' },
   { key: 'fire', label: '消防', icon: '🧯', meterNo: '2#' },
   { key: 'private_room', label: '包厢', icon: '🛋️', meterNo: '3#' },
@@ -31,7 +31,7 @@ const CHARGE_METERS = [
  *
  * 返回 { [meterKey]: { daily, basis, basisLabel, monthlyTotal?, monthDays? } | null }
  */
-function calcMonthlyDailyUsage(readings, charges, meterKey) {
+window.calcMonthlyDailyUsage = function calcMonthlyDailyUsage(readings, charges, meterKey) {
   if (!readings || readings.length === 0) return null;
 
   // 按月份分组
@@ -74,7 +74,7 @@ function calcMonthlyDailyUsage(readings, charges, meterKey) {
  * 计算一组抄表(同一月)内某块表的日均用电。
  * 遍历相邻抄表对,每对用 "表底差 + 期间充值" 算日均,再加权平均。
  */
-function calcMonthDailyUsage(rows, charges, meterKey, monthLabel) {
+window.calcMonthDailyUsage = function calcMonthDailyUsage(rows, charges, meterKey, monthLabel) {
   if (!rows || rows.length < 2) return null;
 
   // 必须 ≥ 2 条记录,且按日期排序
@@ -132,7 +132,7 @@ function calcMonthDailyUsage(rows, charges, meterKey, monthLabel) {
  * 用户填的充值度数 = 表度数(跟抄表读数同语义),
  * 必须 ×160 才是实际度数。1/3/4 表的 MULTIPLIER=160,消防=1。
  */
-function sumChargesBetween(charges, meterKey, startDate, endDate) {
+window.sumChargesBetween = function sumChargesBetween(charges, meterKey, startDate, endDate) {
   if (!charges) return 0;
   let sum = 0;
   for (const c of charges) {
@@ -145,13 +145,13 @@ function sumChargesBetween(charges, meterKey, startDate, endDate) {
 
 // 余量预警 — 4 块表 1 列自适应卡,按剩余天数升序排(紧急在前)
 // 本地时间日期工具(避免 toISOString 的 UTC 坑)
-function addDaysToDate(dateStr, days) {
+window.addDaysToDate = function addDaysToDate(dateStr, days) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + Math.ceil(days));
   return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
-function daysBetween(dateStrA, dateStrB) {
+window.daysBetween = function daysBetween(dateStrA, dateStrB) {
   const [y1, m1, d1] = dateStrA.split('-').map(Number);
   const [y2, m2, d2] = dateStrB.split('-').map(Number);
   return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 86400000);
