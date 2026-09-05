@@ -23,6 +23,11 @@
       <div style="font-size:36px;margin-bottom:8px;">⚡</div>
       <h2 style="margin:0;font-size:20px;font-weight:600;color:var(--text);">工程部管理系统</h2>
       <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted);">登录后管理数据与权限</p>
+      <!-- 登录页全局控制按钮 -->
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
+        <button type="button" class="login-control-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:6px 12px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;">🌙</button>
+        <button type="button" class="login-control-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式" style="padding:6px 12px;background:var(--bg-surface);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;">🔤 大字</button>
+      </div>
     </div>
       <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid rgba(220,38,38,0.2);"></div>
     <div style="margin-bottom:16px;">

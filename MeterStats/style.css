@@ -2517,3 +2517,52 @@
 [data-accessibility="on"] #login-page p[style*="font-size:11px"] {
   font-size: 14px !important;
 }
+
+/* ===== 登录页控制按钮通用样式 ===== */
+.login-control-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  line-height: 1;
+}
+.login-control-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--text-muted);
+}
+.login-control-btn.accessibility-btn {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+.login-control-btn.accessibility-btn:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+.login-control-btn.accessibility-btn.active {
+  background: var(--success);
+  border-color: var(--success);
+  color: #fff;
+}
+.login-control-btn.accessibility-btn.active:hover {
+  background: #047857;
+  border-color: #047857;
+}
+
+/* 大字模式：登录页控制按钮增强 */
+[data-accessibility="on"] .login-control-btn {
+  font-size: 15px !important;
+  padding: 10px 16px !important;
+  border-width: 2px !important;
+  border-radius: 8px !important;
+}
+[data-accessibility="on"] #login-page > div {
+  width: 480px !important;
+  padding: 40px !important;
+}
