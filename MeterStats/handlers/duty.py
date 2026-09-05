@@ -48,7 +48,16 @@ class _DutyHandler(JsonModelHandler):
             val = body.get(key)
             if val is not None:
                 existing[key] = val
-        # 时间更新（可选）
+        # 处理时间（可选）
+        if body.get("handle_time"):
+            existing["handle_time"] = body["handle_time"]
+        # 处理班次（可选）
+        if body.get("handle_shift"):
+            existing["handle_shift"] = body["handle_shift"]
+        # 处理方案（可选）
+        if body.get("handle_method"):
+            existing["handle_method"] = body["handle_method"]
+        # 记录时间更新（可选）
         if body.get("record_time"):
             existing["record_time"] = body["record_time"]
 

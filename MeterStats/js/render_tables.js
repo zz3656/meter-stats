@@ -279,6 +279,7 @@ function renderDutyTable(dutyList, filterMonth) {
       <td><span style="color:${statusColor};font-weight:510;">${escapeHtml(d.status || '—')}</span></td>
       <td>${escapeHtml(d.note || '—')}</td>
       <td>
+        ${d.status === '未处理' ? `<button class="save-btn" data-action="handle-duty" data-id="${d.id}">处理</button>` : ''}
         <button class="del-btn" data-action="del-duty" data-id="${d.id}">删除</button>
       </td>
     </tr>`;
@@ -304,6 +305,16 @@ function renderDutyTable(dutyList, filterMonth) {
       } catch (e) {
         showAlert('删除失败:' + e.message, 'error');
       }
+    });
+  });
+
+  // 绑定处理按钮
+  tbody.querySelectorAll('[data-action="handle-duty"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const duty = dutyList.find(d => d.id === id);
+      if (!duty) return;
+      openDutyHandleModal(id, duty);
     });
   });
 }

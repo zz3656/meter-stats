@@ -1074,6 +1074,49 @@
   </div>
 </div>
 
+<!-- 工作记录处理弹窗（点击"处理"按钮触发） -->
+<div id="duty-handle-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:480px;">
+    <h3 class="modal-title">🔧 处理工作记录</h3>
+    <div class="modal-body">
+      <input type="hidden" id="duty-handle-id" />
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">原始类型</label>
+        <div id="duty-handle-original-type" style="padding:8px 12px;background:var(--bg-surface);border-radius:8px;font-size:14px;color:var(--text);"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">故障区域</label>
+        <div id="duty-handle-original-area" style="padding:8px 12px;background:var(--bg-surface);border-radius:8px;font-size:14px;color:var(--text);"></div>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理时间 <span style="color:var(--danger);">*</span></label>
+        <input type="datetime-local" id="duty-handle-time" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理班次 <span style="color:var(--danger);">*</span></label>
+        <select id="duty-handle-shift" style="width:100%;">
+          <option value="">请选择班次</option>
+          <option value="白班">白班</option>
+          <option value="中班">中班</option>
+          <option value="夜班">夜班</option>
+        </select>
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理方案 <span style="color:var(--danger);">*</span></label>
+        <input type="text" id="duty-handle-method" placeholder="例如:更换灯泡、修复线路" maxlength="200" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="duty-handle-note" placeholder="选填" maxlength="200" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="duty-handle-close">取消</button>
+      <button type="button" class="btn btn-primary" id="duty-handle-confirm">提交</button>
+    </div>
+  </div>
+</div>
+
 <!-- 抄表录入弹窗（抄表/水电 二合一,带 Tab 切换;在抄表记录页面点 ➕ 新增抄表 触发） -->
 <div id="reading-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">

@@ -182,3 +182,58 @@ document.getElementById('duty-add-modal-backdrop')?.addEventListener('click', e 
 document.getElementById('duty-record-month')?.addEventListener('change', (e) => {
   renderDutyTable(CURRENT_DUTY, e.target.value);
 });
+
+// ===== 工作记录处理弹窗 =====
+function openDutyHandleModal(id, duty) {
+  document.getElementById('duty-handle-id').value = id;
+  document.getElementById('duty-handle-original-type').textContent = duty.duty_type || '—';
+  document.getElementById('duty-handle-original-area').textContent = duty.fault_area || '—';
+  // 处理时间默认当前
+  const timeEl = document.getElementById('duty-handle-time');
+  if (timeEl) timeEl.value = nowDateTimeLocalStr();
+  document.getElementById('duty-handle-shift').value = ''; // 重置为选择
+  document.getElementById('duty-handle-method').value = '';
+  document.getElementById('duty-handle-note').value = '';
+  document.getElementById('duty-handle-modal-backdrop').classList.add('show');
+  document.getElementById('duty-handle-method')?.focus();
+}
+function closeDutyHandleModal() {
+  document.getElementById('duty-handle-modal-backdrop').classList.remove('show');
+}
+
+async function submitDutyHandle() {
+  const id = document.getElementById('duty-handle-id').value;
+  const raw_time = document.getElementById('duty-handle-time').value;
+  const handle_shift = document.getElementById('duty-handle-shift').value;
+  const handle_method = document.getElementById('duty-handle-method').value.trim();
+  const note = document.getElementById('duty-handle-note').value.trim();
+
+  if (!handle_shift) { showAlert('请选择处理班次', 'error'); return; }
+  if (!handle_method) { showAlert('请填写处理方案', 'error'); return; }
+
+  let handle_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
+
+  try {
+    await api('PUT', `/api/duty/${id}`, {
+      status: '已处理',
+      handle_time,
+      handle_shift,
+      handle_method,
+      note: note || '',
+    });
+    showAlert('✓ 记录已处理', 'success');
+    closeDutyHandleModal();
+    await refreshDuty();
+  } catch (e) {
+    showAlert('处理失败:' + e.message, 'error');
+  }
+}
+
+// 处理弹窗: 提交按钮
+document.getElementById('duty-handle-confirm')?.addEventListener('click', submitDutyHandle);
+// 处理弹窗: 关闭按钮
+document.getElementById('duty-handle-close')?.addEventListener('click', closeDutyHandleModal);
+// 处理弹窗: 点击遮罩关闭
+document.getElementById('duty-handle-modal-backdrop')?.addEventListener('click', e => {
+  if (e.target === document.getElementById('duty-handle-modal-backdrop')) closeDutyHandleModal();
+});
