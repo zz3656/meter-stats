@@ -95,6 +95,18 @@ function applyAccessibility() {
     btn.textContent = on ? '✅ 大字' : '🔤 大字';
   }
 }
+// 立即执行，确保登录页可见时 data-accessibility 属性已经设置
+// （登录页可能通过 JS 在 DOMContentLoaded 前显示）
+if (document.readyState !== 'loading') {
+  applyAccessibility();
+}
+// DOM 就绪后再次确保设置，并更新按钮状态
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', function initAccessibility() {
+    applyAccessibility();
+    document.removeEventListener('DOMContentLoaded', initAccessibility);
+  });
+}
 function toggleAccessibility() {
   const current = getAccessibilityState();
   const next = !current;
@@ -4148,7 +4160,6 @@ document.getElementById('sidebar-overlay')?.addEventListener('click', () => {
 // 初始化:默认显示抄表记录
 document.addEventListener('DOMContentLoaded', () => {
   applyTheme();
-  applyAccessibility();
   loadMeterConfig().then(() => {
     loadMonthlyReport();
   });
