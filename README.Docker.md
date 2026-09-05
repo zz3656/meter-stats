@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `f19ba49` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `2620d4b` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,8 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 工作记录未处理项添加处理按钮,支持处理时间/班次/方案/备注 (2620d4b)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -331,8 +333,6 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- login page theme button now matches post-login (3-state cycle) (f19ba49)
-
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -418,6 +418,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+f5cd0daf3c05a6a9112aafaae11ff1007116fdbd ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+f19ba4939ae05b8caf10c8c6b72bc553e2526cde ()
+  > fix: login page theme button now matches post-login (3-state cycle)
 - 
 d5503e56e2c38a36eb4fa00ab9ff0bc31c85c69c ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -522,5 +528,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...f19ba49)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...2620d4b)
 
