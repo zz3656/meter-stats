@@ -564,6 +564,12 @@
             <label>备注 <span class="hint">选填</span></label>
             <input type="text" id="duty-note" class="field-control" placeholder="选填" maxlength="200" />
           </div>
+          <div class="form-row">
+            <label>图片 <span class="hint">选填，最多3张</span></label>
+            <div id="duty-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-duty-image" onclick="addDutyImage('sidebar')">📷 添加图片</button>
+            <input type="file" id="duty-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'sidebar')" />
+          </div>
           <div class="button-row">
             <button type="submit" class="btn btn-primary">提交</button>
           </div>
@@ -864,6 +870,11 @@
 
 </div><!-- /.layout -->
 
+<!-- ===== 图片灯箱 ===== -->
+<div id="image-lightbox-backdrop" onclick="closeLightbox()">
+  <img id="image-lightbox-img" src="" />
+</div>
+
 <!-- ===== 模态弹窗 ===== -->
 
 <!-- 充值计算弹窗 -->
@@ -1072,6 +1083,12 @@
           </label>
         </div>
       </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-subtle);">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">图片 <span class="hint">选填，最多3张</span></label>
+        <div id="duty-add-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addDutyImage('add')">📷 添加图片</button>
+        <input type="file" id="duty-add-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'add')" />
+      </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="duty-add-close">取消</button>
@@ -1114,6 +1131,12 @@
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
         <input type="text" id="duty-handle-note" placeholder="选填" maxlength="200" style="width:100%;" />
+      </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-subtle);">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">图片 <span class="hint">选填，最多3张</span></label>
+        <div id="duty-handle-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="addDutyImage('handle')">📷 添加图片</button>
+        <input type="file" id="duty-handle-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'handle')" />
       </div>
     </div>
     <div class="modal-actions">

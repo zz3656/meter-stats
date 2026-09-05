@@ -276,6 +276,12 @@ function renderDutyTable(dutyList, filterMonth) {
     const displayType = isHandle ? '🔧 处理记录' : escapeHtml(d.duty_type || '—');
     const displayHandle = isHandle ? escapeHtml(d.note || '—') : escapeHtml(d.handle_method || '—');
     const displayNote = isHandle ? '' : escapeHtml(d.note || '—');
+    // 图片缩略图
+    const images = (d.images || []);
+    const imageThumbs = images.map(fn => {
+      const imgSrc = getDutyImageUrl(fn);
+      return `<img src="${imgSrc}" class="duty-image-thumb" onclick="openLightbox('${imgSrc}')" title="点击查看大图" />`;
+    }).join('');
     return `<tr class="${isHandle ? 'handle-row' : ''}">
       <td>${d.record_time || '—'}</td>
       <td>${displayType}</td>
@@ -283,11 +289,10 @@ function renderDutyTable(dutyList, filterMonth) {
       <td>${escapeHtml(d.fault_area || '—')}</td>
       <td><span style="color:${statusColor};font-weight:510;">${escapeHtml(d.status || '—')}</span></td>
       <td>${displayHandle}</td>
-      <td>${displayNote}</td>
+      <td>${displayNote}${imageThumbs ? `<div class="duty-image-cell">${imageThumbs}</div>` : ''}</td>
       <td>
         ${d.status === '未处理' ? `<button class="save-btn" data-action="handle-duty" data-id="${d.id}">处理</button>` : ''}
         <button class="del-btn" data-action="del-duty" data-id="${d.id}">删除</button>
-      </td>
     </tr>`;
   }).join('');
 

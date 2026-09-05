@@ -23,7 +23,7 @@ from handlers.purchases import (
 )
 from handlers.duty import (
     handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty,
-    handle_post_duty_handle,
+    handle_post_duty_handle, handle_post_duty_image, handle_get_duty_image,
 )
 from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
@@ -167,6 +167,11 @@ def _route(method: str, handler, path: str) -> bool:
 
     # GET: 精确匹配 + 前缀匹配
     if method == "GET":
+        # 特殊路径: /api/duty/image/{filename}
+        if path_clean.startswith("/api/duty/image/"):
+            filename = path_clean[len("/api/duty/image/"):]
+            _dispatch_fn(handle_get_duty_image, "GET", handler, filename)
+            return True
         # 精确匹配: _GET_ROUTES
         if path_clean in _GET_ROUTES:
             _dispatch_fn(_GET_ROUTES[path_clean], "GET", handler)
@@ -186,6 +191,10 @@ def _route(method: str, handler, path: str) -> bool:
         # 特殊路径: /api/duty/{id}/handle
         if path_clean.startswith("/api/duty/") and path_clean.endswith("/handle"):
             _dispatch_fn(handle_post_duty_handle, "POST", handler, path_clean)
+            return True
+        # 特殊路径: /api/duty/image
+        if path_clean == "/api/duty/image":
+            _dispatch_fn(handle_post_duty_image, "POST", handler, path_clean)
             return True
         handler_fn = _match_prefix(_POST_PREFIX, path_clean)
         if handler_fn:

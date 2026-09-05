@@ -107,7 +107,7 @@ document.getElementById('purchase-add-modal-backdrop')?.addEventListener('click'
 
 // 值班录入:共用提交函数(侧栏录入页 + 工作记录页弹窗 都用)
 async function submitDutyAdd(source) {
-  // source: 'sidebar' | 'modal'
+  const sourceKey = source === 'sidebar' ? 'sidebar' : 'add';
   const ids = source === 'sidebar'
     ? { type: 'duty-type', time: 'duty-time', shift: 'duty-shift', status: 'duty-status', fault_area: 'duty-fault-area', note: 'duty-note' }
     : { type: 'duty-add-type', time: 'duty-add-time', shift: 'duty-add-shift', status: 'duty-add-status', fault_area: 'duty-add-fault-area', note: 'duty-add-note' };
@@ -127,9 +127,12 @@ async function submitDutyAdd(source) {
   let record_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
-    await api('POST', '/api/duty', { duty_type, record_time, shift, status, fault_area, note });
+    // 先上传图片
+    const imageFilenames = await uploadDutyImages(sourceKey);
+
+    await api('POST', '/api/duty', { duty_type, record_time, shift, status, fault_area, note, image_filenames: imageFilenames });
     showAlert('✓ 值班记录已添加', 'success');
-    // 重置两个入口的表单
+    // 重置两个入口的表单和预览
     ['sidebar', 'modal'].forEach(s => {
       const p = s === 'sidebar'
         ? { type: 'duty-type', time: 'duty-time', shift: 'duty-shift', status: 'duty-status', fault_area: 'duty-fault-area', note: 'duty-note' }
@@ -141,7 +144,12 @@ async function submitDutyAdd(source) {
       document.getElementById(p.note).value = '';
       const t = document.getElementById(p.time);
       if (t) t.value = nowDateTimeLocalStr();
+      // 清空图片
+      const container = document.getElementById(`duty-${s === 'sidebar' ? 'duty' : 'add'}-image-preview`);
+      if (container) container.innerHTML = '';
     });
+    DUTY_IMAGES.sidebar = [];
+    DUTY_IMAGES.add = [];
     if (source === 'modal') closeDutyAddModal();
     if (source === 'sidebar') document.getElementById('duty-type')?.focus();
     await refreshDuty();
@@ -214,11 +222,15 @@ async function submitDutyHandle() {
   let handle_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
+    // 先上传图片
+    const imageFilenames = await uploadDutyImages('handle');
+
     await api('POST', `/api/duty/${id}/handle`, {
       handle_time,
       handle_shift,
       handle_method,
       note: note || '',
+      image_filenames: imageFilenames,
     });
     showAlert('✓ 记录已处理,已生成处理记录', 'success');
     closeDutyHandleModal();
@@ -236,3 +248,93 @@ document.getElementById('duty-handle-close')?.addEventListener('click', closeDut
 document.getElementById('duty-handle-modal-backdrop')?.addEventListener('click', e => {
   if (e.target === document.getElementById('duty-handle-modal-backdrop')) closeDutyHandleModal();
 });
+// ===== 工作记录图片上传 =====
+const DUTY_IMAGES = { sidebar: [], add: [], handle: [] };
+const MAX_IMAGES = 3;
+
+function addDutyImage(source) {
+  // source: 'sidebar' | 'add' | 'handle'
+  let prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
+  const input = document.getElementById(`${prefix}-image-input`);
+  if (input) input.click();
+}
+
+function handleDutyImageSelect(input, source) {
+  const files = Array.from(input.files);
+  let prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
+  const container = document.getElementById(`${prefix}-image-preview`);
+  if (!container) return;
+
+  // 限制最多3张
+  const remaining = MAX_IMAGES - DUTY_IMAGES[source].length;
+  const toAdd = files.slice(0, remaining);
+  if (files.length > remaining) {
+    showAlert(`最多上传 ${MAX_IMAGES} 张图片`, 'warn');
+  }
+
+  // 将文件转为临时 blob URL 用于预览
+  toAdd.forEach(file => {
+    const url = URL.createObjectURL(file);
+    const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    DUTY_IMAGES[source].push({ id, file, url, uploaded: false });
+    renderDutyImagePreview(source, container);
+  });
+
+  input.value = '';
+}
+
+function removeDutyImage(source, id, container) {
+  DUTY_IMAGES[source] = DUTY_IMAGES[source].filter(i => i.id !== id);
+  renderDutyImagePreview(source, container);
+}
+
+function renderDutyImagePreview(source, container) {
+  const images = DUTY_IMAGES[source];
+  const prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
+  container.innerHTML = images.map(img => `
+    <div class="duty-image-preview-item">
+      <img src="${img.url}" class="duty-image-thumb" style="width:60px;height:60px;" />
+      <button type="button" class="remove-img-btn" onclick="removeDutyImage('${source}','${img.id}',document.getElementById('${prefix}-image-preview'))">✕</button>
+    </div>
+  `).join('');
+}
+
+// 上传图片到服务器（每张照片一次请求）
+async function uploadDutyImages(source) {
+  const images = DUTY_IMAGES[source].filter(i => !i.uploaded);
+  const filenames = [];
+  for (const img of images) {
+    try {
+      const fd = new FormData();
+      fd.append('image', img.file, img.file.name);
+      const res = await fetch('/api/duty/image', {
+        method: 'POST',
+        body: fd,
+      });
+      const json = await res.json();
+      if (json.ok) {
+        filenames.push(json.filename);
+        img.uploaded = true;
+      } else {
+        showAlert(`图片上传失败: ${json.error}`, 'warn');
+      }
+    } catch (e) {
+      showAlert(`图片上传失败: ${e.message}`, 'warn');
+    }
+  }
+  return filenames;
+}
+
+// 灯箱
+function openLightbox(src) {
+  document.getElementById('image-lightbox-img').src = src;
+  document.getElementById('image-lightbox-backdrop').style.display = 'flex';
+}
+function closeLightbox() {
+  document.getElementById('image-lightbox-backdrop').style.display = 'none';
+}
+
+// ===== 工作记录图片 URL =====
+function getDutyImageUrl(filename) {
+  return `/api/duty/image/${filename}`;
+}

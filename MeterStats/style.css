@@ -2575,3 +2575,59 @@
   width: 480px !important;
   padding: 40px !important;
 }
+
+/* ===== 工作记录图片 ===== */
+.duty-image-thumb {
+  width: 50px;
+  height: 50px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.duty-image-thumb:hover {
+  transform: scale(1.15);
+  border-color: var(--primary);
+}
+.duty-image-preview-item {
+  position: relative;
+  display: inline-block;
+}
+.duty-image-preview-item .remove-img-btn {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.duty-image-preview-item .remove-img-btn:hover {
+  background: #c0392b;
+}
+/* 灯箱 */
+#image-lightbox-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+#image-lightbox-backdrop img {
+  max-width: 90vw;
+  max-height: 90vh;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+}
