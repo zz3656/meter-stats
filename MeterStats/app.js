@@ -2077,7 +2077,7 @@ function renderHistory(readings) {
     });
   });
 
-  // ==================== 水电表底表（仅总表/分表/水表，不含四表） ====================
+  // 水电表底表总是使用全局 CURRENT_WATER_READINGS（不依赖参数）
   const waterTbody = document.querySelector('#water-history-table tbody');
   const waterEmpty = document.getElementById('water-history-empty');
   if (!waterTbody) return;
@@ -3989,7 +3989,10 @@ document.getElementById('btn-export-word').addEventListener('click', exportRepor
 
 document.getElementById('report-month').addEventListener('change', loadMonthlyReport);
 document.getElementById('history-month').addEventListener('change', () => renderHistory(CURRENT_READINGS));
-document.getElementById('water-history-month').addEventListener('change', () => renderHistory(CURRENT_WATER_READINGS));
+document.getElementById('water-history-month').addEventListener('change', () => {
+  renderHistory(CURRENT_READINGS);
+  // water table is rendered inside renderHistory using CURRENT_WATER_READINGS directly
+});
 document.getElementById('charge-month').addEventListener('change', () => renderChargeLog(CURRENT_CHARGES));
 
 // 侧栏切换
