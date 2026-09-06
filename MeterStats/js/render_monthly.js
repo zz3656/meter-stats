@@ -202,6 +202,11 @@ function openDutyHandleModal(id, duty) {
   document.getElementById('duty-handle-shift').value = ''; // 重置为选择
   document.getElementById('duty-handle-method').value = '';
   document.getElementById('duty-handle-note').value = '';
+  // 显示原记录中的图片
+  const handleImageContainer = document.getElementById('duty-handle-image-preview');
+  if (handleImageContainer) {
+    renderUploadedImages('handle', duty.images || [], handleImageContainer);
+  }
   document.getElementById('duty-handle-modal-backdrop').classList.add('show');
   document.getElementById('duty-handle-method')?.focus();
 }
@@ -293,10 +298,26 @@ function renderDutyImagePreview(source, container) {
   const prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
   container.innerHTML = images.map(img => `
     <div class="duty-image-preview-item">
-      <img src="${img.url}" class="duty-image-thumb" style="width:60px;height:60px;" />
+      <img src="${img.url}" class="duty-image-thumb" style="width:60px;height:60px;" onclick="openLightbox('${img.url}')" title="点击查看大图" />
       <button type="button" class="remove-img-btn" onclick="removeDutyImage('${source}','${img.id}',document.getElementById('${prefix}-image-preview'))">✕</button>
     </div>
   `).join('');
+}
+
+// 渲染已上传的图片（用于处理弹窗显示原记录图片）
+function renderUploadedImages(source, filenames, container) {
+  if (!filenames || filenames.length === 0) {
+    container.innerHTML = '';
+    return;
+  }
+  container.innerHTML = filenames.map(fn => {
+    const imgSrc = getDutyImageUrl(fn);
+    return `
+      <div class="duty-image-preview-item">
+        <img src="${imgSrc}" class="duty-image-thumb" style="width:60px;height:60px;" onclick="openLightbox('${imgSrc}')" title="点击查看大图" />
+      </div>
+    `;
+  }).join('');
 }
 
 // 上传图片到服务器（每张照片一次请求）
