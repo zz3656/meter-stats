@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `171c6e2` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `b4770ef` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,13 +228,6 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
-
-- 修复删除处理记录还原报修状态，Docker环境配置目录变量 (171c6e2)
-  > 后端：
-  > - 删除处理记录时自动将原始报修记录恢复为"未处理"状态
-  > - 图片目录在Docker环境下支持METER_IMAGE_DIR环境变量
-  > - 图片目录API在Docker环境下拒绝修改（返回customizable=false）
-  > - 添加import os用于Docker环境变量检测
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -369,6 +362,14 @@ bbbcea)
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
 
+- 更新 README 和 docker-compose 添加 METER_BACKUP_DIR 和 METER_IMAGE_DIR 环境变量说明 (b4770ef)
+  > - README 环境变量表格新增 METER_IMAGE_DIR 说明
+  > - README Docker Compose 和 Docker Run 示例添加备份目录和图片目录环境变量
+  > - docker-compose.yml 将两个环境变量从注释改为默认启用
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+8f2d37)
+
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 307c9c)
 
@@ -429,6 +430,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+171c6e2ada580fad46778f7c44ccd42185ebed41 ()
+  > feat: 修复删除处理记录还原报修状态，Docker环境配置目录变量
 - 
 4653ef384ca4222a5137bf46af40e1b12d66a295 ()
   > fix: 移除备份目录恢复默认按钮，Docker环境下隐藏保存按钮
@@ -599,5 +603,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...171c6e2)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...b4770ef)
 
