@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `8be8402` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `a0a5f15` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,8 +228,6 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
-
-- 图片上传前自动压缩（Canvas 转 JPEG 1920px/0.8 质量）\n\n- 压缩图片最大宽度 1920px，质量 0.8\n- 原图自动转为 JPEG 格式，通常可将照片压缩至 100-300KB\n- 不影响后端 API 和存储逻辑 (8be8402)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -333,6 +331,13 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
+- 防止重复提交 + 删除记录时清理图片附件 (a0a5f15)
+  > 前端：
+  > - 全局 _submitting 锁防止网络卡顿时重复提交（抄表/充值/水电/物品/申购/值班）
+  > - 所有提交函数添加 guard 和 try/finally 重置锁
+  > 后端：
+  > - 删除工作记录时自动清理关联的图片附件文件
+
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -363,6 +368,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+2578ab)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 8412a7)
@@ -430,6 +438,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+8be840267c0eee6d007ce8003b8bfa4dfd4846c7 ()
+  > feat: 图片上传前自动压缩（Canvas 转 JPEG 1920px/0.8 质量）\n\n- 压缩图片最大宽度 1920px，质量 0.8\n- 原图自动转为 JPEG 格式，通常可将照片压缩至 100-300KB\n- 不影响后端 API 和存储逻辑
 - 
 960c8080ac40b0862a4d77604d559ecf1d9babdc ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -618,5 +629,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...8be8402)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...a0a5f15)
 
