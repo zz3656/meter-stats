@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `4653ef3` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `171c6e2` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,13 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 修复删除处理记录还原报修状态，Docker环境配置目录变量 (171c6e2)
+  > 后端：
+  > - 删除处理记录时自动将原始报修记录恢复为"未处理"状态
+  > - 图片目录在Docker环境下支持METER_IMAGE_DIR环境变量
+  > - 图片目录API在Docker环境下拒绝修改（返回customizable=false）
+  > - 添加import os用于Docker环境变量检测
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -331,12 +338,6 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 移除备份目录恢复默认按钮，Docker环境下隐藏保存按钮 (4653ef3)
-  > - 移除备份目录下的恢复默认按钮
-  > - 修复 loadBackupDirConfig 中按钮 ID 匹配错误问题
-  > - Docker 环境下(不可自定义)同时隐藏选择目录和保存按钮
-  > - 删除不再需要的 resetBackupDir 函数
-
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -367,6 +368,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+307c9c)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 e2fc98)
@@ -425,6 +429,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+4653ef384ca4222a5137bf46af40e1b12d66a295 ()
+  > fix: 移除备份目录恢复默认按钮，Docker环境下隐藏保存按钮
 - 
 7ea5edd952575fbafb529403dbfa77a40de10661 ()
   > fix: 备份/图片目录改为先选择/输入再保存,标题改为图片目录
@@ -592,5 +599,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...4653ef3)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...171c6e2)
 
