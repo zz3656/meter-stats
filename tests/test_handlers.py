@@ -70,9 +70,11 @@ class TestApiBase(unittest.TestCase):
         self.data_dir = Path(self.tmp.name)
         paths = {
             "readings": self.data_dir / "readings.json",
+            "readings_water": self.data_dir / "readings_water.json",
             "charges": self.data_dir / "charges.json",
             "items": self.data_dir / "items.json",
             "purchases": self.data_dir / "purchases.json",
+            "duty": self.data_dir / "duty.json",
         }
         app_handler.DATA_PATHS = paths
         for p in paths.values():
@@ -93,16 +95,17 @@ class TestApiBase(unittest.TestCase):
 
 class TestReadingsApi(TestApiBase):
     def test_post_empty_fields_become_null(self):
+        # 水电表底字段(main_meter/sub_meter/water)已迁移至 /api/readings-water,
+        # /api/readings 现在只接受电表抄表字段,多余字段被忽略。
         h = self.call("POST", "/api/readings", {
             "date": "2026-08-18", "hall": 100.0,
             "fire": "", "private_room": "", "ac": "",
-            "main_meter": "", "sub_meter": "", "water": "",
         })
         self.assertEqual(h.response_status, 200)
         row = h.parsed["row"]
         self.assertEqual(row["hall"], 100.0)
         self.assertIsNone(row["fire"])
-        self.assertIsNone(row["water"])
+        self.assertIsNone(row["private_room"])
         self.assertIsNone(row["ac"])
 
     def test_post_requires_at_least_one_field(self):
@@ -122,23 +125,77 @@ class TestReadingsApi(TestApiBase):
         self.assertIsNone(row["fire"])
 
     def test_post_overwrite_preserves_old_null_fields(self):
+        # 二次 POST 时只提供部分字段,未填的字段保留旧值。
         self.call("POST", "/api/readings", {
             "date": "2026-08-18", "hall": 100.0, "fire": 50.0,
             "private_room": 30.0, "ac": 20.0,
         })
         h = self.call("POST", "/api/readings", {
             "date": "2026-08-18",
-            "main_meter": 51800.0, "sub_meter": 20800.0, "water": 3140.0,
+            "hall": 110.0, "fire": "", "private_room": "", "ac": "",
         })
         self.assertEqual(h.response_status, 200)
         row = h.parsed["row"]
-        self.assertEqual(row["hall"], 100.0)
-        self.assertEqual(row["main_meter"], 51800.0)
-        self.assertEqual(row["water"], 3140.0)
+        self.assertEqual(row["hall"], 110.0)  # 新值覆盖
+        self.assertEqual(row["fire"], 50.0)    # 旧值保留
+        self.assertEqual(row["private_room"], 30.0)  # 旧值保留
+        self.assertEqual(row["ac"], 20.0)  # 旧值保留
+
+    def test_post_empty_all_fields_rejected(self):
+        # 全部字段为空(没有原记录可覆盖) → 400。
+        h = self.call("POST", "/api/readings", {"date": "2026-08-18"})
+        self.assertEqual(h.response_status, 400)
+
+    def test_post_overwrite_water_only_keeps_electric(self):
+        # 水电表底走独立 API;/api/readings 现在会保留电表字段。
+        self.call("POST", "/api/readings", {
+            "date": "2026-08-18", "hall": 100.0, "fire": 50.0,
+            "private_room": 30.0, "ac": 20.0,
+        })
+        h = self.call("POST", "/api/readings-water", {
+            "date": "2026-08-18",
+            "main_meter": 51800.0, "sub_meter": 20800.0, "water": 3140.0,
+        })
+        self.assertEqual(h.response_status, 200)
+        # 电表记录不受水电提交影响
+        readings = self.read_json("readings")
+        self.assertEqual(readings[0]["hall"], 100.0)
+        # 水电记录独立存储
+        water = self.read_json("readings_water")
+        self.assertEqual(water[0]["water"], 3140.0)
 
     def test_put_nonexistent_returns_404(self):
         h = self.call("PUT", "/api/readings/2026-01-01", {"hall": 1})
         self.assertEqual(h.response_status, 404)
+
+
+class TestReadingsWaterApi(TestApiBase):
+    """水电表底 API:独立于电表,使用 readings_water.json。"""
+
+    def test_post_water_only(self):
+        h = self.call("POST", "/api/readings-water", {
+            "date": "2026-08-18",
+            "main_meter": 51800.0, "sub_meter": 20800.0, "water": 3140.0,
+        })
+        self.assertEqual(h.response_status, 200)
+        row = h.parsed["row"]
+        self.assertEqual(row["main_meter"], 51800.0)
+        self.assertEqual(row["water"], 3140.0)
+
+    def test_post_requires_at_least_one_field(self):
+        h = self.call("POST", "/api/readings-water", {"date": "2026-08-18"})
+        self.assertEqual(h.response_status, 400)
+
+    def test_post_empty_fields_become_null(self):
+        h = self.call("POST", "/api/readings-water", {
+            "date": "2026-08-18", "main_meter": 100.0,
+            "sub_meter": "", "water": "",
+        })
+        self.assertEqual(h.response_status, 200)
+        row = h.parsed["row"]
+        self.assertEqual(row["main_meter"], 100.0)
+        self.assertIsNone(row["sub_meter"])
+        self.assertIsNone(row["water"])
 
 
 class TestChargesApi(TestApiBase):
