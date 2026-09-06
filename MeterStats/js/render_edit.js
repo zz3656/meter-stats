@@ -118,6 +118,8 @@ async function enterEditMode(date, type = 'reading') {
       await refreshAndRender();
     } catch (err) {
       showAlert(`更新失败: ${err.message}`, 'error');
+    } finally {
+      setSubmitting(false);
     }
   });
 
@@ -218,6 +220,8 @@ async function enterWaterEditMode(date) {
       await refreshAndRender();
     } catch (err) {
       showAlert(`更新失败: ${err.message}`, 'error');
+    } finally {
+      setSubmitting(false);
     }
   });
 

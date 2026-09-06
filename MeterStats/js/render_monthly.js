@@ -1,5 +1,11 @@
+// 全局提交锁：防止网络卡顿时的重复提交
+let _submitting = false;
+function isSubmitting() { return _submitting; }
+function setSubmitting(val) { _submitting = val; }
+
 async function submitItemAdd(source) {
   // source: 'sidebar' | 'modal'
+  if (_submitting) return;
   const ids = source === 'sidebar'
     ? { name: 'item-name', qty: 'item-qty', unit: 'item-unit', note: 'item-note' }
     : { name: 'item-add-name', qty: 'item-add-qty', unit: 'item-add-unit', note: 'item-add-note' };
@@ -10,6 +16,7 @@ async function submitItemAdd(source) {
   if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
   if (isNaN(qty) || qty < 0) { showItemAlert('数量必须 ≥ 0', 'error'); return; }
   try {
+    setSubmitting(true);
     await api('POST', '/api/items', { name, qty, unit, note });
     showItemAlert(`✓ ${name} 已添加`, 'success');
     // 清空两个入口的表单
@@ -26,11 +33,14 @@ async function submitItemAdd(source) {
     await refreshAll();
   } catch (e) {
     showItemAlert('添加失败:' + e.message, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
 // 申购:共用提交函数
 async function submitPurchaseAdd(source) {
+  if (_submitting) return;
   const ids = source === 'sidebar'
     ? { date: 'purchase-date', name: 'purchase-name', qty: 'purchase-qty', unit: 'purchase-unit', price: 'purchase-price', supplier: 'purchase-supplier', note: 'purchase-note' }
     : { date: 'purchase-add-date', name: 'purchase-add-name', qty: 'purchase-add-qty', unit: 'purchase-add-unit', price: 'purchase-add-price', supplier: 'purchase-add-supplier', note: 'purchase-add-note' };
@@ -44,6 +54,7 @@ async function submitPurchaseAdd(source) {
   if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
   if (isNaN(qty) || qty <= 0) { showItemAlert('数量必须 > 0', 'error'); return; }
   try {
+    setSubmitting(true);
     await api('POST', '/api/purchases', { date, name, qty, unit, est_price, supplier, note });
     showItemAlert(`✓ 申购已记录,去「申购记录」确认购买`, 'success');
     ['sidebar', 'modal'].forEach(s => {
@@ -62,6 +73,8 @@ async function submitPurchaseAdd(source) {
     await refreshAll();
   } catch (e) {
     showItemAlert('添加失败:' + e.message, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
@@ -107,6 +120,7 @@ document.getElementById('purchase-add-modal-backdrop')?.addEventListener('click'
 
 // 值班录入:共用提交函数(侧栏录入页 + 工作记录页弹窗 都用)
 async function submitDutyAdd(source) {
+  if (_submitting) return;
   const sourceKey = source === 'sidebar' ? 'sidebar' : 'add';
   const ids = source === 'sidebar'
     ? { type: 'duty-type', time: 'duty-time', shift: 'duty-shift', status: 'duty-status', fault_area: 'duty-fault-area', note: 'duty-note' }
@@ -127,6 +141,7 @@ async function submitDutyAdd(source) {
   let record_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
+    setSubmitting(true);
     // 先上传图片
     const imageFilenames = await uploadDutyImages(sourceKey);
 
@@ -156,6 +171,8 @@ async function submitDutyAdd(source) {
     populateDutyMonthSelector();
   } catch (e) {
     showAlert('添加失败:' + e.message, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
@@ -215,6 +232,7 @@ function closeDutyHandleModal() {
 }
 
 async function submitDutyHandle() {
+  if (_submitting) return;
   const id = document.getElementById('duty-handle-id').value;
   const raw_time = document.getElementById('duty-handle-time').value;
   const handle_shift = document.getElementById('duty-handle-shift').value;
@@ -227,6 +245,7 @@ async function submitDutyHandle() {
   let handle_time = raw_time ? raw_time.replace('T', ' ') + ':00' : nowDateTimeStr();
 
   try {
+    setSubmitting(true);
     // 先上传图片
     const imageFilenames = await uploadDutyImages('handle');
 
@@ -242,6 +261,8 @@ async function submitDutyHandle() {
     await refreshDuty();
   } catch (e) {
     showAlert('处理失败:' + e.message, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 

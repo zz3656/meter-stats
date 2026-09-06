@@ -92,7 +92,9 @@ def handle_delete_duty(handler, path_clean: str):
     """DELETE /api/duty/{id}
 
     如果删除的是"处理"类型记录，自动将原始报修记录恢复为"未处理"状态。
+    同时删除该记录关联的图片附件。
     """
+    import os as _os
     from utils import send_json, read_body
     try:
         rid = _h._extract_id(path_clean)
@@ -118,6 +120,19 @@ def handle_delete_duty(handler, path_clean: str):
                     r.pop("handle_record_id", None)
                     log(f"  OK 删除处理记录 {rid} → 恢复原始记录 {original_id} 为未处理")
                     break
+
+        # 删除记录关联的图片附件
+        image_filenames = target.get("images", [])
+        if image_filenames:
+            images_dir = _get_images_dir()
+            for fn in image_filenames:
+                fp = (images_dir / fn).resolve()
+                try:
+                    if fp.is_file() and str(fp).startswith(str(images_dir.resolve())):
+                        fp.unlink()
+                        log(f"  -- 删除工作记录 {rid} 关联图片: {fn}")
+                except OSError as e:
+                    log(f"  [WARN] 删除图片 {fn} 失败: {e}")
 
         # 删除记录
         new_list = [r for r in data if str(r.get("id")) != rid]

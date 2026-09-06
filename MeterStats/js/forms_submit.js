@@ -2,6 +2,7 @@
 // ===== 表单处理 =====
 // 抄表录入共用函数（侧栏录入页 + 抄表记录页弹窗 都用）
 async function submitReadingAdd(source) {
+  if (_submitting) return;
   const ids = source === 'sidebar'
     ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note' }
     : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note' };
@@ -36,6 +37,7 @@ async function submitReadingAdd(source) {
   }
 
   try {
+    setSubmitting(true);
     await saveReadingRemote(row);
     showAlert(`✓ ${row.date} 已保存`, 'success');
     ['sidebar', 'modal'].forEach(s => {
@@ -48,11 +50,14 @@ async function submitReadingAdd(source) {
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
 // 充值录入共用函数
 async function submitChargeAdd(source) {
+  if (_submitting) return;
   const ids = source === 'sidebar'
     ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private_room', ac: 'charge-ac', note: 'charge-note' }
     : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac', note: 'charge-add-note' };
@@ -72,6 +77,7 @@ async function submitChargeAdd(source) {
     return;
   }
   try {
+    setSubmitting(true);
     await saveChargeRemote(charge);
     showAlert(`✓ ${date} 充值记录已保存`, 'success');
     ['sidebar', 'modal'].forEach(s => {
@@ -84,11 +90,14 @@ async function submitChargeAdd(source) {
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
 // 水电录入共用函数
 async function submitUtilityAdd(source) {
+  if (_submitting) return;
   const ids = source === 'sidebar'
     ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
     : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
@@ -125,6 +134,7 @@ async function submitUtilityAdd(source) {
     if (!ok) return;
   }
   try {
+    setSubmitting(true);
     await saveWaterReadingRemote(row);
     showAlert(`✓ ${date} 水电已保存`, 'success');
     ['sidebar', 'modal'].forEach(s => {
@@ -137,6 +147,8 @@ async function submitUtilityAdd(source) {
     await refreshAndRender();
   } catch (err) {
     showAlert(`保存失败: ${err.message}`, 'error');
+  } finally {
+    setSubmitting(false);
   }
 }
 
