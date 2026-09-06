@@ -93,11 +93,87 @@ def handle_delete_duty(handler, path_clean: str):
 
 
 def _get_images_dir():
-    """获取 duty_images 目录。"""
+    """获取工作记录图片目录。"""
     data_dir = get_data_dir()
-    images_dir = Path(data_dir) / "duty_images"
+    settings = _get_settings()
+    images_dir = Path(settings.get("image_dir", str(Path(data_dir) / "images")))
     images_dir.mkdir(parents=True, exist_ok=True)
     return images_dir
+
+
+def _get_settings() -> dict:
+    """从 settings.json 读取（含默认值）。"""
+    import json
+    try:
+        data_dir = get_data_dir()
+        settings_path = Path(data_dir) / "settings.json"
+        if settings_path.exists():
+            return json.loads(settings_path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return {}
+
+
+def _save_setting(key: str, value) -> None:
+    """更新 settings.json 中的单个字段。"""
+    import json
+    data_dir = get_data_dir()
+    settings_path = Path(data_dir) / "settings.json"
+    settings = {}
+    if settings_path.exists():
+        try:
+            settings = json.loads(settings_path.read_text(encoding="utf-8"))
+        except Exception:
+            settings = {}
+    settings[key] = value
+    try:
+        tmp = settings_path.with_suffix(settings_path.suffix + ".tmp")
+        tmp.write_text(json.dumps(settings, ensure_ascii=False, indent=2), encoding="utf-8")
+        tmp.replace(settings_path)
+        log(f"  [settings] {key} = {value}")
+    except Exception as e:
+        log(f"  [WARN] save_setting {key} failed: {e}")
+
+
+def handle_get_images_config(handler):
+    """GET /api/admin/images — 获取图片目录配置。"""
+    data_dir = get_data_dir()
+    settings = _get_settings()
+    image_dir = Path(settings.get("image_dir", str(Path(data_dir) / "images")))
+    image_dir.mkdir(parents=True, exist_ok=True)
+    # 统计图片数量和总大小
+    image_files = list(image_dir.glob("*"))
+    total_files = len(image_files)
+    total_size = sum(f.stat().st_size for f in image_files if f.is_file())
+    send_json(handler, 200, {
+        "ok": True,
+        "image_dir": str(image_dir),
+        "default_image_dir": str(Path(data_dir) / "images"),
+        "image_count": total_files,
+        "total_size": total_size,
+    })
+
+
+def handle_put_images_config(handler):
+    """PUT /api/admin/images — 设置图片目录。"""
+    body = read_body(handler)
+    image_dir = body.get("image_dir", "").strip()
+    if not image_dir:
+        send_json(handler, 400, {"error": "目录不能为空"})
+        return
+    # 验证目录合法性
+    data_dir = get_data_dir()
+    data_dir_path = Path(data_dir).resolve()
+    candidate = Path(image_dir).resolve()
+    # 确保在 data_dir 内
+    try:
+        candidate.relative_to(data_dir_path)
+    except ValueError:
+        send_json(handler, 400, {"error": "图片目录必须在数据目录内"})
+        return
+    candidate.mkdir(parents=True, exist_ok=True)
+    _save_setting("image_dir", str(candidate))
+    send_json(handler, 200, {"ok": True, "image_dir": str(candidate)})
 
 
 def _allowed_ext(filename: str) -> bool:

@@ -24,6 +24,7 @@ from handlers.purchases import (
 from handlers.duty import (
     handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty,
     handle_post_duty_handle, handle_post_duty_image, handle_get_duty_image,
+    handle_get_images_config, handle_put_images_config,
 )
 from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
@@ -172,6 +173,10 @@ def _route(method: str, handler, path: str) -> bool:
             filename = path_clean[len("/api/duty/image/"):]
             _dispatch_fn(handle_get_duty_image, "GET", handler, filename)
             return True
+        # 特殊路径: /api/admin/images
+        if path_clean == "/api/admin/images":
+            _dispatch_fn(handle_get_images_config, "GET", handler, path_clean)
+            return True
         # 精确匹配: _GET_ROUTES
         if path_clean in _GET_ROUTES:
             _dispatch_fn(_GET_ROUTES[path_clean], "GET", handler)
@@ -203,6 +208,9 @@ def _route(method: str, handler, path: str) -> bool:
 
     # PUT: 优先匹配特殊路径
     if method == "PUT":
+        if path_clean == "/api/admin/images":
+            _dispatch_fn(handle_put_images_config, "PUT", handler, path_clean)
+            return True
         if path_clean.startswith("/api/purchases/") and path_clean.endswith("/stock"):
             _dispatch_fn(handle_put_purchases_stock, "PUT", handler, path_clean)
             return True

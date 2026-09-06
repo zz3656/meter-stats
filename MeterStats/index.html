@@ -796,6 +796,14 @@
         </div>
       </div>
       <div class="settings-panel">
+        <div class="panel-title">📷 工作记录图片目录</div>
+        <div id="image-dir-display" class="panel-desc" style="margin-bottom:10px;font-size:13px;">加载中...</div>
+        <div id="image-dir-stats" class="panel-desc" style="margin-bottom:10px;font-size:13px;color:var(--text-muted);"></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button class="btn btn-secondary btn-xs" onclick="pickImageDir()">选择图片目录</button>
+        </div>
+      </div>
+      <div class="settings-panel">
         <div class="auto-backup-row">
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
           <div style="flex:1;min-width:160px;">
@@ -1286,6 +1294,7 @@
   <script src="js/render_yearly.js"></script>
   <script src="js/features_topup.js"></script>
   <script src="js/features_utilities.js"></script>
+  <script src="js/features_image_settings.js"></script>
   <script src="js/forms_submit.js"></script>
   <script src="js/forms_buttons.js"></script>
   <script src="js/forms_confirm.js"></script>

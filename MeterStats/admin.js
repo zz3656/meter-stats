@@ -338,6 +338,8 @@ function loadBackupStatus() {
       if (dmRet) dmRet.value = retention;
       // 加载备份目录配置
       loadBackupDirConfig();
+      // 加载图片目录配置
+      if (typeof loadImageDirConfig === 'function') loadImageDirConfig();
       // 渲染备份列表
       renderBackupList(res.backups || []);
     }).catch(() => {});
