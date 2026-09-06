@@ -3,43 +3,46 @@ const IMAGE_API = '/api/admin/images';
 
 // 加载图片目录配置
 function loadImageDirConfig() {
-  fetch(IMAGE_API + getAuthParam())
-    .then(r => r.json()).then(res => {
-      if (!res.ok) return;
-      // 显示当前目录
-      const dirEl = document.getElementById('image-dir-display');
-      if (dirEl) dirEl.textContent = '📁 ' + res.image_dir + ' (默认: ' + res.default_image_dir + ')';
-      // 显示统计
-      const statsEl = document.getElementById('image-dir-stats');
-      if (statsEl) statsEl.textContent = '📊 图片数量: ' + res.image_count + ' 张, 总大小: ' + formatBytes(res.total_size);
-    }).catch(() => {
-      const dirEl = document.getElementById('image-dir-display');
-      if (dirEl) dirEl.textContent = '加载失败';
-    });
+  const dirEl = document.getElementById('image-dir-display');
+  const statsEl = document.getElementById('image-dir-stats');
+
+  if (!dirEl) return;
+
+  // 如果 API 不可用（旧版本后端），显示提示信息
+  const doLoad = () => {
+    fetch(IMAGE_API + getAuthParam())
+      .then(r => r.json()).then(res => {
+        if (!res.ok) return;
+        dirEl.textContent = '📁 ' + res.image_dir + ' (默认: ' + res.default_image_dir + ')';
+        if (statsEl) statsEl.textContent = '📊 图片数量: ' + res.image_count + ' 张, 总大小: ' + formatBytes(res.total_size);
+      }).catch(e => {
+        // API 不可用（后端未更新）时显示提示
+        dirEl.textContent = '⚠️ 后端未更新，请重启服务后生效';
+        if (statsEl) statsEl.textContent = '';
+      });
+  };
+
+  // 首次加载时显示加载中（已有则不覆盖）
+  if (dirEl.textContent === '') {
+    dirEl.textContent = '加载中...';
+    doLoad();
+  } else {
+    doLoad();
+  }
 }
 
 // 选择图片目录
 function pickImageDir() {
-  // 使用浏览器文件选择API: 选择文件夹
-  if (window.showDirectoryPicker) {
-    window.showDirectoryPicker({ mode: 'readWrite' })
-      .then(async (dirHandle) => {
-        // 获取完整路径不可靠, 这里用后端 API 设置
-        // 需要让用户手动输入或选择
-        const path = prompt('请输入图片目录的完整路径:', document.getElementById('image-dir-display')?.textContent || '');
-        if (!path) return;
-        await saveImageDir(path);
-      })
-      .catch(() => {});
-  } else {
-    // 回退: 手动输入路径
-    const current = document.getElementById('image-dir-display')?.textContent || '';
-    const match = current.match(/📁 (.+?) \(/);
-    const currentPath = match ? match[1] : '';
-    const path = prompt('请输入图片目录的完整路径:', currentPath);
-    if (!path) return;
-    saveImageDir(path);
+  const dirEl = document.getElementById('image-dir-display');
+  // 尝试从当前文本提取已保存的路径
+  let currentPath = '';
+  if (dirEl) {
+    const match = dirEl.textContent.match(/📁 (\S+)/);
+    if (match) currentPath = match[1];
   }
+  const path = prompt('请输入图片目录的完整路径:', currentPath);
+  if (!path || !path.trim()) return;
+  saveImageDir(path.trim());
 }
 
 async function saveImageDir(path) {
