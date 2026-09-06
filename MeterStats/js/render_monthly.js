@@ -320,14 +320,46 @@ function renderUploadedImages(source, filenames, container) {
   }).join('');
 }
 
-// 上传图片到服务器（每张照片一次请求）
+// 压缩图片（Canvas 压缩为 JPEG，降低体积）
+// 最大宽度 1920px，质量 0.8，通常可将原图压缩至 100-300KB
+function compressImage(file, maxWidth = 1920, quality = 0.8) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('图片加载失败')); return; };
+      let w = img.naturalWidth;
+      let h = img.naturalHeight;
+      if (w > maxWidth) {
+        h = Math.round((h * maxWidth) / w);
+        w = maxWidth;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(blob => {
+        URL.revokeObjectURL(img.src);
+        if (!blob) { reject(new Error('图片压缩失败')); return; }
+        // 保持原文件名后缀
+        const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
+        resolve(new File([blob], name, { type: 'image/jpeg' }));
+      }, 'image/jpeg', quality);
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+// 上传图片到服务器（每张照片一次请求，先压缩）
 async function uploadDutyImages(source) {
   const images = DUTY_IMAGES[source].filter(i => !i.uploaded);
   const filenames = [];
   for (const img of images) {
     try {
+      // 压缩图片
+      const compressed = await compressImage(img.file, 1920, 0.8);
       const fd = new FormData();
-      fd.append('image', img.file, img.file.name);
+      fd.append('image', compressed, compressed.name);
       const res = await fetch('/api/duty/image', {
         method: 'POST',
         body: fd,
