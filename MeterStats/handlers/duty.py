@@ -287,7 +287,7 @@ def _parse_multipart(handler, content_type: str) -> dict:
     return result
 
 
-def handle_post_duty_image(handler):
+def handle_post_duty_image(handler, path_clean=""):
     """POST /api/duty/image — 上传图片，返回文件名。"""
     content_type = handler.headers.get("Content-Type", "") or ""
     if "multipart/form-data" not in content_type:
