@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `133a252` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `3eedcd8` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -228,6 +228,11 @@ a5b123)
   > - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
+
+- 工作记录图片预览功能增强 (3eedcd8)
+  > - 新增/预上传的图片缩略图点击可打开灯箱大图预览
+  > - 处理弹窗打开时自动加载并显示原始报修记录中的图片
+  > - 新增 renderUploadedImages 函数渲染已上传的服务器图片
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -331,8 +336,6 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 修复工作记录图片上传"服务器内部错误" — handle_post_duty_image 缺少 path_clean 参数导致路由调用时报 TypeError (133a252)
-
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -363,6 +366,9 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
+
+- 自动同步 v changelog 到 README.Docker.md [skip ci] (
+8412a7)
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 8f2d37)
@@ -427,6 +433,9 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+133a252b9ead2e0682313dc4e0e6aa0b693f5e39 ()
+  > fix: 修复工作记录图片上传"服务器内部错误" — handle_post_duty_image 缺少 path_clean 参数导致路由调用时报 TypeError
 - 
 198a92811a557db6f47ba83e60a3bfc75d99312f ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -606,5 +615,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...133a252)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...3eedcd8)
 
