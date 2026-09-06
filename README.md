@@ -122,6 +122,17 @@ docker compose down && docker compose up -d
 # 从 GitHub Releases 下载新版 DMG 覆盖安装即可
 ```
 
+## ⚠️ data/ 目录使用注意
+
+`data/`（Docker 挂载路径）或 `MeterStats/.data/`（本地源码运行）是**运行时数据目录**，包含 `readings.json` / `charges.json` / `settings.json` 等业务文件。
+
+**请勿手动修改**：
+- 手动编辑 JSON 可能导致数据不一致（存储层依赖原子写入）
+- 崩溃后启动服务会从 `backup/` 自动恢复，但**手改过的内容会被覆盖**
+- 业务数据修改请走 Web UI 或 API
+
+**如果意外复制了旧版 `storage.py` 到 `data/`**：这是一些备份恢复工具的历史遗留物，可以安全删除——运行时只用 `MeterStats/storage.py`。
+
 ## 🛠️ 技术
 
 | 项 | 说明 |
