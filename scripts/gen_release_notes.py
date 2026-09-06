@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""生成结构化 release notes。"""
+"""生成简洁的 release notes。"""
 from __future__ import annotations
 
 import os
@@ -8,16 +8,24 @@ import subprocess
 import sys
 
 
+# 噪音 commit 过滤:这些类型的提交不出现在 release notes 中
+NOISE_SUBJECTS = [
+    re.compile(r"\[skip ci\]", re.IGNORECASE),
+    re.compile(r"自动同步.*changelog.*README\.Docker\.md", re.IGNORECASE),
+    re.compile(r"bump\s+version", re.IGNORECASE),
+]
+
+
 def main() -> int:
     version = os.environ["VERSION"]
     sha = os.environ["SHA"]
     sha_short = sha[:7]
 
-    # 解析上次发布点(从哪个 commit 起算新增):
-    # 优先用最新 tag;无 tag 时用 HEAD~1(最近一个 commit),避免把整个历史算进去
+    # 解析上次发布点(只看 v* 版本标签,过滤 latest 等其它标签)
     prev_tag = subprocess.run(
-        ["git", "describe", "--tags", "--abbrev=0", "HEAD~1"],
-        capture_output=True, text=True).stdout.strip()
+        ["git", "tag", "--sort=-creatordate", "--list", "v*"],
+        capture_output=True, text=True).stdout.strip().split("\n")
+    prev_tag = next((t for t in prev_tag if t), "")
 
     if prev_tag:
         rng = f"{prev_tag}..HEAD"
@@ -28,7 +36,7 @@ def main() -> int:
         if prev_sha:
             rng = f"{prev_sha}..HEAD"
         else:
-            rng = "HEAD"  # 单 commit 仓库
+            rng = "HEAD"
 
     # 用 %B 拿完整 body,commits 之间用 NUL 分隔
     log_raw = subprocess.run(
@@ -44,131 +52,108 @@ def main() -> int:
         elif len(parts) == 2:
             commits.append({"sha": parts[0], "subject": parts[1], "body": ""})
 
+    # 过滤噪音 commit
+    def is_noise(commit: dict) -> bool:
+        subject = commit["subject"]
+        # 只取 subject 第一行(避免 feat: xxx\n... 把后续行当作 subject)
+        first_line = subject.split("\n")[0].strip()
+        for pat in NOISE_SUBJECTS:
+            if pat.search(first_line):
+                return True
+        return False
+
+    commits = [c for c in commits if not is_noise(c)]
+
     TYPE_ICON = {
         "feat": "✨", "fix": "🐛", "refactor": "♻️", "perf": "⚡",
         "docs": "📖", "chore": "🔧", "ci": "🚀", "build": "📦", "test": "✅",
     }
-    TYPE_ORDER = ["feat", "fix", "perf", "refactor", "docs", "ci", "build", "test", "chore"]
-
-    SCOPE_NORM = {
-        "mac": "macos", "macos": "macos", "mac-app": "macos",
-        "docker": "docker", "container": "docker",
-        "web": "web", "frontend": "web",
-        "deploy": "deploy", "release": "release",
-        "ci": "ci", "workflow": "ci",
-    }
-    SCOPE_DISPLAY = {
-        "web": "🌐 Web/Docker 前端",
-        "macos": "🍎 macOS 原生 App",
-        "docker": "🐳 Docker 部署",
-        "deploy": "🚀 部署/CDN",
-        "ci": "🚀 CI/CD",
-        "release": "📦 Release",
+    TYPE_ORDER = ["feat", "fix", "perf", "refactor", "ci", "build", "test", "docs", "chore"]
+    TYPE_LABEL = {
+        "feat": "新功能", "fix": "问题修复", "perf": "性能优化",
+        "refactor": "重构", "ci": "CI/CD", "build": "构建",
+        "test": "测试", "docs": "文档", "chore": "杂项",
     }
 
-    buckets: dict[str, dict[str, list]] = {}
-    uncategorized: list[dict] = []
+    # 从 body 提取简短描述(首个以 - 或汉字开头的行,不超 80 字)
+    def short_desc(body: str, subject: str) -> str:
+        if not body:
+            return ""
+        lines: list[str] = []
+        for line in body.split("\n"):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            lines.append(stripped)
+            if len(lines) >= 3:  # 只取前 3 行
+                break
+        text = " / ".join(lines)
+        # 只保留第一句(中英文句号分号)
+        m = re.match(r"^(.+?[\.\u3002;\uff1b])", text)
+        if m:
+            text = m.group(1)
+        return text.strip()[:80]
+
+    # 把所有 commits 按类型归类(每类内部去重:同 subject 只保留最新一条)
+    buckets: dict[str, dict[str, str]] = {}  # {type: {subject: short_desc}}
+    uncategorized: list[str] = []  # 不符合 type: 格式的 subject
 
     for c in commits:
-        m = re.match(r"^(\w+)(\([^)]+\))?:\s*(.+)$", c["subject"])
+        # subject 取首行(去掉 \n 后面的内容)
+        subject = c["subject"].split("\n")[0].strip()
+        m = re.match(r"^(\w+)(\([^)]+\))?:\s*(.+)$", subject)
         if m:
-            t, scope, subj = m.groups()
-            scope_key = scope.strip("()") if scope else ""
-            scope_norm = SCOPE_NORM.get(scope_key.lower(), scope_key.lower()) if scope_key else ""
-            buckets.setdefault(t, {}).setdefault(scope_norm, []).append({
-                "subject": subj.strip(),
-                "body": c["body"],
-                "sha": c["sha"][:7],
-            })
+            t = m.group(1)
+            subj = m.group(3).strip()
+            desc = short_desc(c["body"], subject)
+            if t not in buckets:
+                buckets[t] = {}
+            # 去重:同 subject 只保留第一个(最新)
+            if subj not in buckets[t]:
+                buckets[t][subj] = desc
         else:
-            uncategorized.append(c)
+            uncategorized.append(subject)
 
-    def fmt_item(item: dict) -> str:
-        lines = [f"- {item['subject']} ({item['sha']})"]
-        if item["body"]:
-            body_lines = item["body"].split("\n")
-            impact_lines: list[str] = []
-            other_lines: list[str] = []
-            in_impact = False
-            for bl in body_lines:
-                bl_stripped = bl.strip()
-                if re.match(r"^-\s*(web|macos?|docker|三端|all):", bl_stripped, re.IGNORECASE):
-                    impact_lines.append(bl_stripped)
-                    in_impact = True
-                elif bl_stripped.startswith("-") and in_impact:
-                    impact_lines.append(bl_stripped)
-                elif bl_stripped:
-                    other_lines.append(bl_stripped)
-                    in_impact = False
-            if other_lines:
-                for ol in other_lines[:5]:
-                    if ol.startswith("#"):
-                        lines.append(f"  {ol}")
-                    else:
-                        lines.append(f"  > {ol}")
-            if impact_lines:
-                lines.append("  **影响范围**:")
-                for il in impact_lines:
-                    lines.append(f"  {il}")
-        return "\n".join(lines)
-
-    def section_for_type(t: str) -> str:
-        icon = TYPE_ICON.get(t, "•")
-        t_buckets = buckets.get(t, {})
-        if not t_buckets:
-            return ""
-        out = [f"### {icon} {t}", ""]
-        scoped = [(s, items) for s, items in t_buckets.items() if s]
-        unscoped = t_buckets.get("", [])
-        if scoped:
-            for scope, items in sorted(scoped):
-                scope_display = SCOPE_DISPLAY.get(scope, f"📦 {scope}")
-                out.append(f"#### {scope_display}")
-                out.append("")
-                for item in items:
-                    out.append(fmt_item(item))
-                    out.append("")
-        if unscoped:
-            for item in unscoped:
-                out.append(fmt_item(item))
-                out.append("")
-        return "\n".join(out)
-
-    if uncategorized:
-        out_uncat = ["### 📝 其他改动", ""]
-        for c in uncategorized:
-            out_uncat.append(f"- {c['subject']} ({c['sha'][:7]})")
-            if c.get("body"):
-                out_uncat.append(f"  > {c['body']}")
-        uncategorized_section = "\n".join(out_uncat) + "\n"
-    else:
-        uncategorized_section = ""
-
-    body_sections = ""
+    sections: list[str] = []
     for t in TYPE_ORDER:
-        body_sections += section_for_type(t)
-    body_sections += uncategorized_section
+        if t not in buckets:
+            continue
+        icon = TYPE_ICON.get(t, "•")
+        label = TYPE_LABEL.get(t, t)
+        sections.append(f"### {icon} {label}")
+        sections.append("")
+        for subj, desc in buckets[t].items():
+            if desc and desc != subj:
+                sections.append(f"- {subj} — {desc}")
+            else:
+                sections.append(f"- {subj}")
+        sections.append("")
 
+    # 过滤掉只含空格的有效 subject
+    uncategorized = [s for s in uncategorized if s.strip()]
+    if uncategorized:
+        sections.append("### 📝 其他")
+        sections.append("")
+        for s in uncategorized[:10]:
+            sections.append(f"- {s}")
+        sections.append("")
+
+    body_sections = "\n".join(sections).rstrip()
+
+    # 升级提示
     upgrade_hints: list[str] = []
-    if buckets.get("fix"):
-        upgrade_hints.append("⚠️ **强烈建议升级**:本次包含问题修复。")
-    all_scopes = {s for t in buckets.values() for s in t}
-    has_web = "web" in all_scopes
-    has_macos = "macos" in all_scopes
-    has_docker = "docker" in all_scopes
-    if has_web or has_docker:
-        upgrade_hints.append("- 🌐 **Web/Docker 用户**:重启 docker 容器 `docker compose pull && docker compose up -d`,浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)。")
-    if has_macos:
-        upgrade_hints.append("- 🍎 **macOS 用户**:下载下方 DMG 覆盖安装。")
-    if not upgrade_hints:
-        upgrade_hints.append("- ✅ 内部优化,无需任何操作。")
+    if "fix" in buckets:
+        upgrade_hints.append("⚠️ **建议升级**:本次包含问题修复")
+    upgrade_hints.append("- 🍎 macOS:下载下方 DMG 覆盖安装")
+    upgrade_hints.append("- 🐳 Docker:`docker compose pull && docker compose up -d`")
+    upgrade_hints.append("- 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)")
 
-    upgrade_section = "### ⬆️ 升级指引\n\n" + "\n".join(upgrade_hints) + "\n"
+    upgrade_section = "### ⬆️ 升级\n\n" + "\n".join(upgrade_hints) + "\n"
 
     header = "\n".join([
         f"## 📦 MeterStats v{version}",
         "",
-        f"> macOS + Docker + Web 三端统一部署 · 提交 `{sha_short}` · 完整改动见下方",
+        f"提交 `{sha_short}`",
         "",
         "**下载**:",
         f"- 🍎 macOS: `MeterStats-{version}-macos.dmg` (下方 Assets)",
@@ -179,12 +164,11 @@ def main() -> int:
     footer_parts = ["", "---", ""]
     if prev_tag and prev_tag != "HEAD":
         footer_parts.append(
-            f"💡 完整代码改动请看 [commits 页面]"
-            f"(https://github.com/zz3656/meter-stats/compare/{prev_tag}...{sha_short})"
+            f"💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/{prev_tag}...{sha_short})"
         )
     footer = "\n".join(footer_parts)
 
-    body = header + body_sections + upgrade_section + footer
+    body = header + body_sections + "\n\n" + upgrade_section + footer
     print(body.rstrip())
     return 0
 
