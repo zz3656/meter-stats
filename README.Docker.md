@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `b4770ef` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `133a252` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -331,6 +331,8 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
+- 修复工作记录图片上传"服务器内部错误" — handle_post_duty_image 缺少 path_clean 参数导致路由调用时报 TypeError (133a252)
+
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
   > - Add 'readings_water' to DATA_PATHS in app_handler.py to match storage.DATA_FILES
@@ -361,11 +363,6 @@ bbbcea)
   - docker: 镜像结构无变化,镜像内 Python 路径相同
   - 三端: 数据结构与字段不变,存量 JSON 文件无需迁移
 ### 📖 docs
-
-- 更新 README 和 docker-compose 添加 METER_BACKUP_DIR 和 METER_IMAGE_DIR 环境变量说明 (b4770ef)
-  > - README 环境变量表格新增 METER_IMAGE_DIR 说明
-  > - README Docker Compose 和 Docker Run 示例添加备份目录和图片目录环境变量
-  > - docker-compose.yml 将两个环境变量从注释改为默认启用
 
 - 自动同步 v changelog 到 README.Docker.md [skip ci] (
 8f2d37)
@@ -430,6 +427,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+198a92811a557db6f47ba83e60a3bfc75d99312f ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+b4770efe4c5ad6dcae4daf126149a297ef26c385 ()
+  > docs: 更新 README 和 docker-compose 添加 METER_BACKUP_DIR 和 METER_IMAGE_DIR 环境变量说明
 - 
 171c6e2ada580fad46778f7c44ccd42185ebed41 ()
   > feat: 修复删除处理记录还原报修状态，Docker环境配置目录变量
@@ -603,5 +606,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...b4770ef)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...133a252)
 
