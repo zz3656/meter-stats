@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock, get_data_dir
+from handlers._base import JsonModelHandler
 
 _now = datetime.now
 
