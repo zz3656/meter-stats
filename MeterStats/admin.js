@@ -259,18 +259,18 @@ function loadBackupDirConfig() {
     .then(r => r.json()).then(res => {
       const display = document.getElementById('backup-dir-display');
       const pickBtn = document.getElementById('pick-backup-dir-btn');
-      const resetBtn = document.getElementById('reset-backup-dir-btn');
+      const saveBtn = document.getElementById('save-backup-dir-btn');
       if (!display) return;
 
       if (res.customizable === false) {
         display.textContent = '🔒 ' + (res.backup_dir || res.data_dir);
         if (pickBtn) pickBtn.style.display = 'none';
-        if (resetBtn) resetBtn.style.display = 'none';
+        if (saveBtn) saveBtn.style.display = 'none';
       } else {
         const dir = res.backup_dir || '默认: ' + res.data_dir + '/backup';
         display.textContent = dir;
         if (pickBtn) pickBtn.style.display = '';
-        if (resetBtn) resetBtn.style.display = '';
+        if (saveBtn) saveBtn.style.display = '';
       }
     }).catch(() => {});
 }
@@ -309,21 +309,6 @@ async function saveBackupDirInput() {
     }
     showToast('✅ 备份目录已保存', 'success');
     inputWrap.style.display = 'none';
-    loadBackupDirConfig();
-  } catch (e) {
-    showToast('保存失败: ' + e.message, 'error');
-  }
-}
-
-// 恢复默认备份目录
-async function resetBackupDir() {
-  try {
-    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
-    if (!res.ok) {
-      showToast('保存失败: ' + (res.error || '未知错误'), 'error');
-      return;
-    }
-    showToast('✅ 已恢复默认备份目录', 'success');
     loadBackupDirConfig();
   } catch (e) {
     showToast('保存失败: ' + e.message, 'error');

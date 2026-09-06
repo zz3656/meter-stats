@@ -794,9 +794,8 @@
           <input type="text" id="backup-dir-input" placeholder="输入备份目录完整路径" class="field-control" style="width:100%;font-size:12px;">
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()">选择目录</button>
-          <button class="btn btn-primary btn-xs" onclick="saveBackupDirInput()">保存</button>
-          <button class="btn btn-secondary btn-xs" onclick="resetBackupDir()">恢复默认</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn">选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveBackupDirInput()" id="save-backup-dir-btn">保存</button>
         </div>
       </div>
       <div class="settings-panel">
