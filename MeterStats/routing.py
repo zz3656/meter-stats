@@ -175,7 +175,7 @@ def _route(method: str, handler, path: str) -> bool:
             return True
         # 特殊路径: /api/admin/images
         if path_clean == "/api/admin/images":
-            _dispatch_fn(handle_get_images_config, "GET", handler, path_clean)
+            _dispatch_fn(handle_get_images_config, "GET", handler)
             return True
         # 精确匹配: _GET_ROUTES
         if path_clean in _GET_ROUTES:
@@ -209,7 +209,7 @@ def _route(method: str, handler, path: str) -> bool:
     # PUT: 优先匹配特殊路径
     if method == "PUT":
         if path_clean == "/api/admin/images":
-            _dispatch_fn(handle_put_images_config, "PUT", handler, path_clean)
+            _dispatch_fn(handle_put_images_config, "PUT", handler)
             return True
         if path_clean.startswith("/api/purchases/") and path_clean.endswith("/stock"):
             _dispatch_fn(handle_put_purchases_stock, "PUT", handler, path_clean)
