@@ -31,6 +31,8 @@ services:
       - METER_INITIAL_PASS=admin123
       # 备份目录（相对于 /data 的相对路径，留空则使用 /data/backup）
       # - METER_BACKUP_DIR=backup
+      # 图片目录（默认 /data/images）
+      # - METER_IMAGE_DIR=/data/images
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()"]
       interval: 30s

@@ -13,6 +13,18 @@ if [ -z "$METER_DOCKER" ]; then
     fi
 fi
 
+# Docker 环境下备份目录和环境变量 METER_BACKUP_DIR
+# 默认值: /data/backup(相对于 /data)
+if [ -z "$METER_BACKUP_DIR" ]; then
+    export METER_BACKUP_DIR=backup
+fi
+
+# Docker 环境下图片目录环境变量 METER_IMAGE_DIR
+# 默认值: /data/images
+if [ -z "$METER_IMAGE_DIR" ]; then
+    export METER_IMAGE_DIR=/data/images
+fi
+
 # 修复 /data 目录权限
 if [ -d /data ]; then
     chown -R app:app /data 2>/dev/null || true

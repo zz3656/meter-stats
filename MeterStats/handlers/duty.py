@@ -1,6 +1,7 @@
 """值班录入相关 API handler。"""
 from __future__ import annotations
 
+import os
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -88,8 +89,46 @@ def handle_put_duty(handler, path_clean: str):
 
 
 def handle_delete_duty(handler, path_clean: str):
-    """DELETE /api/duty/{id}"""
-    _h.handle_delete(handler, path_clean)
+    """DELETE /api/duty/{id}
+
+    如果删除的是"处理"类型记录，自动将原始报修记录恢复为"未处理"状态。
+    """
+    from utils import send_json, read_body
+    try:
+        rid = _h._extract_id(path_clean)
+        data = _h._load()
+        target = None
+        target_idx = None
+        for i, r in enumerate(data):
+            if str(r.get("id")) == rid:
+                target = r
+                target_idx = i
+                break
+        if target is None:
+            send_json(handler, 404, {"error": f"未找到 {rid}"})
+            return
+
+        # 如果删除的是"处理"记录，恢复原始报修记录的状态
+        if target.get("duty_type") == "处理" and target.get("original_id"):
+            original_id = target["original_id"]
+            for r in data:
+                if str(r.get("id")) == original_id:
+                    r["status"] = "未处理"
+                    # 清除处理关联字段
+                    r.pop("handle_record_id", None)
+                    log(f"  OK 删除处理记录 {rid} → 恢复原始记录 {original_id} 为未处理")
+                    break
+
+        # 删除记录
+        new_list = [r for r in data if str(r.get("id")) != rid]
+        _h._save(new_list)
+        log(f"  -- 删除工作记录 {rid}")
+        send_json(handler, 200, {"ok": True})
+    except Exception as e:
+        log(f"  [ERROR] handle_delete_duty: {e}")
+        import traceback
+        log(traceback.format_exc())
+        send_json(handler, 500, {"error": f"服务器内部错误: {e}"})
 
 
 def _get_images_dir():
@@ -136,8 +175,31 @@ def _save_setting(key: str, value) -> None:
 
 
 def handle_get_images_config(handler):
-    """GET /api/admin/images — 获取图片目录配置。"""
+    """GET /api/admin/images — 获取图片目录配置。
+
+    Docker 环境下由环境变量 METER_IMAGE_DIR 控制，返回 customizable=false。
+    """
     data_dir = get_data_dir()
+    env_image_dir = os.environ.get("METER_IMAGE_DIR", "").strip()
+
+    if os.environ.get("METER_DOCKER") and env_image_dir:
+        # Docker 环境: 使用环境变量指定的图片目录
+        image_dir = Path(env_image_dir)
+        image_dir.mkdir(parents=True, exist_ok=True)
+        image_files = list(image_dir.glob("*"))
+        total_files = len(image_files)
+        total_size = sum(f.stat().st_size for f in image_files if f.is_file())
+        send_json(handler, 200, {
+            "ok": True,
+            "image_dir": str(image_dir),
+            "default_image_dir": str(image_dir),
+            "image_count": total_files,
+            "total_size": total_size,
+            "customizable": False,
+        })
+        return
+
+    # macOS 环境: 从 settings.json 读取
     settings = _get_settings()
     image_dir = Path(settings.get("image_dir", str(Path(data_dir) / "images")))
     image_dir.mkdir(parents=True, exist_ok=True)
@@ -151,11 +213,19 @@ def handle_get_images_config(handler):
         "default_image_dir": str(Path(data_dir) / "images"),
         "image_count": total_files,
         "total_size": total_size,
+        "customizable": True,
     })
 
 
 def handle_put_images_config(handler):
-    """PUT /api/admin/images — 设置图片目录。"""
+    """PUT /api/admin/images — 设置图片目录。
+
+    Docker 环境下由环境变量 METER_IMAGE_DIR 控制，不可通过 API 修改。
+    """
+    # Docker 环境不允许修改
+    if os.environ.get("METER_DOCKER"):
+        send_json(handler, 400, {"error": "Docker 环境下图片目录由环境变量 METER_IMAGE_DIR 控制"})
+        return
     body = read_body(handler)
     image_dir = body.get("image_dir", "").strip()
     if not image_dir:

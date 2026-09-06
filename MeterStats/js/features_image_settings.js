@@ -5,6 +5,8 @@ const IMAGE_API = '/api/admin/images';
 function loadImageDirConfig() {
   const dirEl = document.getElementById('image-dir-display');
   const statsEl = document.getElementById('image-dir-stats');
+  const pickBtn = document.getElementById('pick-image-dir-btn');
+  const saveBtn = document.getElementById('save-image-dir-btn');
 
   if (!dirEl) return;
 
@@ -12,8 +14,15 @@ function loadImageDirConfig() {
     fetch(IMAGE_API + getAuthParam())
       .then(r => r.json()).then(res => {
         if (!res.ok) return;
-        dirEl.textContent = '📁 ' + res.image_dir + ' (默认: ' + res.default_image_dir + ')';
+        if (res.customizable === false) {
+          dirEl.textContent = '🔒 ' + res.image_dir;
+        } else {
+          dirEl.textContent = '📁 ' + res.image_dir + ' (默认: ' + res.default_image_dir + ')';
+        }
         if (statsEl) statsEl.textContent = '📊 图片数量: ' + res.image_count + ' 张, 总大小: ' + formatBytes(res.total_size);
+        // 根据 customizable 控制按钮显隐
+        if (pickBtn) pickBtn.style.display = res.customizable === false ? 'none' : '';
+        if (saveBtn) saveBtn.style.display = res.customizable === false ? 'none' : '';
       }).catch(() => {
         dirEl.textContent = '⚠️ 后端未更新，请重启服务后生效';
         if (statsEl) statsEl.textContent = '';
@@ -36,7 +45,7 @@ function pickImageDirInput() {
   if (!dirEl || !inputWrap || !input) return;
 
   let currentPath = '';
-  const match = dirEl.textContent.match(/📁 (\S+)/);
+  const match = dirEl.textContent.match(/📁 (\S+)/) || dirEl.textContent.match(/🔒 (\S+)/);
   if (match) currentPath = match[1];
 
   input.value = currentPath;
