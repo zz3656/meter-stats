@@ -198,8 +198,8 @@ def handle_get_images_config(handler):
     env_image_dir = os.environ.get("METER_IMAGE_DIR", "").strip()
 
     if os.environ.get("METER_DOCKER") and env_image_dir:
-        # Docker 环境: 使用环境变量指定的图片目录
-        image_dir = Path(env_image_dir)
+        # Docker 环境: 使用环境变量指定的图片目录(相对 data_dir)
+        image_dir = data_dir / env_image_dir
         image_dir.mkdir(parents=True, exist_ok=True)
         image_files = list(image_dir.glob("*"))
         total_files = len(image_files)

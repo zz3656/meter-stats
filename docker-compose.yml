@@ -29,10 +29,10 @@ services:
       - METER_BIND=0.0.0.0
       # 初始管理员密码（⚠️ 请修改！）
       - METER_INITIAL_PASS=admin123
-      # 备份目录（相对于 /data 的相对路径）
+      # 备份目录(相对于数据目录,默认 backup)
       - METER_BACKUP_DIR=backup
-      # 图片目录
-      - METER_IMAGE_DIR=/data/images
+      # 图片目录(相对于数据目录,默认 images)
+      - METER_IMAGE_DIR=images
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8765/api/health', timeout=3).close()"]
       interval: 30s

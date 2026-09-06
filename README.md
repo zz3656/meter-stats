@@ -42,8 +42,8 @@ services:
       - METER_DATA_DIR=/data
       - METER_BIND=0.0.0.0
       - METER_INITIAL_PASS=admin123    # 首次登录密码(可改)
-      - METER_BACKUP_DIR=backup        # 备份目录(可选,默认 backup)
-      - METER_IMAGE_DIR=/data/images   # 图片目录(可选,默认 /data/images)
+      - METER_BACKUP_DIR=backup        # 备份目录(相对数据目录,默认 backup)
+      - METER_IMAGE_DIR=images         # 图片目录(相对数据目录,默认 images)
 ```
 
 ```bash
@@ -62,7 +62,7 @@ docker run -d --name meter-stats \
   -e METER_PORT=8765 \
   -e METER_INITIAL_PASS=your-password \
   -e METER_BACKUP_DIR=backup \
-  -e METER_IMAGE_DIR=/data/images \
+  -e METER_IMAGE_DIR=images \
   --restart unless-stopped \
   zz3656/meter-stats:latest
 ```
@@ -106,8 +106,8 @@ cd MeterStats
 | `METER_DATA_DIR` | `/data` | 数据目录(Docker 推荐挂载到此路径) |
 | `METER_INITIAL_PASS` | `admin123` | 初始 admin 密码(**首次启动生效**,之后改不生效) |
 | `METER_INITIAL_ADMIN` | `admin` | 初始 admin 用户名 |
-| `METER_BACKUP_DIR` | `backup` | 备份目录(相对 `METER_DATA_DIR` 的相对路径) |
-| `METER_IMAGE_DIR`  | `/data/images` | 图片目录(Docker 环境下使用,macOS 本地使用 settings.json 配置) |
+| `METER_BACKUP_DIR` | `backup` | 备份目录(相对 `METER_DATA_DIR` 的路径) |
+| `METER_IMAGE_DIR`  | `images` | 图片目录(相对 `METER_DATA_DIR` 的路径,macOS 本地使用 settings.json 配置) |
 | `METER_CORS_ORIGIN` | `http://localhost:8765` | 跨域来源(`*` 表示完全开放,适合 Docker / 远程访问) |
 
 ## 🔄 升级
