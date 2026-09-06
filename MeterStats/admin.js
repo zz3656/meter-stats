@@ -892,3 +892,36 @@ function escapeHtml(str) {
   div.textContent = str;
   return div.innerHTML;
 }
+
+// ===== 下载导入模板 =====
+async function downloadImportTemplate() {
+  const model = document.getElementById('import-model').value;
+  const btn = document.getElementById('import-template-btn');
+  const resultEl = document.getElementById('import-result');
+
+  try {
+    btn.disabled = true;
+    const resp = await fetch(`/api/import/template?model=${encodeURIComponent(model)}`, {
+      headers: { 'X-Auth-Token': localStorage.getItem('meter_token') || '' },
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      resultEl.innerHTML = `<span style="color:#ef4444;">❌ 下载模板失败: ${escapeHtml(data.error || resp.statusText)}</span>`;
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `import-template-${model}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    resultEl.innerHTML = `<span style="color:#22c55e;">✅ 已下载模板 (${model})</span>`;
+  } catch (err) {
+    resultEl.innerHTML = `<span style="color:#ef4444;">❌ 网络错误: ${escapeHtml(err.message)}</span>`;
+  } finally {
+    btn.disabled = false;
+  }
+}

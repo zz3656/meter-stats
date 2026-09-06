@@ -31,7 +31,7 @@ from handlers.reports import (
     handle_get_yearly_report, handle_get_monthly_utilities,
     handle_get_snapshot, handle_get_report_cache,
 )
-from handlers.dataimport import handle_post_import
+from handlers.dataimport import handle_post_import, handle_get_import_template
 from handlers.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
 from handlers.admin import (
     # Auth
@@ -83,6 +83,7 @@ _POST_PREFIX = {
     "/api/purchases": handle_post_purchases,
     "/api/duty": handle_post_duty,
     "/api/import": handle_post_import,
+    "/api/import/template": handle_get_import_template,
 }
 
 _PUT_PREFIX = {

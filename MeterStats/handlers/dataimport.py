@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from utils import send_json, opt_float, read_body
+from utils import send_json, send_csv, opt_float, read_body
 from storage import log, get_lock, load_json, save_json
 from handlers._base import get_data_paths
 
@@ -26,6 +26,14 @@ MODEL_FIELDS: Dict[str, List[str]] = {
     "charges": ["id", "date", "hall", "fire", "private_room", "ac", "note"],
     "items": ["id", "name", "qty", "unit", "note", "created_at"],
     "purchases": ["id", "date", "name", "qty", "unit", "est_price", "supplier", "status", "note"],
+}
+
+# 模型示例数据（用于生成 CSV 模板，让用户直观看到正确格式）
+MODEL_EXAMPLES: Dict[str, List[str]] = {
+    "readings":   ["2026-01-15", "1234.5", "12.3", "456.7", "234.5", "", "", "", "示例：大厅/包间/空调读数"],
+    "charges":    ["", "2026-01-15", "100", "20", "50", "30", "示例：充值记录"],
+    "items":      ["", "扫把", "5", "把", "示例物品备注", ""],
+    "purchases":  ["", "2026-01-15", "扫把", "5", "把", "10.5", "示例供应商", "ordered", "示例备注"],
 }
 
 
@@ -313,6 +321,28 @@ def handle_post_import(handler):
         "errors": error_list,
     }
     send_json(handler, 200 if failed < len(rows) else 400, result)
+
+
+def handle_get_import_template(handler, path_clean: str):
+    """GET /api/import/template?model=<name> → 下载 CSV 模板
+
+    根据指定模型返回表头 + 一行示例数据，帮助用户了解正确的导入格式。
+    支持模型: readings, charges, items, purchases
+    """
+    from urllib.parse import urlparse, parse_qs
+    qs = parse_qs(urlparse(path_clean).query)
+    model = (qs.get("model", [""])[0] or "").strip().lower()
+
+    if model not in VALID_MODELS:
+        send_json(handler, 400, {
+            "error": f"不支持的模型: {model}。支持: {', '.join(sorted(VALID_MODELS))}"
+        })
+        return
+
+    headers = MODEL_FIELDS[model]
+    rows = [MODEL_EXAMPLES[model]]
+    filename = f"import-template-{model}.csv"
+    send_csv(handler, filename, headers, rows)
 
 
 def _parse_multipart(handler, content_type: str) -> Optional[Dict]:

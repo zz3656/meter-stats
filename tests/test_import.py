@@ -95,7 +95,13 @@ class TestDataImportDisk(unittest.TestCase):
         _IMPORT_TEST_DIR.mkdir(parents=True, exist_ok=True)
         # 初始化 storage DATA_PATHS (写回 app_handler)
         import storage
-        storage.init_data_files(_IMPORT_TEST_DIR)
+        paths = storage.init_data_files(_IMPORT_TEST_DIR)
+        # init_data_files 返回 {model: filepath} 但不自动写回全局
+        # 写回 app_handler.DATA_PATHS，供 handler 使用
+        import app_handler
+        for model, filepath in paths.items():
+            if model in app_handler.DATA_PATHS:
+                app_handler.DATA_PATHS[model] = filepath
         # 初始化 settings
         from handlers.settings import init_settings
         init_settings(_IMPORT_TEST_DIR)
@@ -313,6 +319,143 @@ class TestDataImportDisk(unittest.TestCase):
 
         self.assertEqual(len(errors), 0)
         self.assertEqual(sum(results), 10)
+
+
+class TestImportTemplate(unittest.TestCase):
+    """模板下载测试：handler、字段对齐、无效模型。"""
+
+    def test_examples_aligned_with_fields(self):
+        """每个模型的示例行字段数必须和表头字段数一致（防止以后改字段忘了同步示例）。"""
+        from handlers.dataimport import MODEL_FIELDS, MODEL_EXAMPLES, VALID_MODELS
+        for model in VALID_MODELS:
+            self.assertEqual(
+                len(MODEL_EXAMPLES[model]),
+                len(MODEL_FIELDS[model]),
+                f"模型 {model} 的示例行与表头字段数不一致",
+            )
+
+    def test_examples_first_col_is_meaningful(self):
+        """示例行应包含可识别的数据，不应全空（避免用户下载到空模板不知格式）。"""
+        from handlers.dataimport import MODEL_EXAMPLES, VALID_MODELS
+        for model in VALID_MODELS:
+            example = MODEL_EXAMPLES[model]
+            non_empty = [v for v in example if v and v.strip()]
+            self.assertGreater(
+                len(non_empty), 0,
+                f"模型 {model} 的示例行为空，无法起到示范作用",
+            )
+
+    def test_get_template_handler_returns_csv(self):
+        """GET /api/import/template?model=items 应返回 text/csv 格式的模板。"""
+        import csv as csv_mod
+        from io import StringIO
+        from handlers.dataimport import (
+            handle_get_import_template, MODEL_FIELDS,
+        )
+
+        captured = {"headers": {}, "body": b""}
+
+        class _FakeHandler:
+            path = "/api/import/template?model=items"
+            def send_response(self, status):
+                captured["status"] = status
+            def send_header(self, k, v):
+                captured["headers"][k] = v
+            def end_headers(self):
+                pass
+
+        class _FakeWFile:
+            def write(self, data):
+                captured["body"] += data
+
+        h = _FakeHandler()
+        h.wfile = _FakeWFile()
+        handle_get_import_template(h, h.path)
+
+        self.assertEqual(captured["status"], 200)
+        headers = captured["headers"]
+        self.assertIn("text/csv", headers.get("Content-Type", ""))
+        self.assertIn("import-template-items.csv", headers.get("Content-Disposition", ""))
+
+        body = captured["body"].decode("utf-8")
+        reader = csv_mod.DictReader(StringIO(body))
+        rows = list(reader)
+        self.assertEqual(len(rows), 1, "模板应只包含一行示例数据")
+        # 示例行字段应与表头一致
+        self.assertEqual(
+            set(rows[0].keys()),
+            set(MODEL_FIELDS["items"]),
+            "模板表头应与 MODEL_FIELDS 一致",
+        )
+
+    def test_get_template_all_models(self):
+        """4 个模型都应能成功生成模板。"""
+        from handlers.dataimport import (
+            handle_get_import_template, VALID_MODELS, MODEL_FIELDS,
+        )
+        import csv as csv_mod
+        from io import StringIO
+
+        for model in VALID_MODELS:
+            captured = {"headers": {}, "body": b""}
+
+            class _FakeHandler:
+                path = f"/api/import/template?model={model}"
+                def send_response(self, status):
+                    captured["status"] = status
+                def send_header(self, k, v):
+                    captured["headers"][k] = v
+                def end_headers(self):
+                    pass
+
+            class _FakeWFile:
+                def write(self, data):
+                    captured["body"] += data
+
+            h = _FakeHandler()
+            h.wfile = _FakeWFile()
+            handle_get_import_template(h, h.path)
+
+            self.assertEqual(captured["status"], 200, f"{model} 模板下载应返回 200")
+            body = captured["body"].decode("utf-8")
+            reader = csv_mod.DictReader(StringIO(body))
+            rows = list(reader)
+            self.assertEqual(len(rows), 1, f"{model} 模板应包含一行示例")
+            self.assertEqual(
+                set(rows[0].keys()),
+                set(MODEL_FIELDS[model]),
+                f"{model} 表头不匹配",
+            )
+
+    def test_get_template_invalid_model(self):
+        """未知模型应返回 400 JSON 错误。"""
+        import json as json_mod
+        from handlers.dataimport import handle_get_import_template
+
+        captured = {"headers": {}, "body": b""}
+
+        class _FakeHandler:
+            path = "/api/import/template?model=bogus"
+            def send_response(self, status):
+                captured["status"] = status
+            def send_header(self, k, v):
+                captured["headers"][k] = v
+            def end_headers(self):
+                pass
+
+        class _FakeWFile:
+            def write(self, data):
+                captured["body"] += data
+
+        h = _FakeHandler()
+        h.wfile = _FakeWFile()
+        handle_get_import_template(h, h.path)
+
+        self.assertEqual(captured["status"], 400)
+        self.assertIn("application/json", captured["headers"].get("Content-Type", ""))
+        payload = json_mod.loads(captured["body"].decode("utf-8"))
+        self.assertIn("error", payload)
+        self.assertIn("bogus", payload["error"])
 
 
 if __name__ == "__main__":

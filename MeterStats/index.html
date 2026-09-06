@@ -845,7 +845,10 @@
         <div class="field" style="margin-bottom:10px;">
           <input type="file" id="import-file" accept=".csv" class="field-control">
         </div>
-        <button class="btn btn-secondary btn-sm" onclick="doImport()" style="width:100%;" id="import-btn">📤 导入 CSV</button>
+        <div style="display:flex;gap:8px;margin-bottom:4px;">
+          <button class="btn btn-secondary btn-sm" onclick="doImport()" style="flex:1;" id="import-btn">📤 导入 CSV</button>
+          <button class="btn btn-secondary btn-sm" onclick="downloadImportTemplate()" style="flex:1;" id="import-template-btn">📋 下载模板</button>
+        </div>
         <div id="import-result" style="font-size:12px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;min-height:20px;"></div>
       </div>
       <div class="settings-panel" style="margin-bottom:0;">
