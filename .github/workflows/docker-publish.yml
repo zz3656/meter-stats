@@ -37,7 +37,7 @@ jobs:
           push: true
           tags: |
             zz3656/meter-stats:latest
-            zz3656/meter-stats:v0.1.1
+            zz3656/meter-stats:v0.1.0
 
       - name: Update Docker Hub repository description
         env:
