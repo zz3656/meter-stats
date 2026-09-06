@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `701c436` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `b7f717c` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -331,7 +331,7 @@ a2c621)
   > 页面始终显示'暂无抄表记录'(即使后端有 35 条数据)。
   > 修复:成功路径同时赋值 CURRENT_READINGS/CHARGES/ITEMS/PURCHASES/DUTY
 
-- 图片目录选择简化为prompt,加载失败时提示重启后端 (701c436)
+- 修复admin/images路由参数不匹配导致500错误 (b7f717c)
 
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics (
 6c8ae6)
@@ -418,6 +418,12 @@ e19fdd)
   > - DO-HUB-TOKEN-GUIDE.md:同上
 ### 📝 其他改动
 
+- 
+6b544a60f0f0c8c9a28a8210e1dde66225f522ee ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+701c43600af876b0c72f4955ba910462e69c1ffa ()
+  > fix: 图片目录选择简化为prompt,加载失败时提示重启后端
 - 
 c4644988cddb55608819007e843a18af030eb325 ()
   > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
@@ -570,5 +576,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...701c436)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...b7f717c)
 
