@@ -790,17 +790,25 @@
       <div class="settings-panel">
         <div class="panel-title">📂 备份目录</div>
         <div id="backup-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
+        <div id="backup-dir-input-wrap" style="display:none;margin-bottom:8px;">
+          <input type="text" id="backup-dir-input" placeholder="输入备份目录完整路径" class="field-control" style="width:100%;font-size:12px;">
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="setBackupDir()">选择备份目录</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()">选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveBackupDirInput()">保存</button>
           <button class="btn btn-secondary btn-xs" onclick="resetBackupDir()">恢复默认</button>
         </div>
       </div>
       <div class="settings-panel">
-        <div class="panel-title">📷 工作记录图片目录</div>
-        <div id="image-dir-display" class="panel-desc" style="margin-bottom:10px;font-size:13px;">加载中...</div>
+        <div class="panel-title">📷 图片目录</div>
+        <div id="image-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
         <div id="image-dir-stats" class="panel-desc" style="margin-bottom:10px;font-size:13px;color:var(--text-muted);"></div>
+        <div id="image-dir-input-wrap" style="display:none;margin-bottom:8px;">
+          <input type="text" id="image-dir-input" placeholder="输入图片目录完整路径" class="field-control" style="width:100%;font-size:12px;">
+        </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="pickImageDir()">选择图片目录</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()">选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveImageDirInput()">保存</button>
         </div>
       </div>
       <div class="settings-panel">

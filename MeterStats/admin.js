@@ -276,10 +276,29 @@ function loadBackupDirConfig() {
 }
 
 // 选择备份目录
-async function setBackupDir() {
-  const dir = await adminPickBackupDir();
+function pickBackupDirInput() {
+  const dirEl = document.getElementById('backup-dir-display');
+  const inputWrap = document.getElementById('backup-dir-input-wrap');
+  const input = document.getElementById('backup-dir-input');
+  if (!dirEl || !inputWrap || !input) return;
+
+  // 从显示文本中提取当前路径
+  let currentPath = '';
+  const match = dirEl.textContent.match(/📁 (.+?)(?:$| \()/);
+  if (match) currentPath = match[1].trim();
+
+  input.value = currentPath;
+  inputWrap.style.display = 'block';
+  input.focus();
+}
+
+async function saveBackupDirInput() {
+  const input = document.getElementById('backup-dir-input');
+  const inputWrap = document.getElementById('backup-dir-input-wrap');
+  if (!input) return;
+  const dir = input.value.trim();
   if (!dir) {
-    showToast('未选择目录', 'info');
+    showToast('请输入目录路径', 'warn');
     return;
   }
   try {
@@ -288,7 +307,8 @@ async function setBackupDir() {
       showToast('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
     }
-    showToast('✅ 备份目录已更新', 'success');
+    showToast('✅ 备份目录已保存', 'success');
+    inputWrap.style.display = 'none';
     loadBackupDirConfig();
   } catch (e) {
     showToast('保存失败: ' + e.message, 'error');
