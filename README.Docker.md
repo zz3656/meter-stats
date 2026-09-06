@@ -202,7 +202,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-> macOS + Docker + Web 三端统一部署 · 提交 `3eedcd8` · 完整改动见下方
+> macOS + Docker + Web 三端统一部署 · 提交 `8be8402` · 完整改动见下方
 
 **升级 Docker 容器**:
 ```bash
@@ -229,10 +229,7 @@ a5b123)
   > - 工作记录表格新增「故障区域」列展示
   > - 后端 duty.py POST/PUT 都支持 fault_area 字段,空值默认空串(向后兼容旧记录)
 
-- 工作记录图片预览功能增强 (3eedcd8)
-  > - 新增/预上传的图片缩略图点击可打开灯箱大图预览
-  > - 处理弹窗打开时自动加载并显示原始报修记录中的图片
-  > - 新增 renderUploadedImages 函数渲染已上传的服务器图片
+- 图片上传前自动压缩（Canvas 转 JPEG 1920px/0.8 质量）\n\n- 压缩图片最大宽度 1920px，质量 0.8\n- 原图自动转为 JPEG 格式，通常可将照片压缩至 100-300KB\n- 不影响后端 API 和存储逻辑 (8be8402)
 
 - 录入集成+侧栏重构+UI统一+移动端适配 (
 4a5d7e)
@@ -434,6 +431,12 @@ e19fdd)
 ### 📝 其他改动
 
 - 
+960c8080ac40b0862a4d77604d559ecf1d9babdc ()
+  > docs: 自动同步 v changelog 到 README.Docker.md [skip ci]
+- 
+3eedcd89071584ef1e517a2f187637985c1ff5b8 ()
+  > feat: 工作记录图片预览功能增强
+- 
 133a252b9ead2e0682313dc4e0e6aa0b693f5e39 ()
   > fix: 修复工作记录图片上传"服务器内部错误" — handle_post_duty_image 缺少 path_clean 参数导致路由调用时报 TypeError
 - 
@@ -615,5 +618,5 @@ c94accace30e6e06fde6220cd8db5de14f51419f ()
 
 ---
 
-💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...3eedcd8)
+💡 完整代码改动请看 [commits 页面](https://github.com/zz3656/meter-stats/compare/v0.1.0...8be8402)
 
