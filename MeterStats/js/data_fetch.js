@@ -15,6 +15,7 @@ async function renderAll() {
   renderPurchaseTable(CURRENT_PURCHASES);
   renderDutyTable(CURRENT_DUTY, '');
   populateDutyMonthSelector();
+  checkDutyReminder();
   refreshMonthSelectors();
   refreshDayCopySelect(CURRENT_READINGS, CURRENT_CHARGES);
   updateStatusBar(CURRENT_READINGS, CURRENT_CHARGES);
