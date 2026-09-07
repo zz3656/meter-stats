@@ -197,6 +197,22 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         else:
             log(f"[BACKUP] 跳过 {name}: 文件不存在")
 
+    # 自动备份也包含 settings.json（与手动备份一致）
+    settings_src = data_dir / "settings.json"
+    if settings_src.exists():
+        try:
+            settings_data = json.loads(settings_src.read_text(encoding="utf-8"))
+            # 剥离部署环境字段，保持与手动备份一致
+            safe_settings = {k: v for k, v in settings_data.items()
+                             if k not in ("backup_dir", "backup_retention_count")}
+            (backup_dir / "settings.json").write_text(
+                json.dumps(safe_settings, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            log(f"[BACKUP] 已复制 settings.json → {backup_dir}")
+        except Exception as e:
+            log(f"[WARN] 读取 settings 失败,跳过: {e}")
+
     # 打包为 ZIP 并清理临时目录（自动备份使用 auto-bak- 前缀，便于按天数清理）
     stamp_name = backup_dir.name
     zip_filename = f"auto-bak-{stamp_name}.zip"
