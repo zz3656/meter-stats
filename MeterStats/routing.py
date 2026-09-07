@@ -180,11 +180,11 @@ def _route(method: str, handler, path: str) -> bool:
             return True
         # 精确匹配: _GET_ROUTES
         if path_clean in _GET_ROUTES:
-            _dispatch_fn(_GET_ROUTES[path_clean], "GET", handler)
+            _dispatch_fn(_call_handler, "GET", _GET_ROUTES[path_clean], handler, path_clean)
             return True
         # 精确匹配: admin 路由
         if path_clean in _GET_ADMIN:
-            _dispatch_fn(_GET_ADMIN[path_clean], "GET", handler)
+            _dispatch_fn(_call_handler, "GET", _GET_ADMIN[path_clean], handler, path_clean)
             return True
         # 前缀匹配: _GET_ROUTES (for path like /api/readings/monthly)
         fn = _match_prefix(_GET_ROUTES, path_clean)
