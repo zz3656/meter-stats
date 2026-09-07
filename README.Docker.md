@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `b5505ff`
+提交 `7c0d5b6`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- GET精确匹配路由未正确传递path_clean参数导致500错误 — _GET_ROUTES和_GET_ADMIN的精确匹配路由直接调用fn(handler)， / 未使用_call_handler动态检查signature。
+- CSV模板下载model参数解析错误 — 从handler.path而非path_clean解析query string — path_clean在路由层已被剥离query string(path.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...b5505ff)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...7c0d5b6)
 
