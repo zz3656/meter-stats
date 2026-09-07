@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `7c0d5b6`
+提交 `62e52ba`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- CSV模板下载model参数解析错误 — 从handler.path而非path_clean解析query string — path_clean在路由层已被剥离query string(path.
+- 自动备份也包含 settings.json，与手动备份保持一致 — 之前自动备份只打包 DATA_FILES 的 6 个文件，手动备份打包 6 / 个 DATA_FILES + settings.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...7c0d5b6)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...62e52ba)
 
