@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `9747dfb`
+提交 `1048cc1`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,7 @@ docker compose up -d
 ```
 
 
-- 添加 CSV 模板下载功能 — - 后端新增 GET /api/import/template?model=<name>，返回对应模型的表头 + 示例行 / - 前端导入区增加'下载模板'按钮
+- 修改记录改用模态框样式,非当日编辑需二次确认 — - 抄表、充值、水电表底三项编辑全部改用模态框弹窗(同新增样式) / - 修改非当日录入的记录时弹出二次确认提示 / - 新增3个编辑弹窗模板(抄表/水电/充值
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...9747dfb)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1048cc1)
 
