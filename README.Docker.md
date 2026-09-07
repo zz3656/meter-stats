@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `1048cc1`
+提交 `44e185b`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,6 @@ docker compose up -d
 ```
 
 
-- 修改记录改用模态框样式,非当日编辑需二次确认 — - 抄表、充值、水电表底三项编辑全部改用模态框弹窗(同新增样式) / - 修改非当日录入的记录时弹出二次确认提示 / - 新增3个编辑弹窗模板(抄表/水电/充值
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -113,6 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
+- CSV模板下载路由注册错误 — 从_POST_PREFIX移至_GET_ROUTES — /api/import/template 是 GET 请求，但之前错误地注册在_POST_PREFIX / 下（POST路由列表），导致 GET 请求匹配不到路
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1048cc1)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...44e185b)
 
