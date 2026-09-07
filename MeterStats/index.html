@@ -1282,6 +1282,113 @@
   </div>
 </div>
 
+<!-- 抄表编辑弹窗(样式同新增弹窗,移动端友好) -->
+<div id="reading-edit-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:480px;">
+    <h3 class="modal-title">📝 编辑抄表记录</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
+        <input type="date" id="reading-edit-date" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">读数 ×160</span></label>
+        <input type="number" id="reading-edit-hall" step="0.01" placeholder="例如 65.30" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">读数即实际电量</span></label>
+        <input type="number" id="reading-edit-fire" step="0.01" placeholder="例如 1305.20" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">读数 ×160</span></label>
+        <input type="number" id="reading-edit-private_room" step="0.01" placeholder="例如 79.80" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">读数 ×160</span></label>
+        <input type="number" id="reading-edit-ac" step="0.01" placeholder="例如 52.10" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="reading-edit-note" placeholder="例如:补录上周" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="reading-edit-close">取消</button>
+      <button type="button" class="btn btn-primary" id="reading-edit-confirm">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- 水电表底编辑弹窗(样式同新增弹窗,移动端友好) -->
+<div id="water-edit-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:480px;">
+    <h3 class="modal-title">💧 编辑水电表底</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
+        <input type="date" id="water-edit-date" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">总表 <span class="hint">每月抄 · 读数 ×50</span></label>
+        <input type="number" id="water-edit-main_meter" step="0.01" placeholder="例如 51800.00" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">分表 <span class="hint">每月抄 · 读数 ×40</span></label>
+        <input type="number" id="water-edit-sub_meter" step="0.01" placeholder="例如 20800.00" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">水表 <span class="hint">每月抄 · 读数递增</span></label>
+        <input type="number" id="water-edit-water" step="0.01" placeholder="例如 3140.00" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="water-edit-note" placeholder="例如:月底抄表" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="water-edit-close">取消</button>
+      <button type="button" class="btn btn-primary" id="water-edit-confirm">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<!-- 充值记录编辑弹窗(样式同新增弹窗,移动端友好) -->
+<div id="charge-edit-modal-backdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:460px;">
+    <h3 class="modal-title">💰 编辑充值记录</h3>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
+        <input type="date" id="charge-edit-date" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-edit-hall" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">表读数</span></label>
+        <input type="number" id="charge-edit-fire" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-edit-private_room" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">表读数 ×160</span></label>
+        <input type="number" id="charge-edit-ac" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
+      </div>
+      <div style="margin-bottom:0;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
+        <input type="text" id="charge-edit-note" placeholder="例如:晚上 10 点充的" maxlength="100" style="width:100%;" />
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" id="charge-edit-close">取消</button>
+      <button type="button" class="btn btn-primary" id="charge-edit-confirm">保存修改</button>
+    </div>
+  </div>
+</div>
+
   <!-- 模块化加载 -->
   <script src="js/utils_helpers.js"></script>
   <script src="js/core_meterConfig.js"></script>

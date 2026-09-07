@@ -694,10 +694,13 @@
   [data-theme="dark"] .history-table tr.handle-row {
     background: rgba(37, 99, 235, 0.12);
   }
-  /* 编辑行 input 固定宽度 — 和普通行数字文本同宽,点编辑时列宽不跳变(date input 默认 ~160px 会把列撑爆) */
+  /* 编辑行 input 固定宽度 — 行内编辑降级时使用(modal 编辑不需要此样式) */
   .history-table tr.edit-row .cell-input { width: 60px; }
   .history-table tr.edit-row #edit-date { width: 118px; }
   .history-table tr.edit-row #edit-note { width: 96px; }
+  /* 充值行内编辑专用 id */
+  .history-table tr.edit-row #ce-date { width: 118px; }
+  .history-table tr.edit-row #ce-note { width: 96px; }
   .history-table .cell-input {
     width: 100%;
     min-width: 0;  /* 防编辑时 input 默认最小宽度撑开列 */
