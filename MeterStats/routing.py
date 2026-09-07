@@ -57,6 +57,7 @@ _GET_ROUTES = {
     "/api/monthly-report": handle_get_monthly_report,
     "/api/yearly-report": handle_get_yearly_report,
     "/api/monthly-utilities": handle_get_monthly_utilities,
+    "/api/import/template": handle_get_import_template,
     "/api/readings": handle_get_readings,
     "/api/readings-water": handle_get_readings_water,
     "/api/charges": handle_get_charges,
@@ -83,7 +84,6 @@ _POST_PREFIX = {
     "/api/purchases": handle_post_purchases,
     "/api/duty": handle_post_duty,
     "/api/import": handle_post_import,
-    "/api/import/template": handle_get_import_template,
 }
 
 _PUT_PREFIX = {
