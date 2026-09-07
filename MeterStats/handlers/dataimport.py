@@ -330,7 +330,9 @@ def handle_get_import_template(handler, path_clean: str):
     支持模型: readings, charges, items, purchases
     """
     from urllib.parse import urlparse, parse_qs
-    qs = parse_qs(urlparse(path_clean).query)
+    # handler.path 是原始请求 URL（含 query string），path_clean 不含 query string
+    # 需要从 handler.path 解析 model 参数
+    qs = parse_qs(urlparse(handler.path).query)
     model = (qs.get("model", [""])[0] or "").strip().lower()
 
     if model not in VALID_MODELS:
