@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `44e185b`
+提交 `b5505ff`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- CSV模板下载路由注册错误 — 从_POST_PREFIX移至_GET_ROUTES — /api/import/template 是 GET 请求，但之前错误地注册在_POST_PREFIX / 下（POST路由列表），导致 GET 请求匹配不到路
+- GET精确匹配路由未正确传递path_clean参数导致500错误 — _GET_ROUTES和_GET_ADMIN的精确匹配路由直接调用fn(handler)， / 未使用_call_handler动态检查signature。
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...44e185b)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...b5505ff)
 
