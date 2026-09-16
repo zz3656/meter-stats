@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `1032805`
+提交 `8a62d17`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,7 @@ docker compose up -d
 ```
 
 
-- 抄表记录新增排练/编程标签选择 — - 后台 API 新增 rehearsal 和 programming 字段存储 / - 侧栏抄表表单、新增抄表弹窗、编辑弹窗均增加排练/编程复选框 / - 抄
+- 新增每周汇报报表分析 — - 报表分析侧栏新增「每周汇报」入口(每日趋势下方) / - 每周汇报页面包含: / · 目标周选择器(自动生成ISO周,默认上上周)
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1032805)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...8a62d17)
 
