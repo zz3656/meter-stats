@@ -18,20 +18,26 @@ function renderHistory(readings) {
   readEmpty.style.display = 'none';
   const sortedReadings = [...filtered].sort((a, b) => b.date.localeCompare(a.date));
 
-  readTbody.innerHTML = sortedReadings.map(r => `
+  readTbody.innerHTML = sortedReadings.map(r => {
+    const tags = [];
+    if (r.rehearsal) tags.push('<span class="tag tag-rehearsal" title="排练">排练</span>');
+    if (r.programming) tags.push('<span class="tag tag-programming" title="编程">编程</span>');
+    const tagsHtml = tags.length ? tags.join(' ') : '';
+    return `
     <tr data-date="${r.date}" data-type="reading">
       <td>${r.date}</td>
       <td>${r.hall == null ? '—' : r.hall.toFixed(2)}</td>
       <td>${r.fire == null ? '—' : r.fire.toFixed(2)}</td>
       <td>${r.private_room == null ? '—' : r.private_room.toFixed(2)}</td>
       <td>${r.ac == null ? '—' : r.ac.toFixed(2)}</td>
-      <td style="color:var(--text-muted);font-size:12px;">${r.note || '—'}</td>
+      <td style="color:var(--text-muted);font-size:12px;">${r.note || '—'}${tagsHtml}</td>
       <td>
         <button class="edit-btn" data-action="edit-reading" data-date="${r.date}">编辑</button>
         <button class="delete-btn" data-action="delete-reading" data-date="${r.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
       </td>
     </tr>
-  `).join('');
+    `;
+  }).join('');
 
   // 抄表编辑
   readTbody.querySelectorAll('[data-action="edit-reading"]').forEach(btn => {

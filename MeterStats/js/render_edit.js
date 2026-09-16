@@ -113,6 +113,10 @@ async function enterEditMode(date, type = 'reading') {
   setVal('reading-edit-fire', row.fire ?? '');
   setVal('reading-edit-private_room', row.private_room ?? '');
   setVal('reading-edit-ac', row.ac ?? '');
+  const rehEl = document.getElementById('reading-edit-rehearsal');
+  if (rehEl) rehEl.checked = !!row.rehearsal;
+  const progEl = document.getElementById('reading-edit-programming');
+  if (progEl) progEl.checked = !!row.programming;
   setVal('reading-edit-note', row.note || '');
 
   const modalEl = document.getElementById('reading-edit-modal-backdrop');
@@ -166,6 +170,8 @@ async function enterEditMode(date, type = 'reading') {
         private_room: prV === null ? undefined : prV,
         ac: acV === null ? undefined : acV,
         note: document.getElementById(ids.note).value.trim(),
+        rehearsal: document.getElementById('reading-edit-rehearsal').checked,
+        programming: document.getElementById('reading-edit-programming').checked,
       });
       showAlert(`✓ ${date} 抄表已更新为 ${newDate}`, 'success');
       closeReadingEditModal();

@@ -47,6 +47,8 @@ def handle_post_readings(handler):
     private_room = opt_float(body, "private_room")
     ac = opt_float(body, "ac")
     note = body.get("note", "")
+    rehearsed = bool(body.get("rehearsal", False))
+    programming = bool(body.get("programming", False))
 
     if all(v is None for v in [hall, fire, private_room, ac]):
         send_json(handler, 400, {"error": "四表至少填一个"})
@@ -61,7 +63,7 @@ def handle_post_readings(handler):
         new_row = {
             "date": date,
             "hall": hall, "fire": fire, "private_room": private_room, "ac": ac,
-            "note": note,
+            "note": note, "rehearsal": rehearsed, "programming": programming,
         }
         for k in ("hall", "fire", "private_room", "ac", "note"):
             if new_row[k] is None:
@@ -72,7 +74,7 @@ def handle_post_readings(handler):
         readings.append({
             "date": date,
             "hall": hall, "fire": fire, "private_room": private_room, "ac": ac,
-            "note": note,
+            "note": note, "rehearsal": rehearsed, "programming": programming,
         })
         log(f"  ++ 新增抄表 {date}")
 
@@ -99,11 +101,13 @@ def handle_put_readings(handler, path_clean: str):
         send_json(handler, 404, {"error": f"未找到 {date}"})
         return
 
-    for key in ["hall", "fire", "private_room", "ac", "note"]:
+    for key in ["hall", "fire", "private_room", "ac", "note", "rehearsal", "programming"]:
         val = body.get(key)
         if val is not None:
             if key in ("hall", "fire", "private_room", "ac"):
                 existing[key] = opt_float(body, key)
+            elif key in ("rehearsal", "programming"):
+                existing[key] = bool(val)
             else:
                 existing[key] = val
     _save_readings(readings)

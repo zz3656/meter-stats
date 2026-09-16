@@ -4,8 +4,8 @@
 async function submitReadingAdd(source) {
   if (_submitting) return;
   const ids = source === 'sidebar'
-    ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note' }
-    : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note' };
+    ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
+    : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
   const num = (id) => {
     const v = document.getElementById(id).value;
     return v === '' ? null : parseFloat(v);
@@ -18,6 +18,8 @@ async function submitReadingAdd(source) {
     date: document.getElementById(ids.date).value,
     hall: hallV, fire: fireV, private_room: prV, ac: acV,
     note: document.getElementById(ids.note).value.trim(),
+    rehearsal: ids.rehearsal ? document.getElementById(ids.rehearsal).checked : false,
+    programming: ids.programming ? document.getElementById(ids.programming).checked : false,
   };
   if (!row.date) { showAlert('请选择日期', 'error'); return; }
 
@@ -42,9 +44,11 @@ async function submitReadingAdd(source) {
     showAlert(`✓ ${row.date} 已保存`, 'success');
     ['sidebar', 'modal'].forEach(s => {
       const p = s === 'sidebar'
-        ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note' }
-        : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note' };
+        ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
+        : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
       ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(k => document.getElementById(p[k]).value = '');
+      if (p.rehearsal) document.getElementById(p.rehearsal).checked = false;
+      if (p.programming) document.getElementById(p.programming).checked = false;
     });
     if (source === 'modal') closeReadingAddModal();
     await refreshAndRender();
