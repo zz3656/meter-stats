@@ -138,8 +138,8 @@ function populateWeeklyWeekSelector() {
   });
   const sortedWeeks = [...weekSet].sort().reverse();
 
-  // 默认:上上周
-  const defaultWeek = lastLastWeekKey;
+  // 默认:上周(离当前日期最近一周)
+  const defaultWeek = lastWeekKey;
 
   // 构建选项
   const allWeekKeys = [lastWeekKey, lastLastWeekKey];
