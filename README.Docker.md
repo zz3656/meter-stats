@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `4aa930b`
+提交 `42ea381`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,6 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
+- 每周汇报默认显示离当前日期最近一周 — - 将默认选中周从'上上周'改为'上周'
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -143,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...4aa930b)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...42ea381)
 
