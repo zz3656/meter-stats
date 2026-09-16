@@ -94,6 +94,7 @@
           <span class="group-icon">📊</span><span class="group-label">报表分析</span><span class="group-arrow">▾</span>
         </div>
         <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')"><span class="item-icon">📈</span><span class="item-label">每日趋势</span></button>
+        <button class="sidebar-item" data-section="report-weekly" onclick="switchSection('report-weekly')"><span class="item-icon">📋</span><span class="item-label">每周汇报</span></button>
         <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')"><span class="item-icon">📊</span><span class="item-label">月度报告</span></button>
         <button class="sidebar-item" data-section="report-utilities" onclick="switchSection('report-utilities')"><span class="item-icon">💧</span><span class="item-label">月度水电</span></button>
         <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')"><span class="item-icon">📅</span><span class="item-label">年度汇总</span></button>
@@ -690,6 +691,65 @@
           <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 8px 0;">📊 当日用电占比</h3>
           <div id="daily-pie-summary" class="daily-pie-summary"></div>
           <div class="chart-wrap short"><canvas id="chart-daily-pie"></canvas></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== 每周汇报 ===== -->
+    <section id="section-report-weekly" class="content-section" style="display:none;">
+      <div class="card">
+        <div class="card-header">
+          <h2>📋 每周汇报</h2>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <label style="font-size:12px;color:var(--text-muted);">目标周</label>
+            <select id="weekly-target-week" class="field-control" style="width:auto;padding:5px 10px;"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-weekly" style="display:none;">📋 复制</button>
+          </div>
+        </div>
+        <!-- 加载提示 -->
+        <div id="weekly-report-empty" class="report-empty">选择目标周查看每周汇报</div>
+        <!-- 区域电费对比 -->
+        <div id="weekly-electricity" style="display:none;">
+          <h3 style="font-size:14px;margin:0 0 10px 0;">⚡ 上周 vs 上上周 电费对比</h3>
+          <div style="overflow-x:auto;">
+            <table class="history-table" id="weekly-compare-table">
+              <thead>
+                <tr>
+                  <th>区域</th>
+                  <th>上周用电</th>
+                  <th>上上周用电</th>
+                  <th>涨跌</th>
+                  <th>上周费用</th>
+                  <th>上上周费用</th>
+                  <th>费用变化</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <!-- 合计行 -->
+          <div id="weekly-summary-row" class="report-summary" style="display:none;margin-top:10px;"></div>
+        </div>
+        <!-- 排练/编程次数 -->
+        <div id="weekly-tags" style="display:none;margin-top:16px;">
+          <h3 style="font-size:14px;margin:0 0 10px 0;">🎭 排练 / 编程统计</h3>
+          <div style="overflow-x:auto;">
+            <table class="history-table" id="weekly-tag-table">
+              <thead>
+                <tr>
+                  <th></th>
+                  <th>排练次数</th>
+                  <th>编程次数</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+        <!-- 空调电费趋势 -->
+        <div id="weekly-ac-trend" style="display:none;margin-top:16px;">
+          <h3 style="font-size:14px;margin:0 0 10px 0;">❄️ 空调电费趋势</h3>
+          <div id="weekly-ac-result" style="padding:12px;background:var(--bg-subtle);border-radius:8px;font-size:14px;line-height:1.8;"></div>
         </div>
       </div>
     </section>
@@ -1442,6 +1502,7 @@
   <script src="js/render_monthly.js"></script>
   <script src="js/render_reports.js"></script>
   <script src="js/render_yearly.js"></script>
+  <script src="js/render_weekly.js"></script>
   <script src="js/features_topup.js"></script>
   <script src="js/features_utilities.js"></script>
   <script src="js/features_image_settings.js"></script>

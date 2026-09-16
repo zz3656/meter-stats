@@ -227,7 +227,7 @@ const SIDEBAR_VISIBLE_SECTIONS = new Set([
   'reading-record', 'charge-record', 'charge-alert',
   'item-record', 'purchase-record',
   'item-add', 'purchase-add',
-  'report-monthly', 'report-trend', 'report-pie', 'report-utilities', 'report-yearly',
+  'report-monthly', 'report-trend', 'report-weekly', 'report-pie', 'report-utilities', 'report-yearly',
   'overview'
 ]);
 
@@ -270,6 +270,9 @@ function switchSection(sectionId) {
   // 隐藏容器里初始化的 Chart 尺寸为 0,切回报表时重新计算
   if (sectionId === 'report-trend' && trendChart) {
     setTimeout(() => trendChart.resize(), 60);
+  }
+  if (sectionId === 'report-weekly') {
+    loadWeeklyReport();
   }
   if (sectionId === 'report-pie' && pieChart) {
     setTimeout(() => pieChart.resize(), 60);
