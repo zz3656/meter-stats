@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>工程部管理系统</title>
+<title>MeterStats · 电表统计</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,25 +21,25 @@
   <div style="width:360px;padding:32px;background:var(--bg-elevated);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);">
     <div style="text-align:center;margin-bottom:24px;">
       <div style="font-size:36px;margin-bottom:8px;">⚡</div>
-      <h2 style="margin:0;font-size:20px;font-weight:600;color:var(--text);">工程部管理系统</h2>
-      <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted);">登录后管理数据与权限</p>
+      <h2>工程部管理系统</h2>
+      <p>登录后管理数据与权限</p>
       <!-- 登录页全局控制按钮 -->
-      <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
-        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:7px 10px;">🌙</button>
+      <div class="login-actions">
+        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题">🌙</button>
         <button type="button" class="header-backup-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式">🔤 大字</button>
       </div>
     </div>
-      <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid rgba(220,38,38,0.2);"></div>
-    <div style="margin-bottom:16px;">
-      <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">用户名</label>
-      <input type="text" id="login-username" class="field-control" placeholder="输入用户名" autocomplete="username" style="width:100%;">
+      <div id="login-error" class="login-error"></div>
+    <div class="form-row">
+      <label for="login-username">用户名</label>
+      <input type="text" id="login-username" class="field-control" placeholder="输入用户名" autocomplete="username">
     </div>
-    <div style="margin-bottom:24px;">
-      <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">密码</label>
-      <input type="password" id="login-password" class="field-control" placeholder="输入密码" autocomplete="current-password" style="width:100%;">
+    <div class="form-row">
+      <label for="login-password">密码</label>
+      <input type="password" id="login-password" class="field-control" placeholder="输入密码" autocomplete="current-password">
     </div>
-    <button class="btn btn-primary" id="login-submit" onclick="doLogin()" style="width:100%;height:40px;font-size:14px;">登录</button>
-    <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:16px;">默认管理员: admin / admin123</p>
+    <button class="btn btn-primary" id="login-submit" onclick="doLogin()">登录</button>
+    <p class="login-hint">默认管理员: admin / admin123</p>
   </div>
 </div>
 

@@ -64,6 +64,7 @@
     color: var(--text);
     line-height: 1.5;
     font-weight: 400;
+    scroll-behavior: smooth;
   }
 
   header {
@@ -350,19 +351,110 @@
     .content {
       padding: 16px;
       max-width: 100%;
+      -webkit-overflow-scrolling: touch;
     }
 
     header {
-      padding: 12px 16px;
+      padding: 14px 16px;
+    }
+
+    /* ===== 移动端进一步优化 ===== */
+
+    /* 移动端卡片 */
+    .card {
+      border-radius: 14px;
+      padding: 16px;
+    }
+
+    /* 移动端表单间距 */
+    .form-row {
+      margin-bottom: 14px;
+    }
+
+    /* 移动端按钮区 */
+    .button-row {
+      gap: 10px;
+      flex-direction: column;
+    }
+    .button-row .btn {
+      min-height: 44px;
+      padding: 10px 16px;
+      font-size: 14px;
+    }
+
+    /* 移动端统计卡片 */
+    .stat-card {
+      padding: 16px;
+      border-radius: 12px;
+    }
+    .stat-card .value {
+      font-size: 24px;
+    }
+
+    /* 移动端弹窗 */
+    .modal {
+      padding: 20px 16px;
+    }
+
+    /* 移动端 select 下拉 */
+    select {
+      min-height: 44px;
+    }
+
+    /* 移动端表格行 */
+    .history-table th,
+    .history-table td {
+      padding: 10px 8px;
+      font-size: 13px;
+    }
+
+    /* 移动端侧栏 wider,更好触摸 */
+    .sidebar {
+      width: 280px;
+      min-width: 280px;
+    }
+
+    /* 移动端侧栏项 */
+    .sidebar-item {
+      min-height: 46px;
+      padding: 12px 12px 12px 16px;
+      font-size: 14px;
+    }
+    .sidebar-item .item-icon {
+      font-size: 16px;
+      width: 20px;
+    }
+
+    /* 移动端:header 右侧按钮组 */
+    header .header-right {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    /* 移动端:header 副标题隐藏 */
+    header p {
+      display: none;
+    }
+
+    /* 移动端:表单 radio/checkbox 增大 */
+    input[type="radio"],
+    input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+    }
+    label[style*="display:flex"] {
+      font-size: 14px;
     }
 
     .sidebar-overlay {
       display: none;
       position: fixed;
       inset: 0;
-      top: 70px;
-      background: rgba(0,0,0,0.4);
+      top: 60px;
+      background: rgba(0,0,0,0.35);
       z-index: 99;
+      transition: opacity 0.2s ease;
     }
 
     .sidebar-overlay.show {
@@ -372,8 +464,28 @@
 
   /* ≤ 600px:header 主题切换按钮缩小,避免挤压 */
   @media (max-width: 600px) {
-    header h1 { font-size: 16px; }
-    header .theme-toggle-btn { padding: 6px 10px; font-size: 12px; }
+    header h1 {
+      font-size: 15px;
+    }
+    header .theme-toggle-btn {
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    header .header-backup-btn {
+      padding: 6px 10px;
+      font-size: 12px;
+      min-height: 32px;
+    }
+    header {
+      padding: 10px 12px;
+      gap: 8px;
+    }
+    /* 移动端侧栏切换按钮 */
+    #sidebar-toggle {
+      width: 40px;
+      height: 40px;
+      font-size: 18px;
+    }
   }
 
   .card {
@@ -402,6 +514,11 @@
     border-radius: 4px;
     font-weight: 510;
     border: 1px solid var(--border-subtle);
+  }
+  [data-theme="dark"] .card h2 .badge {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+    border-color: var(--border);
   }
 
   /* 表单 */
@@ -992,15 +1109,16 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(2px);
+    background: rgba(0, 0, 0, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.15s;
+    transition: opacity 0.2s ease;
   }
   /* 确认弹窗(z-index最高,覆盖所有其他模态框) */
   #modal-backdrop {
@@ -1098,13 +1216,15 @@
     padding-top: 60px;
   }
   .toast-content {
-    background: #1e293b;
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     color: #f1f5f9;
-    padding: 10px 20px;
-    border-radius: 8px;
+    padding: 12px 22px;
+    border-radius: 12px;
     font-size: 13px;
     font-weight: 510;
-    box-shadow: 0 4px 24px rgba(0,0,0,0.25);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
     max-width: 90vw;
     text-align: center;
     opacity: 0;
@@ -1116,9 +1236,18 @@
     opacity: 1;
     transform: translateY(0);
   }
-  .toast-content.success { border-left: 3px solid #10b981; background: rgba(16,185,129,0.12); color: #6ee7b7; }
-  .toast-content.error { border-left: 3px solid #ef4444; background: rgba(239,68,68,0.12); color: #fca5a5; }
-  .toast-content.info { border-left: 3px solid #6366f1; background: rgba(99,102,241,0.12); color: #a5b4fc; }
+  .toast-content.success {
+    background: rgba(16, 185, 129, 0.92);
+    color: #fff;
+  }
+  .toast-content.error {
+    background: rgba(239, 68, 68, 0.92);
+    color: #fff;
+  }
+  .toast-content.info {
+    background: rgba(99, 102, 241, 0.92);
+    color: #fff;
+  }
 
   /* 后台管理: 侧边栏按钮激活态 */
   .admin-sidebar-btn {
@@ -1338,8 +1467,8 @@
   gap: 16px;
   align-items: center;
   padding: 10px 16px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   margin-bottom: 16px;
   font-size: 13px;
@@ -1352,6 +1481,14 @@
   white-space: nowrap;
 }
 .status-item .em { color: var(--warn); font-weight: 600; }
+
+/* Tab 导航深色模式 */
+[data-theme="dark"] .tab-nav {
+  background: rgba(255, 255, 255, 0.03);
+}
+[data-theme="dark"] .entry-tabs {
+  background: rgba(255, 255, 255, 0.03);
+}
 /* 录入卡内切换小 Tab(抄表 / 充值) */
 .entry-tabs {
   display: flex;
@@ -1680,6 +1817,12 @@
     background-clip: content-box;
 }
 
+/* 深色 checkbox/radio */
+[data-theme="dark"] input[type="checkbox"],
+[data-theme="dark"] input[type="radio"] {
+    accent-color: var(--primary);
+}
+
 /* 深色表单 — 覆盖所有 input/select/textarea,
    包含弹窗里裸露 <input style="..."> 的深色适配 */
 [data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
@@ -1777,18 +1920,10 @@
     box-shadow: 0 8px 24px rgba(0,0,0,0.4);
 }
 
-/* 深色 tab bar 背景 */
-[data-theme="dark"] .tab-nav {
-    background: rgba(255, 255, 255, 0.03);
-}
-[data-theme="dark"] .entry-tabs {
-    background: rgba(255, 255, 255, 0.03);
-}
-
 /* 深色状态栏 */
 [data-theme="dark"] .status-bar {
-    background: rgba(255, 255, 255, 0.02);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--bg-surface);
+    border-color: var(--border-subtle);
 }
 
 /* 深色表头 */
@@ -1801,6 +1936,9 @@
 }
 [data-theme="dark"] .compare-table th {
     background: var(--bg-surface);
+}
+[data-theme="dark"] .settings-table th {
+    background: transparent;
 }
 
 /* 深色报告摘要 */
@@ -1861,6 +1999,15 @@
     color: var(--text-muted);
 }
 
+/* 深色充值紧凑卡 */
+[data-theme="dark"] .charge-compact {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+}
+[data-theme="dark"] .charge-compact:hover {
+    background: var(--bg-hover);
+}
+
 /* 深色管理员角色表 */
 [data-theme="dark"] .admin-sidebar-btn.active {
     background: rgba(129, 140, 248, 0.12);
@@ -1910,6 +2057,7 @@
     border-radius: 10px;
     font-size: 14px;
     font-weight: 500;
+    display: flex;
     align-items: center;
     justify-content: space-between;
     background: var(--reminder-bg);
@@ -2019,8 +2167,14 @@
   }
 
   /* chart 自适应高度 */
-  .chart-wrap { height: 220px; }
-  .chart-wrap.short { height: 200px; }
+  .chart-wrap {
+    height: 250px;
+    min-height: 200px;
+  }
+  .chart-wrap.short {
+    height: 220px;
+    min-height: 180px;
+  }
 
   /* stat-card:大数字略缩 */
   .stat-card .value { font-size: 22px; }
@@ -2031,9 +2185,12 @@
     flex-wrap: nowrap;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-    padding: 8px 12px;
+    padding: 10px 16px;
   }
   .status-item { flex-shrink: 0; }
+  .status-item::before {
+    font-size: 14px;
+  }
 }
 
 @media (max-width: 768px) {
@@ -2051,18 +2208,101 @@
   }
 
   /* 更紧凑的卡片 padding */
-  .card { padding: 14px; border-radius: 10px; }
+  .card { padding: 14px; }
 
-  /* header 简化:logo 缩小 */
-  header h1 {
-    font-size: 16px !important;
+  /* 小屏:充电紧凑卡片 */
+  .charge-compact-main {
+    flex-wrap: nowrap;
   }
-  header p { display: none; }  /* 副标题在小屏隐藏,省空间 */
+  .charge-compact-label {
+    min-width: 0;
+    flex: 1 1 100%;
+    order: -1;
+  }
 
-  /* content padding 再缩 */
-  .content { padding: 12px; }
+  /* 小屏:tab导航 */
+  .tab-nav {
+    padding: 3px;
+  }
+  .tab-btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
 
-  /* 历史表格更紧凑 */
+  /* 小屏:entry-tabs */
+  .entry-tabs {
+    width: 100%;
+  }
+  .entry-tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  /* 小屏:设置工具栏 */
+  .settings-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .settings-toolbar .field-control {
+    width: 100% !important;
+  }
+  .settings-toolbar .btn {
+    width: 100%;
+  }
+
+  /* 小屏:设置页表格 */
+  .settings-table {
+    font-size: 12px;
+  }
+  .settings-table th,
+  .settings-table td {
+    padding: 8px 6px;
+  }
+
+  /* 小屏:统计卡片 */
+  .stat-card .value {
+    font-size: 22px;
+  }
+  .stat-card .label {
+    font-size: 11px;
+  }
+
+  /* 小屏:报表摘要 */
+  .report-summary {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+
+  /* 小屏:编辑行 input */
+  .history-table .cell-input {
+    padding: 5px 6px;
+    font-size: 12px;
+  }
+
+  /* 小屏:按钮 */
+  .btn {
+    min-height: 36px;
+    padding: 6px 12px !important;
+    font-size: 12px;
+  }
+
+  /* 小屏:抄表提醒横幅 */
+  .meter-reminder {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+
+  /* 小屏:空状态 */
+  .empty {
+    padding: 24px;
+    font-size: 12px;
+  }
+  .report-empty {
+    padding: 32px;
+    font-size: 12px;
+  }
+
+  /* 小屏:历史表格更紧凑 */
   .history-table { font-size: 11px; }
   .history-table th, .history-table td { padding: 5px 6px; }
 }
@@ -2076,16 +2316,26 @@
   .modal {
     max-width: 100% !important;
     width: 100%;
-    border-radius: 16px 16px 0 0;
-    max-height: 92vh;
+    border-radius: 20px 20px 0 0;
+    max-height: 90vh;
     overflow-y: auto;
-    animation: slideUpModal 0.2s ease;
+    animation: slideUpModal 0.25s ease;
+    /* 拖动提示条 */
+    position: relative;
+  }
+  .modal::before {
+    content: '';
+    display: block;
+    width: 36px;
+    height: 4px;
+    background: rgba(128,128,128,0.3);
+    border-radius: 2px;
+    margin: -4px auto 12px;
   }
   @keyframes slideUpModal {
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
   }
-  /* 弹窗内边距在小屏适配 */
   .modal { padding: 16px; }
   .modal-body { padding: 4px 0 8px; }
 
@@ -2126,11 +2376,12 @@
   .sidebar, .sidebar-overlay, .sidebar-toggle-btn,
   .button-row, .modal-backdrop, #status-bar, #meter-reminder,
   .alert, .card-header select, .field-control,
-  .del-btn, .save-btn, .btn, [data-action] {
+  .del-btn, .save-btn, .btn, [data-action],
+  .header-backup-btn, .tab-nav, .entry-tabs {
     display: none !important;
   }
 
-  body { background: white !important; color: black !important; }
+  body { background: white !important; color: black !important; font-size: 12pt; }
   .content-section { display: block !important; padding: 0 !important; margin: 0 !important; }
   .card { box-shadow: none !important; border: 1px solid #888 !important; padding: 12px !important; page-break-inside: avoid; }
 
@@ -2165,6 +2416,43 @@
 [data-accessibility="on"] {
   /* 大字模式：增大基础字号 */
   font-size: 18px;
+}
+
+/* ====================================================================
+   整体视觉统一性增强
+   ==================================================================== */
+
+/* 全局 - 去除点击高亮,改善触摸体验 */
+*, *::before, *::after {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* 链接样式 */
+a {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* 移动端触摸滚动优化 */
+.content {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===== 移动端:视口与定位优化 ===== */
+@media (max-width: 768px) {
+  .layout {
+    min-height: calc(min(100vh, 100dvh) - 70px);
+  }
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    background: var(--bg);
+  }
 }
 
 /* 头部区域增强 */
@@ -2561,6 +2849,97 @@
   }
 }
 
+/* ===== 登录页面 ===== */
+#login-page {
+  background: var(--bg) !important;
+}
+#login-page > div {
+  width: 380px;
+  padding: 36px 32px;
+  border-radius: 20px;
+  transition: border-color 0.15s;
+}
+#login-page > div:hover {
+  border-color: rgba(0,0,0,0.16);
+}
+#login-page h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+#login-page > div > p:first-of-type {
+  margin: 0 0 14px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+#login-page label {
+  font-size: 13px;
+  font-weight: 510;
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text);
+}
+#login-page .form-row {
+  margin-bottom: 16px;
+}
+#login-page .field-control {
+  width: 100%;
+}
+#login-page .btn {
+  width: 100%;
+  height: 40px;
+  font-size: 14px;
+}
+#login-page .login-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 14px;
+}
+#login-page .login-error {
+  display: none;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  background: var(--bg-surface);
+  color: var(--danger);
+  border: 1px solid rgba(220,38,38,0.2);
+}
+#login-page .login-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 16px;
+}
+
+/* ===== 登录页面:移动端 ===== */
+@media (max-width: 480px) {
+  #login-page > div {
+    width: 92vw;
+    max-width: 360px;
+    padding: 28px 20px;
+    border-radius: 16px;
+  }
+  #login-page h2 {
+    font-size: 18px;
+  }
+  #login-page .btn {
+    height: 44px;
+    font-size: 15px;
+  }
+  #login-page .field-control {
+    font-size: 16px !important;
+  }
+  #login-page .login-actions {
+    gap: 10px;
+  }
+  #login-page .header-backup-btn {
+    padding: 8px 12px;
+    font-size: 14px;
+  }
+}
+
 /* ===== 大字模式：登录页面 ===== */
 [data-accessibility="on"] #login-page > div {
   width: 480px !important;
@@ -2593,12 +2972,6 @@
 }
 [data-accessibility="on"] #login-page p[style*="font-size:11px"] {
   font-size: 14px !important;
-}
-
-
-[data-accessibility="on"] #login-page > div {
-  width: 480px !important;
-  padding: 40px !important;
 }
 
 /* ===== 工作记录图片 ===== */
@@ -2644,15 +3017,25 @@
   position: fixed;
   inset: 0;
   z-index: 9999;
-  background: rgba(0,0,0,0.85);
+  background: rgba(0,0,0,0.9);
   display: none;
   align-items: center;
   justify-content: center;
   cursor: zoom-out;
+  -webkit-tap-highlight-color: transparent;
 }
 #image-lightbox-backdrop img {
-  max-width: 90vw;
+  max-width: 95vw;
   max-height: 90vh;
-  border-radius: 8px;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  border-radius: 4px;
+  box-shadow: 0 4px 32px rgba(0,0,0,0.6);
+  object-fit: contain;
+}
+/* 移动端:灯箱内缩略图 */
+@media (max-width: 768px) {
+  .duty-image-thumb {
+    width: 60px;
+    height: 60px;
+    border-radius: 8px;
+  }
 }
