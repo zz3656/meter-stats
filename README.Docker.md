@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `62e52ba`
+提交 `1032805`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,6 +103,7 @@ docker compose up -d
 ```
 
 
+- 抄表记录新增排练/编程标签选择 — - 后台 API 新增 rehearsal 和 programming 字段存储 / - 侧栏抄表表单、新增抄表弹窗、编辑弹窗均增加排练/编程复选框 / - 抄
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -112,7 +113,6 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- 自动备份也包含 settings.json，与手动备份保持一致 — 之前自动备份只打包 DATA_FILES 的 6 个文件，手动备份打包 6 / 个 DATA_FILES + settings.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -144,5 +144,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...62e52ba)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1032805)
 
