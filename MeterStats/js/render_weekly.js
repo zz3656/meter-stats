@@ -169,40 +169,8 @@ function loadWeeklyReport() {
   `;
   tagWrap.style.display = '';
 
-  // ============ 空调电费趋势 ============
-  const acResult = document.getElementById('weekly-ac-result');
-  const acTrendWrap = document.getElementById('weekly-ac-trend');
-
-  const acT = calcPeriodUsage(readings, charges, 'ac', targetStart, targetEnd);
-  const acP = calcPeriodUsage(readings, charges, 'ac', prevStart, prevEnd);
-  const acDaysT = daysInPeriod(prevStart, targetEnd);
-  const acDaysP = daysInPeriod(prevStart, prevEnd);
-  const acDailyT = acDaysT > 0 ? acT.kwh / acDaysT : 0;
-  const acDailyP = acDaysP > 0 ? acP.kwh / acDaysP : 0;
-
-  let acTrendStr = '';
-  if (acP.kwh > 0) {
-    const acChangePct = ((acT.kwh - acP.kwh) / acP.kwh) * 100;
-    if (acChangePct > 5) {
-      acTrendStr = `⚠️ 空调电费同比上上周 <strong style="color:var(--danger);">上涨 ${Math.abs(acChangePct).toFixed(1)}%</strong> (${acP.kwh.toFixed(1)} 度 → ${acT.kwh.toFixed(1)} 度),请关注。`;
-    } else if (acChangePct < -5) {
-      acTrendStr = `✅ 空调电费同比上上周 <strong style="color:var(--success);">下降 ${Math.abs(acChangePct).toFixed(1)}%</strong> (${acP.kwh.toFixed(1)} 度 → ${acT.kwh.toFixed(1)} 度)。`;
-    } else {
-      acTrendStr = `➡️ 空调电费与上上周基本持平 (${acP.kwh.toFixed(1)} 度 → ${acT.kwh.toFixed(1)} 度),变化 ${acChangePct > 0 ? '+' : ''}${acChangePct.toFixed(1)}%。`;
-    }
-  } else if (acT.kwh > 0) {
-    acTrendStr = `🆕 上上周无数据,上周空调用电 ${acT.kwh.toFixed(1)} 度(¥${(acT.kwh * ELECTRICITY_PRICE).toFixed(2)})。`;
-  } else {
-    acTrendStr = `❄️ 两周内空调未用电。`;
-  }
-
-  acResult.innerHTML = `${acTrendStr}
-    <br><span style="font-size:12px;color:var(--text-muted);">
-    上周日均 ${acDailyT.toFixed(1)} 度/天(¥${(acDailyT * ELECTRICITY_PRICE).toFixed(2)}),
-    上上周日均 ${acDailyP.toFixed(1)} 度/天(¥${(acDailyP * ELECTRICITY_PRICE).toFixed(2)})
-    </span>`;
-  acTrendWrap.style.display = '';
-
+  // 注:原"空调电费趋势"独単块于 2025-09 移除(与上面"4 块表详细电费趋势"
+  // 重复信息,且空调信息已在表格与趋势卡片中呈现)。
   // ============ 4 块表详细电费趋势 ============
   if (typeof renderWeeklyMeterTrend === 'function') {
     renderWeeklyMeterTrend(targetStart, targetEnd, prevStart, prevEnd);
