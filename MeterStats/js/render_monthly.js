@@ -13,12 +13,12 @@ async function submitItemAdd(source) {
   const qty = parseFloat(document.getElementById(ids.qty).value);
   const unit = document.getElementById(ids.unit).value.trim();
   const note = document.getElementById(ids.note).value.trim();
-  if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
-  if (isNaN(qty) || qty < 0) { showItemAlert('数量必须 ≥ 0', 'error'); return; }
+  if (!name) { showAlert('请填写物品名称', 'error'); return; }
+  if (isNaN(qty) || qty < 0) { showAlert('数量必须 ≥ 0', 'error'); return; }
   try {
     setSubmitting(true);
     await api('POST', '/api/items', { name, qty, unit, note });
-    showItemAlert(`✓ ${name} 已添加`, 'success');
+    showAlert(`✓ ${name} 已添加`, 'success');
     // 清空两个入口的表单
     ['sidebar', 'modal'].forEach(s => {
       const p = s === 'sidebar'
@@ -32,7 +32,7 @@ async function submitItemAdd(source) {
     if (source === 'modal') closeItemAddModal();
     await refreshAll();
   } catch (e) {
-    showItemAlert('添加失败:' + e.message, 'error');
+    showAlert('添加失败:' + e.message, 'error');
   } finally {
     setSubmitting(false);
   }
@@ -51,12 +51,12 @@ async function submitPurchaseAdd(source) {
   const est_price = parseFloat(document.getElementById(ids.price).value);
   const supplier = document.getElementById(ids.supplier).value.trim();
   const note = document.getElementById(ids.note).value.trim();
-  if (!name) { showItemAlert('请填写物品名称', 'error'); return; }
-  if (isNaN(qty) || qty <= 0) { showItemAlert('数量必须 > 0', 'error'); return; }
+  if (!name) { showAlert('请填写物品名称', 'error'); return; }
+  if (isNaN(qty) || qty <= 0) { showAlert('数量必须 > 0', 'error'); return; }
   try {
     setSubmitting(true);
     await api('POST', '/api/purchases', { date, name, qty, unit, est_price, supplier, note });
-    showItemAlert(`✓ 申购已记录,去「申购记录」确认购买`, 'success');
+    showAlert(`✓ 申购已记录,去「申购记录」确认购买`, 'success');
     ['sidebar', 'modal'].forEach(s => {
       const p = s === 'sidebar'
         ? { date: 'purchase-date', name: 'purchase-name', qty: 'purchase-qty', unit: 'purchase-unit', price: 'purchase-price', supplier: 'purchase-supplier', note: 'purchase-note' }
@@ -72,7 +72,7 @@ async function submitPurchaseAdd(source) {
     if (source === 'modal') closePurchaseAddModal();
     await refreshAll();
   } catch (e) {
-    showItemAlert('添加失败:' + e.message, 'error');
+    showAlert('添加失败:' + e.message, 'error');
   } finally {
     setSubmitting(false);
   }
@@ -274,141 +274,6 @@ document.getElementById('duty-handle-close')?.addEventListener('click', closeDut
 document.getElementById('duty-handle-modal-backdrop')?.addEventListener('click', e => {
   if (e.target === document.getElementById('duty-handle-modal-backdrop')) closeDutyHandleModal();
 });
-// ===== 工作记录图片上传 =====
-const DUTY_IMAGES = { sidebar: [], add: [], handle: [] };
-const MAX_IMAGES = 3;
 
-function addDutyImage(source) {
-  // source: 'sidebar' | 'add' | 'handle'
-  let prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
-  const input = document.getElementById(`${prefix}-image-input`);
-  if (input) input.click();
-}
-
-function handleDutyImageSelect(input, source) {
-  const files = Array.from(input.files);
-  let prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
-  const container = document.getElementById(`${prefix}-image-preview`);
-  if (!container) return;
-
-  // 限制最多3张
-  const remaining = MAX_IMAGES - DUTY_IMAGES[source].length;
-  const toAdd = files.slice(0, remaining);
-  if (files.length > remaining) {
-    showAlert(`最多上传 ${MAX_IMAGES} 张图片`, 'warn');
-  }
-
-  // 将文件转为临时 blob URL 用于预览
-  toAdd.forEach(file => {
-    const url = URL.createObjectURL(file);
-    const id = `img_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    DUTY_IMAGES[source].push({ id, file, url, uploaded: false });
-    renderDutyImagePreview(source, container);
-  });
-
-  input.value = '';
-}
-
-function removeDutyImage(source, id, container) {
-  DUTY_IMAGES[source] = DUTY_IMAGES[source].filter(i => i.id !== id);
-  renderDutyImagePreview(source, container);
-}
-
-function renderDutyImagePreview(source, container) {
-  const images = DUTY_IMAGES[source];
-  const prefix = source === 'sidebar' ? 'duty' : `duty-${source}`;
-  container.innerHTML = images.map(img => `
-    <div class="duty-image-preview-item">
-      <img src="${img.url}" class="duty-image-thumb" style="width:60px;height:60px;" onclick="openLightbox('${img.url}')" title="点击查看大图" />
-      <button type="button" class="remove-img-btn" onclick="removeDutyImage('${source}','${img.id}',document.getElementById('${prefix}-image-preview'))">✕</button>
-    </div>
-  `).join('');
-}
-
-// 渲染已上传的图片（用于处理弹窗显示原记录图片）
-function renderUploadedImages(source, filenames, container) {
-  if (!filenames || filenames.length === 0) {
-    container.innerHTML = '';
-    return;
-  }
-  container.innerHTML = filenames.map(fn => {
-    const imgSrc = getDutyImageUrl(fn);
-    return `
-      <div class="duty-image-preview-item">
-        <img src="${imgSrc}" class="duty-image-thumb" style="width:60px;height:60px;" onclick="openLightbox('${imgSrc}')" title="点击查看大图" />
-      </div>
-    `;
-  }).join('');
-}
-
-// 压缩图片（Canvas 压缩为 JPEG，降低体积）
-// 最大宽度 1920px，质量 0.8，通常可将原图压缩至 100-300KB
-function compressImage(file, maxWidth = 1920, quality = 0.8) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      img.onerror = () => { URL.revokeObjectURL(img.src); reject(new Error('图片加载失败')); return; };
-      let w = img.naturalWidth;
-      let h = img.naturalHeight;
-      if (w > maxWidth) {
-        h = Math.round((h * maxWidth) / w);
-        w = maxWidth;
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w;
-      canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(blob => {
-        URL.revokeObjectURL(img.src);
-        if (!blob) { reject(new Error('图片压缩失败')); return; }
-        // 保持原文件名后缀
-        const name = file.name.replace(/\.[^.]+$/, '') + '.jpg';
-        resolve(new File([blob], name, { type: 'image/jpeg' }));
-      }, 'image/jpeg', quality);
-    };
-    img.src = URL.createObjectURL(file);
-  });
-}
-
-// 上传图片到服务器（每张照片一次请求，先压缩）
-async function uploadDutyImages(source) {
-  const images = DUTY_IMAGES[source].filter(i => !i.uploaded);
-  const filenames = [];
-  for (const img of images) {
-    try {
-      // 压缩图片
-      const compressed = await compressImage(img.file, 1920, 0.8);
-      const fd = new FormData();
-      fd.append('image', compressed, compressed.name);
-      const res = await fetch('/api/duty/image', {
-        method: 'POST',
-        body: fd,
-      });
-      const json = await res.json();
-      if (json.ok) {
-        filenames.push(json.filename);
-        img.uploaded = true;
-      } else {
-        showAlert(`图片上传失败: ${json.error}`, 'warn');
-      }
-    } catch (e) {
-      showAlert(`图片上传失败: ${e.message}`, 'warn');
-    }
-  }
-  return filenames;
-}
-
-// 灯箱
-function openLightbox(src) {
-  document.getElementById('image-lightbox-img').src = src;
-  document.getElementById('image-lightbox-backdrop').style.display = 'flex';
-}
-function closeLightbox() {
-  document.getElementById('image-lightbox-backdrop').style.display = 'none';
-}
-
-// ===== 工作记录图片 URL =====
-function getDutyImageUrl(filename) {
-  return `/api/duty/image/${filename}`;
-}
+// 注:工作记录图片上传(consist/render/preview/compress/upload)已迁出至 render_duty_image_upload.js。
+//   openLightbox / closeLightbox / getDutyImageUrl 在 render_duty_images.js 中定义。

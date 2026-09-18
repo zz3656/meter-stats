@@ -730,6 +730,12 @@
           <!-- 合计行 -->
           <div id="weekly-summary-row" class="report-summary" style="display:none;margin-top:10px;"></div>
         </div>
+        <!-- 4 块表详细电费趋势(每块表一张卡片,详尽展示上周 vs 上上周) -->
+        <div id="weekly-meter-trend" style="display:none;margin-top:16px;">
+          <h3 style="font-size:14px;margin:0 0 10px 0;">📈 4 块表电费详细趋势(上周 vs 上上周)</h3>
+          <div id="weekly-meter-trend-grid" class="meter-trend-grid"></div>
+          <div id="weekly-meter-trend-summary"></div>
+        </div>
         <!-- 排练/编程次数 -->
         <div id="weekly-tags" style="display:none;margin-top:16px;">
           <h3 style="font-size:14px;margin:0 0 10px 0;">🎭 排练 / 编程统计</h3>
@@ -1496,13 +1502,18 @@
   <script src="js/render_charge_alert.js"></script>
   <script src="js/render_stats.js"></script>
   <script src="js/render_charts.js"></script>
+  <script src="js/render_pie_charts.js"></script>
   <script src="js/render_tables.js"></script>
   <script src="js/render_records.js"></script>
   <script src="js/render_edit.js"></script>
+  <script src="js/render_duty_images.js"></script>
+  <script src="js/render_duty_image_upload.js"></script>
   <script src="js/render_monthly.js"></script>
   <script src="js/render_reports.js"></script>
   <script src="js/render_yearly.js"></script>
+  <script src="js/render_weekly_utils.js"></script>
   <script src="js/render_weekly.js"></script>
+  <script src="js/render_weekly_trend.js"></script>
   <script src="js/features_topup.js"></script>
   <script src="js/features_utilities.js"></script>
   <script src="js/features_image_settings.js"></script>

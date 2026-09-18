@@ -1,9 +1,7 @@
-// ===== 图表实例（全局变量） =====
+// ===== 图表实例(全局变量) =====
 let trendChart = null;
-let pieChart = null;
-let dailyPieChart = null;
-let _monthlyPieChart = null;
-let monthlyPieChart = null;
+// 饼图实例 dailyPieChart / monthlyPieChart / _monthlyPieChart / pieChart
+// 已迁出至 render_pie_charts.js,本文件只保留折线图。
 
 function refreshDayCopySelect(readings, charges) {
   const sel = document.getElementById('day-copy-date');
@@ -18,10 +16,7 @@ function refreshDayCopySelect(readings, charges) {
   const last = new Date(rs[rs.length - 1].date);
   const copyDates = [];
   for (let d = new Date(first); d < last; d.setDate(d.getDate() + 1)) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    copyDates.push(`${y}-${m}-${day}`);
+    copyDates.push(formatDate(d));
   }
   sel.innerHTML = copyDates.map(dd => `<option value="${dd}">${dd}</option>`).join('');
   // 默认选昨天(最新抄表日的前一天;今天录入表底 → 算出的正是昨日用电)
@@ -55,7 +50,7 @@ function calcDayUsage(readings, charges, day) {
   let yPer = null;
   const yDateObj = new Date(day);
   yDateObj.setDate(yDateObj.getDate() - 1);
-  const yDate = `${yDateObj.getFullYear()}-${String(yDateObj.getMonth() + 1).padStart(2, '0')}-${String(yDateObj.getDate()).padStart(2, '0')}`;
+  const yDate = formatDate(yDateObj);
   let yA = null, yB = null;
   for (let i = 0; i < rs.length - 1; i++) {
     if (yDate >= rs[i].date && yDate < rs[i + 1].date) { yA = rs[i]; yB = rs[i + 1]; break; }
@@ -179,11 +174,7 @@ function renderTrendChart(readings, charges) {
   for (let i = 0; i < dayCount; i++) {
     const d = new Date(startDate);
     d.setDate(d.getDate() + i);
-    // 用本地时间生成 YYYY-MM-DD
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    dayLabels.push(`${y}-${m}-${day}`);
+    dayLabels.push(formatDate(d));
   }
 
   // 预建 DateString → Index 映射,避免循环里 indexOf 的 O(n²)
@@ -315,140 +306,6 @@ function renderTrendChart(readings, charges) {
   });
 }
 
-// 占比饼图 — 通用:传入 canvasId + 持有 chart 实例的变量 holder
-// 用法:drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c)
-function calcMonthPie(monthReadings, charges) {
-  // monthReadings:某月内按日期排序的抄表(hall != null 已过滤)
-  if (!monthReadings || monthReadings.length < 2) return null;
-  const first = monthReadings[0], last = monthReadings[monthReadings.length - 1];
-  const usage = ['hall', 'fire', 'private_room', 'ac'].map(k => {
-    const delta = realKwh(first[k] - last[k], k);
-    const charged = sumChargesBetween(charges, k, first.date, last.date);
-    return Math.max(delta + charged, 0);
-  });
-  const total = usage.reduce((a, b) => a + b, 0);
-  if (total <= 0) return null;
-  return { usage, total, first, last };
-}
-
-// 占比饼图 — 通用:传入 canvasId + 持有 chart 实例的变量 holder
-// 用法:drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c)
-function drawPieChart(canvasId, data, setChart) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  const labels = ['hall', 'fire', 'private_room', 'ac'].map((k, i) => {
-    const pct = data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : 0;
-    return `${LABELS(k)} (${pct}%)`;
-  });
-  const chart = new Chart(ctx, {
-    type: 'doughnut',
-    data: {
-      labels,
-      datasets: [{
-        data: data.usage,
-        backgroundColor: [COLORS('hall'), COLORS('fire'), COLORS('private_room'), COLORS('ac')],
-        borderWidth: 2,
-        borderColor: 'rgba(0,0,0,0.08)',
-      }],
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'right', labels: { boxWidth: 12, font: { size: 12 } } },
-        tooltip: {
-          callbacks: {
-            label: (c) => {
-              const v = c.parsed;
-              const pct = data.total > 0 ? (v / data.total * 100).toFixed(1) : 0;
-              return `${c.label.split(' (')[0]}: ${v.toFixed(1)} 度 (${pct}%)`;
-            },
-          },
-        },
-      },
-    },
-  });
-  if (setChart) setChart(chart);
-  return chart;
-}
-
-// 单日占比(每日趋势页):从单天汇报下拉联动
-function renderDailyPie(dateStr) {
-  const wrap = document.getElementById('daily-pie-wrap');
-  const summaryEl = document.getElementById('daily-pie-summary');
-  if (!wrap || !summaryEl) return;
-
-  const readings = CURRENT_READINGS.filter(r => r.hall != null);
-  if (!dateStr || readings.length < 2) {
-    wrap.style.display = 'none';
-    return;
-  }
-
-  // 找到包含该日的前后两次抄表
-  const sorted = [...readings].sort((a, b) => a.date.localeCompare(b.date));
-  let prev = null, next = null;
-  for (let i = 0; i < sorted.length; i++) {
-    if (sorted[i].date <= dateStr) prev = sorted[i];
-    if (sorted[i].date > dateStr) { next = sorted[i]; break; }
-  }
-  if (!prev || !next) {
-    wrap.style.display = 'none';
-    return;
-  }
-
-  // 计算 prev → next 区间,按天数均摊到 prev 日(与单天汇报口径一致)
-  const days = Math.max(1, Math.round((new Date(next.date) - new Date(prev.date)) / 86400000));
-  const usage = ['hall', 'fire', 'private_room', 'ac'].map(k => {
-    const delta = realKwh(prev[k] - next[k], k);
-    const charged = sumChargesBetween(CURRENT_CHARGES, k, prev.date, next.date);
-    return Math.max((delta + charged) / days, 0);
-  });
-  const total = usage.reduce((a, b) => a + b, 0);
-
-  wrap.style.display = '';
-  // summary 文字
-  const pct = (i) => total > 0 ? (usage[i] / total * 100).toFixed(1) : '0';
-  summaryEl.innerHTML = `
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('hall')}"></span>大厅 ${usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('fire')}"></span>消防 ${usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('private_room')}"></span>包厢 ${usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('ac')}"></span>空调 ${usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
-  `;
-
-  if (dailyPieChart) { dailyPieChart.destroy(); dailyPieChart = null; }
-  drawPieChart('chart-daily-pie', { usage, total }, c => dailyPieChart = c);
-}
-
-// 月度占比(月度报告页):从「选择月份」下拉联动
-function renderMonthlyPie(monthKey) {
-  const wrap = document.getElementById('monthly-pie-wrap');
-  const summaryEl = document.getElementById('monthly-pie-summary');
-  if (!wrap || !summaryEl) return;
-
-  const readings = CURRENT_READINGS.filter(r => r.hall != null);
-  const data = calcMonthPie(readings.filter(r => r.date.startsWith(monthKey)), CURRENT_CHARGES);
-
-  if (!data) {
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = '';
-
-  const pct = (i) => data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : '0';
-  summaryEl.innerHTML = `
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('hall')}"></span>大厅 ${data.usage[0].toFixed(1)} 度 (${pct(0)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('fire')}"></span>消防 ${data.usage[1].toFixed(1)} 度 (${pct(1)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('private_room')}"></span>包厢 ${data.usage[2].toFixed(1)} 度 (${pct(2)}%)</div>
-    <div class="daily-pie-row"><span class="dot" style="background:${COLORS('ac')}"></span>空调 ${data.usage[3].toFixed(1)} 度 (${pct(3)}%)</div>
-  `;
-
-  if (monthlyPieChart) { monthlyPieChart.destroy(); monthlyPieChart = null; }
-  drawPieChart('chart-monthly-pie', data, c => monthlyPieChart = c);
-}
-
-// 兼容旧入口(已被删除,但 admin.js 等可能引用)
-function renderPieChart() {
-  // 旧的独立占比页已删除,不再做任何事
-}
+// 注: calcMonthPie / drawPieChart / renderDailyPie / renderMonthlyPie /
+//   renderPieChart 已迁出至 render_pie_charts.js(独立文件)。
 
