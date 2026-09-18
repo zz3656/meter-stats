@@ -1,8 +1,6 @@
 """抄表相关 API handler。"""
 from __future__ import annotations
 
-from urllib.parse import parse_qs, urlparse
-
 from utils import send_json, opt_float, read_body
 from storage import log, load_json, save_json
 from handlers._base import get_data_paths, get_lock
@@ -20,16 +18,9 @@ def handle_get_readings(handler):
     send_json(handler, 200, _load_readings())
 
 
-def handle_get_readings_monthly(handler):
-    """GET /api/readings/monthly?month=2026-07"""
-    qs = parse_qs(urlparse(handler.path).query)
-    month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
-    readings = _load_readings()
-    filtered = [r for r in readings if r.get("date", "").startswith(month)]
-    filtered.sort(key=lambda r: r["date"])
-    send_json(handler, 200, filtered)
-
-
+# 注：/api/readings/monthly 与 /api/charges/monthly 曾定义过 handle_get_*_monthly，
+# 但从未在 routing.py 注册，前端也未调用 — 现已删除，避免死代码。
+# 月度查询请使用 /api/monthly-report(已有 handle_get_monthly_report)。
 # ==================== POST ====================
 
 def handle_post_readings(handler):

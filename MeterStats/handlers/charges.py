@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, opt_float, read_body
 
@@ -23,16 +22,7 @@ def handle_get_charges(handler):
     send_json(handler, 200, _load_charges())
 
 
-def handle_get_charges_monthly(handler):
-    """GET /api/charges/monthly?month=2026-07"""
-    qs = parse_qs(urlparse(handler.path).query)
-    month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
-    charges = _load_charges()
-    filtered = [c for c in charges if c.get("date", "").startswith(month)]
-    filtered.sort(key=lambda c: c["date"])
-    send_json(handler, 200, filtered)
-
-
+# 注：handle_get_charges_monthly 已删除 — 详见 handlers/readings.py 同名注释。
 # ==================== POST ====================
 
 def handle_post_charges(handler):

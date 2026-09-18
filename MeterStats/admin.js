@@ -111,18 +111,21 @@ function loadAdminUsers() {
       const tbody = document.getElementById('users-table-body');
       if (!tbody) return;
       const users = res || [];
-      tbody.innerHTML = users.map(u => `
+      tbody.innerHTML = users.map(u => {
+        const safeName = window.escapeHtml(u.name || '');
+        const safeUser = window.escapeHtml(u.username || '');
+        return `
         <tr>
-          <td>${u.username}</td>
-          <td>${u.name}</td>
+          <td>${safeUser}</td>
+          <td>${safeName}</td>
           <td>${ROLE_NAMES[u.role] || u.role}</td>
           <td>${u.enabled ? '✅ 启用' : '❌ 禁用'}</td>
           <td class="ta-right">
-            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
+            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${safeUser}')">编辑</button>
             ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
           </td>
-        </tr>
-      `).join('');
+        </tr>`;
+      }).join('');
     }).catch(e => showAlert('加载用户失败: ' + e.message, 'error'));
 }
 
@@ -400,17 +403,18 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
+        const safeName = window.escapeHtml(b.zip_name || '');
         html += `<div class="backup-item">
           <div>
-            <span class="b-name">${b.name}</span>
+            <span class="b-name">${window.escapeHtml(b.name || '')}</span>
             ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
-            <span class="b-meta">${b.created_at}</span>
+            <span class="b-meta">${window.escapeHtml(b.created_at || '')}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${safeName}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${safeName}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${safeName}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -428,16 +432,17 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
+        const safeName = window.escapeHtml(b.zip_name || '');
         html += `<div class="backup-item">
           <div>
-            <span class="b-name">${b.name}</span>
+            <span class="b-name">${window.escapeHtml(b.name || '')}</span>
             ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${safeName}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${safeName}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${safeName}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -714,7 +719,7 @@ async function adminRestore() {
     icon: '⚠️',
     iconKind: 'warn',
     title: '确认恢复数据？',
-    body: `将从 <b>${zipFile.name}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
+    body: `将从 <b>${window.escapeHtml(zipFile.name)}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
     confirmText: '确认恢复',
     cancelText: '取消',
     confirmKind: 'danger',

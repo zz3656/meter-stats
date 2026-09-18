@@ -30,7 +30,7 @@ function renderHistory(readings) {
       <td>${r.fire == null ? '—' : r.fire.toFixed(2)}</td>
       <td>${r.private_room == null ? '—' : r.private_room.toFixed(2)}</td>
       <td>${r.ac == null ? '—' : r.ac.toFixed(2)}</td>
-      <td style="color:var(--text-muted);font-size:12px;">${r.note || '—'}${tagsHtml}</td>
+      <td style="color:var(--text-muted);font-size:12px;">${r.note ? escapeHtml(r.note) : '—'}${tagsHtml}</td>
       <td>
         <button class="edit-btn" data-action="edit-reading" data-date="${r.date}">编辑</button>
         <button class="delete-btn" data-action="delete-reading" data-date="${r.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
@@ -90,7 +90,7 @@ function renderHistory(readings) {
       <td>${w.main_meter == null ? '—' : w.main_meter.toFixed(1)}</td>
       <td>${w.sub_meter == null ? '—' : w.sub_meter.toFixed(1)}</td>
       <td>${w.water == null ? '—' : w.water.toFixed(1)}</td>
-      <td style="color:var(--text-muted);font-size:12px;">${w.note || '—'}</td>
+      <td style="color:var(--text-muted);font-size:12px;">${w.note ? escapeHtml(w.note) : '—'}</td>
       <td>
         <button class="edit-btn" data-action="edit-water" data-date="${w.date}">编辑</button>
         <button class="delete-btn" data-action="delete-water" data-date="${w.date}" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>
@@ -199,7 +199,7 @@ function renderChargeLog(charges) {
 
   // 汇总(本月 = 当前自然月;当月没充值就显示 0)
   const now = new Date();
-  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthKey = formatDate(now).slice(0, 7);  // YYYY-MM
   const monthCharges = charges.filter(c => c.date.startsWith(monthKey));
   const monthCount = monthCharges.length;
   // 用户填的充值度数 = 表度数,需要 ×160 才是实际度数

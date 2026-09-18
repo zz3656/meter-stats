@@ -1,6 +1,4 @@
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
-}
+// escapeHtml 已移至 utils_helpers.js,直接用全局 window.escapeHtml
 
 // ========== 通用:检查是否当日记录 ==========
 function isToday(dateStr) {
