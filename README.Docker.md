@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `42ea381`
+提交 `1124c09`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- 每周汇报默认显示离当前日期最近一周 — - 将默认选中周从'上上周'改为'上周'
+- XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
 - 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
@@ -125,13 +125,24 @@ docker compose up -d
 - 修复 build-dmg.yml 工作流 — - 移除已弃用的 altool 引用 / - 使用新的 notarytool 替代 altool --notarize 公证
 - 完善 build-dmg.yml 版本判断逻辑
 
+### ⚡ 性能优化
+
+- 缓存真 LRU + 日志统一 + toast 统一 + 响应式策略文档化 — storage.
+
 ### ♻️ 重构
 
+- 拆分超大 JS 文件 + 解决跨文件隐式依赖 — 拆分(全部 ≤ 450 行约束): / - render_charts.
+- 拆分 admin.py 1162 行 → 4 个职责清晰子模块 — 将原 handlers/admin.
 - 精简 release notes 生成脚本,输出更简洁 — - 过滤噪音 commit([skip ci]、自动同步 changelog、bump version) / - 按 type 分组(subject 去重,只保
 - 拆分 handlers/ + utils/, 引入认证/会话/CORS/PBKDF2 — 把原 server.
 
+### ✅ 测试
+
+- 加强测试覆盖 72 → 88,覆盖关键边界用例 + 修真实 bug — items 借出/归还 9 个边界用例(全新覆盖): / - 借出需要 borrower / 数量必须 > 0 / - 借出超出可用数量拒绝(精确边界值)
+
 ### 📖 文档
 
+- 添加 ARCHITECTURE.md 与 OPTIMIZATION_REPORT.md — ARCHITECTURE.
 - README 添加 data/ 目录使用警告,说明不应手动修改
 - 重写 README + DockerHub 描述;清理冗余文件 — - .
 
@@ -144,5 +155,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...42ea381)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1124c09)
 
