@@ -1,3 +1,15 @@
+/*
+ * MeterStats 响应式断点策略(详见 docs/ARCHITECTURE.md):
+ *   ≥ 1280px 桌面默认(左侧边栏 + 主内容 3 栏布局)
+ *   ≤ 960px  饼图 1 列,history-table 横向滚动
+ *   ≤ 900px  侧栏变抽屉(汉堡菜单),表格行更紧凑
+ *   ≤ 768px  stat-grid 2 列,touch target ≥ 38px
+ *   ≤ 720px  4 块表趋势卡片 1 列
+ *   ≤ 700px  meter-grid 1 列
+ *   ≤ 600px  card-header 纵向堆叠,弹窗底部 sheet,header 简化
+ *   ≤ 480px  stat-grid 1 列,数字 22px,卡片 padding 14px
+ * 约定:任何新组件加入都应考虑 ≤ 600px 与 ≤ 480px 这两个最关键断点。
+ */
 
   :root {
     /* 浅色主题(办公风格:白/浅灰背景 + 深色文字) */
@@ -1301,6 +1313,7 @@
 .table-container {
   max-height: 480px;
   overflow-y: auto;
+  overflow-x: auto;  /* 窄屏让表格可横向滚动,避免内容被裁 */
   border-radius: 8px;
 }
 .report-grid-table thead th {
@@ -1418,6 +1431,66 @@
   margin-top: 4px;
   padding-top: 6px;
 }
+
+/* ===== 每周汇报:4 块表电费详细趋势卡片 ===== */
+.meter-trend-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .meter-trend-grid { grid-template-columns: 1fr; }
+}
+.meter-trend-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.meter-trend-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-subtle, rgba(0,0,0,0.02));
+  font-size: 14px;
+  font-weight: 600;
+}
+.meter-trend-icon { font-size: 18px; }
+.meter-trend-title { flex: 1; }
+.meter-trend-badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-hover, rgba(0,0,0,0.06));
+  color: var(--text-muted);
+}
+.meter-trend-badge.up   { color: var(--danger);  background: rgba(220, 38, 38, 0.10); }
+.meter-trend-badge.down { color: var(--success); background: rgba(16, 185, 129, 0.10); }
+.meter-trend-badge.flat { color: var(--text-muted); }
+.meter-trend-table-wrap { padding: 0 4px 4px 4px; }
+.meter-trend-table { font-size: 13px; }
+.meter-trend-table th,
+.meter-trend-table td { padding: 6px 8px; }
+.meter-trend-overall {
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: var(--bg-surface);
+  border: 1px solid rgba(99,102,241,0.25);
+  border-left: 4px solid var(--primary, #6366f1);
+  border-radius: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+.meter-trend-overall-item { display: flex; flex-direction: column; gap: 2px; }
+.meter-trend-overall-label { color: var(--text-muted); font-size: 12px; }
+.meter-trend-overall-value { font-size: 14px; }
 .tab-nav {
   display: flex;
   gap: 4px;

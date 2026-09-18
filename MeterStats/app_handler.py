@@ -46,7 +46,8 @@ def _sync_data_paths():
                 init_settings(data_dir)
                 break
     except Exception as e:
-        print(f"[meter-stats] [WARNING] _sync_data_paths: {e}")
+        from storage import log
+        log(f"  [meter-stats] [WARNING] _sync_data_paths: {e}")
 
 class Handler(BaseHTTPRequestHandler):
     """HTTP 请求处理类：静态文件 + API 路由。"""

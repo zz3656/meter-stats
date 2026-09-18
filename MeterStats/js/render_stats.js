@@ -12,7 +12,7 @@ function renderStats(readings, charges) {
   let monthKey = statsSel && statsSel.value ? statsSel.value : '';
   if (!monthKey) {
     const latestDate = new Date(readings[readings.length - 1].date);
-    monthKey = `${latestDate.getFullYear()}-${String(latestDate.getMonth() + 1).padStart(2, '0')}`;
+    monthKey = formatDate(latestDate).slice(0, 7);  // YYYY-MM
   }
 
   // 当月抄表数据

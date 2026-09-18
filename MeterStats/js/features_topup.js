@@ -246,21 +246,21 @@ document.getElementById('lend-confirm').addEventListener('click', async () => {
   const note = document.getElementById('lend-note').value.trim();
 
   if (!qty || qty <= 0) {
-    showItemAlert('请输入有效的借出数量', 'error');
+    showAlert('请输入有效的借出数量', 'error');
     return;
   }
   if (!borrower) {
-    showItemAlert('请输入借出人', 'error');
+    showAlert('请输入借出人', 'error');
     return;
   }
 
   try {
     await api('PUT', `/api/items/${id}/lend`, { qty, borrower, note });
-    showItemAlert('✓ 借出成功', 'success');
+    showAlert('✓ 借出成功', 'success');
     closeLendModal();
     await refreshAll();
   } catch (e) {
-    showItemAlert('借出失败:' + e.message, 'error');
+    showAlert('借出失败:' + e.message, 'error');
   }
 });
 document.getElementById('return-confirm')?.addEventListener('click', async () => {
@@ -269,17 +269,17 @@ document.getElementById('return-confirm')?.addEventListener('click', async () =>
   const note = document.getElementById('return-note').value.trim();
 
   if (!qty || qty <= 0) {
-    showItemAlert('请输入有效的归还数量', 'error');
+    showAlert('请输入有效的归还数量', 'error');
     return;
   }
 
   try {
     await api('PUT', `/api/items/${id}/return`, { qty, note });
-    showItemAlert('✓ 已归还', 'success');
+    showAlert('✓ 已归还', 'success');
     closeReturnModal();
     await refreshAll();
   } catch (e) {
-    showItemAlert('归还失败:' + e.message, 'error');
+    showAlert('归还失败:' + e.message, 'error');
   }
 });
 

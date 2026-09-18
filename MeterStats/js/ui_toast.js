@@ -24,10 +24,8 @@ function showAlert(msg, type = 'success') {
   showToast(msg, type);
 }
 
-// 物品卡提示条(已改为全局 Toast)
-function showItemAlert(msg, type = 'success') {
-  showToast(msg, type);
-}
+// 注: 原 showItemAlert 别名已废弃(2025-09 重构)。所有调用点已改为 showAlert。
+//   本函数已删除。如发现遗留调用会报 ReferenceError，便于发现遗留问题。
 
 // 数据管理:自动备份开关(localStorage 持久化)
 const AUTO_BACKUP_KEY = 'meter_auto_backup';

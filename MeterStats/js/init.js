@@ -1,11 +1,9 @@
 
 // ===== 初始化 =====
+// 日期/时间格式化为 YYYY-MM-DD / YYYY-MM-DD HH:MM:SS / YYYY-MM-DDTHH:MM,
+// 复用 utils_helpers.js 的 formatDate / formatDateTime / formatDateTimeLocal。
 function todayStr() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  return formatDate(new Date());
 }
 const _dateEl = document.getElementById('date'); if (_dateEl) _dateEl.value = todayStr();
 const _chargeDateEl = document.getElementById('charge-date'); if (_chargeDateEl) _chargeDateEl.value = todayStr();
@@ -13,24 +11,11 @@ const _utilityDateEl = document.getElementById('utility-date'); if (_utilityDate
 
 // 设置值班时间字段为当前时间
 function nowDateTimeStr() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const h = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  const s = String(d.getSeconds()).padStart(2, '0');
-  return `${y}-${m}-${day} ${h}:${mi}:${s}`;
+  return formatDateTime(new Date());
 }
 // datetime-local 格式: YYYY-MM-DDTHH:MM(浏览器会按本地时区解释)
 function nowDateTimeLocalStr() {
-  const d = new Date();
-  const y = d.getFullYear();
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  const h = String(d.getHours()).padStart(2, '0');
-  const mi = String(d.getMinutes()).padStart(2, '0');
-  return `${y}-${mo}-${day}T${h}:${mi}`;
+  return formatDateTimeLocal(new Date());
 }
 const dutyTimeEl = document.getElementById('duty-time');
 if (dutyTimeEl) {

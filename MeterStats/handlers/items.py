@@ -13,6 +13,8 @@ _now = datetime.now
 
 class _ItemsHandler(JsonModelHandler):
     model = "items"
+    # PUT 白名单:仅这些字段可被 PUT 更新。lend_records 不能通过此接口修改。
+    updatable_fields = frozenset({"name", "qty", "unit", "note"})
 
     def _create_row(self, body: dict):
         name = body.get("name")
@@ -167,11 +169,13 @@ def handle_put_items_return(handler, path_clean: str):
         ret_from_this = min(record_qty, remaining)
         record["return_qty"] = record.get("return_qty", 0) + ret_from_this
         remaining -= ret_from_this
+        # 部分/全部归还都应记录 note (修复 bug: 之前仅在全部归还时记 note,
+        # 导致部分归还时用户输入的说明丢失,最需要 note 的场景反而丢了)
+        if note:
+            record["return_note"] = note
         if record_qty <= ret_from_this:
             record["status"] = "returned"
             record["return_date"] = _now().strftime("%Y-%m-%d %H:%M:%S")
-            if note:
-                record["return_note"] = note
 
     item["lent_qty"] = lent_qty - qty
     _save_items(items)
@@ -181,21 +185,30 @@ def handle_put_items_return(handler, path_clean: str):
 
 # ==================== 权限检查 ====================
 def _check_delete(handler):
-    """检查删除权限（仅管理员和主管）。无 token 时放行(前端兼容)。"""
-    from handlers.permissions import check_delete_permission, _get_token
-    from handlers.admin import get_session, _touch_session
+    """检查删除权限（仅管理员和主管）。
+
+    行为说明：
+    - 无 token 时放行(前端兼容遗留客户端,保持与原实现一致)。
+    - 有 token 但会话不存在 → 401。
+    - 有 token 但角色不足 → 403。
+    - 有 token 且角色足够 → 放行并重置 TTL。
+
+    实现复用 handlers.permissions._get_token 与 handlers.auth.get_session,
+    不重复造轮子。
+    """
+    from handlers.permissions import _get_token
+    from handlers.auth import get_session, _touch_session
     from handlers.settings import ROLE_ADMIN, ROLE_SUPERVISOR
     from utils import send_json
 
     token = _get_token(handler)
     if not token:
-        return  # 无 token 时放行
+        return  # 无 token 时放行(前端兼容)
     sess = get_session(token)
-    if sess:
-        _touch_session(token)  # 重置 TTL
-        if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
-            send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
-            return
-    else:
+    if sess is None:
         send_json(handler, 401, {"error": "未登录"})
+        return
+    _touch_session(token)  # 重置 TTL
+    if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
+        send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
         return

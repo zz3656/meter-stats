@@ -149,7 +149,7 @@ window.addDaysToDate = function addDaysToDate(dateStr, days) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() + Math.ceil(days));
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  return formatDate(dt);
 }
 window.daysBetween = function daysBetween(dateStrA, dateStrB) {
   const [y1, m1, d1] = dateStrA.split('-').map(Number);

@@ -30,9 +30,21 @@ def get_data_paths() -> dict:
 
 
 class JsonModelHandler:
-    """JSON 模型 CRUD 基类，子类只需声明 model 名称。"""
+    """JSON 模型 CRUD 基类，子类只需声明 model 名称。
+
+    安全说明:子类必须声明 `updatable_fields` 白名单,未在白名单中的字段在 PUT 中
+    会被忽略。这样可避免"默认开放"的 bug——以前基类默认接收任意 body 字段,
+    攻击者可注入未预期的字段(如 `role: admin` 之类)。
+
+    定制途径(优先级从高到低):
+    1. 复写 `_update_fields(existing, body)`:完全自定义字段处理逻辑。
+    2. 仅声明 `updatable_fields = {...}`:基类只接受白名单中的字段。
+    3. 什么都不写:将拒绝所有 PUT 更新(返回 500 + 提示错误)。这避免了
+       "默认接收任意字段"的安全隐患。
+    """
 
     model: str = ""  # 子类必须覆盖, e.g. "items" / "readings" / "duty"
+    updatable_fields: frozenset = frozenset()  # 白名单
 
     # ------- 数据路径 -------
     @staticmethod
@@ -94,15 +106,24 @@ class JsonModelHandler:
             send_json(handler, 404, {"error": f"未找到 {rid}"})
             return
 
-        # 调用子类的字段过滤（如果提供）
+        # 优先级 1:子类提供 _update_fields(existing, body) → 完全自定义
         updater = getattr(self, "_update_fields", None)
         if updater:
             updater(existing, body)
+        elif self.updatable_fields:
+            # 优先级 2:子类仅提供白名单 → 只接受白名单中的字段
+            # id 始终不允许通过 PUT 修改(避免主键冲突)
+            for k in self.updatable_fields:
+                if k in body:
+                    existing[k] = body[k]
         else:
-            # 默认:把 body 中所有 key 覆盖到 existing（除 id 外）
-            for k, v in body.items():
-                if k != "id":
-                    existing[k] = v
+            # 优先级 3:子类既无 _update_fields 又无 updatable_fields
+            # → 拒绝所有更新,避免默认接收任意 body 字段的安全隐患。
+            log(f"  [WARN] {self.model} handler 未声明 updatable_fields,拒绝更新 {rid}")
+            send_json(handler, 500, {
+                "error": f"{self.model} handler 未声明 updatable_fields 白名单,拒绝更新以保证安全",
+            })
+            return
 
         data[idx] = existing
         self._save(data)

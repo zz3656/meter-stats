@@ -15,6 +15,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
+from collections import OrderedDict
 from functools import lru_cache
 from threading import RLock
 
@@ -311,32 +312,48 @@ def _try_restore_from_backup(path: Path):
 
 
 # ============ JSON 文件缓存 ============
+# 使用 OrderedDict 实现真正的 LRU:
+# - 读命中时 move_to_end(path) 标记为最近访问
+# - 写入时如果 key 已存在则先删除再插入,确保顺序更新
+# - 超出容量时弹出字典首部(最久未访问)
 
-# { path_str: (mtime_ns, data) }
-_json_cache: Dict[str, tuple] = {}
+_json_cache: "OrderedDict[str, tuple]" = OrderedDict()
 _json_cache_lock = RLock()
 _JSON_CACHE_SIZE = 20  # 最多缓存 20 个文件
 
+
 def _cache_get(path_str: str):
-    """从缓存读取。返回 (mtime_ns, data) 或 (None, None)。"""
+    """从缓存读取,同时标记为最近访问(读命中也更新 LRU 顺序)。
+
+    返回 (mtime_ns, data) 或 (None, None)。
+    """
     with _json_cache_lock:
         entry = _json_cache.get(path_str)
         if entry is not None:
-            return entry  # (mtime_ns, data)
+            # move_to_end 使 OrderedDict 正确实现 LRU:
+            # 最近读/写的 key 排到末尾,下次淘汰时优先踢掉首部(最久未访问)。
+            _json_cache.move_to_end(path_str)
+            return entry
         return None, None
 
+
 def _cache_set(path_str: str, mtime_ns: int, data: list) -> None:
-    """写入缓存。LRU 策略：新写入插到末尾，淘汰最老的（字典头部）。"""
+    """写入缓存。若 key 已存在则更新其值与 LRU 位置,超出容量则淘汰最久未访问的 key。"""
     with _json_cache_lock:
+        if path_str in _json_cache:
+            # 已存在:先删再插,保证顺序更新到末尾
+            _json_cache.pop(path_str)
         _json_cache[path_str] = (mtime_ns, data)
-        # 超出容量时删除字典的第一个条目（最久未写入的）
         while len(_json_cache) > _JSON_CACHE_SIZE:
-            _json_cache.pop(next(iter(_json_cache)), None)
+            # popitem(last=False) 弹出首部 = 最久未访问的 key
+            _json_cache.popitem(last=False)
+
 
 def _cache_invalidate(path_str: str) -> None:
     """失效指定路径的缓存。"""
     with _json_cache_lock:
         _json_cache.pop(path_str, None)
+
 
 def _cache_clear() -> None:
     """清除全部缓存。"""

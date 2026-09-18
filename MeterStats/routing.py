@@ -34,21 +34,29 @@ from handlers.reports import (
 from handlers.dataimport import handle_post_import, handle_get_import_template
 from handlers.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
 from handlers.admin import (
-    # Auth
+    # Auth (兼容旧代码)
     handle_post_login, handle_get_logout, handle_get_me, handle_get_sessions,
-    # Admin CRUD
+    # Admin CRUD (兼容旧代码)
     handle_get_users, handle_post_users, handle_put_users, handle_delete_users,
     handle_get_meter_settings, handle_put_meter_settings, handle_get_meters_public,
     handle_get_roles,
+    # Backup HTTP (兼容旧代码)
     handle_get_backup_status, handle_put_auto_backup,
     handle_put_backup_retention,
     handle_get_backup_config, handle_put_backup_config,
     handle_get_backup_download, handle_get_backup_delete,
     handle_post_backup_download, handle_post_backup_delete,
     handle_post_restore_upload,
+    # Admin tools (兼容旧代码)
     handle_get_dir_listing, handle_get_audit_log,
     handle_get_migrate_status, handle_post_migrate_water,
 )
+
+# 注：admin 模块已拆分,本表保留为兼容层。新代码推荐直接从子模块导入:
+#   - handlers.auth         — 登录/会话
+#   - handlers.users        — 用户 CRUD + 电表设置
+#   - handlers.backup_admin — 备份 HTTP API
+#   - handlers.admin_tools  — 辅助工具(目录/审计/迁移)
 
 _GET_ROUTES = {
     "/api/health": handle_get_health,

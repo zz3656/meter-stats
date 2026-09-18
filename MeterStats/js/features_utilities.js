@@ -98,7 +98,7 @@ function buildReportHTML() {
   html += `</tr></thead><tbody>`;
 
   for (let day = 1; day <= daysInMonth; day++) {
-    const d_str = `${yy}-${mm}-${String(day).padStart(2, '0')}`;
+    const d_str = formatDate(new Date(parseInt(yy), parseInt(mm) - 1, day));
     const row = d.days.find(r => r.date === d_str);
     if (row && row.is_reading_day) {
       // 抄表日 — 显示该次用电(用户表格原样)

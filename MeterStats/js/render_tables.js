@@ -48,10 +48,10 @@ function renderItemTable(items) {
       if (!ok) return;
       try {
         await api('DELETE', `/api/items/${id}`);
-        showItemAlert('✓ 已删除', 'success');
+        showAlert('✓ 已删除', 'success');
         await refreshAll();
       } catch (e) {
-        showItemAlert('删除失败:' + e.message, 'error');
+        showAlert('删除失败:' + e.message, 'error');
       }
     });
   });
@@ -210,10 +210,10 @@ function renderPurchaseTable(purchases) {
       if (!ok) return;
       try {
         await api('PUT', `/api/purchases/${id}/stock`);
-        showItemAlert('✓ 已确认购买,数量已自动加入物品记录', 'success');
+        showAlert('✓ 已确认购买,数量已自动加入物品记录', 'success');
         await refreshAll();
       } catch (e) {
-        showItemAlert('失败:' + e.message, 'error');
+        showAlert('失败:' + e.message, 'error');
       }
     });
   });
@@ -231,10 +231,10 @@ function renderPurchaseTable(purchases) {
       if (!ok) return;
       try {
         await api('DELETE', `/api/purchases/${id}`);
-        showItemAlert('✓ 已删除', 'success');
+        showAlert('✓ 已删除', 'success');
         await refreshAll();
       } catch (e) {
-        showItemAlert('删除失败:' + e.message, 'error');
+        showAlert('删除失败:' + e.message, 'error');
       }
     });
   });

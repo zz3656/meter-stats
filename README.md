@@ -212,6 +212,8 @@ docker compose down && docker compose up -d
 
 ## 🛠️ 开发者
 
+📐 **架构文档**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 模块清单、关键算法、安全模型、扩展指南、常见坑。
+
 ```bash
 # 单元测试
 python3 -m unittest discover -s tests -v
