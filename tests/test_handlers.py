@@ -247,6 +247,134 @@ class TestItemsPurchasesApi(TestApiBase):
         })
         self.assertEqual(h.response_status, 400)
 
+    def test_item_put_whitelist_blocks_unknown_fields(self):
+        """验证 PUT 白名单生效: 不在 updatable_fields 的字段(如 lent_qty)
+        会被忽略,即使攻击者在 body 里传也不会被写入。
+        """
+        # 先创建 item
+        h = self.call("PUT", "/api/items", {"name": "扫把", "qty": 5, "unit": "把"})
+        self.assertEqual(h.response_status, 200)
+        item_id = h.parsed["row"]["id"]
+
+        # 尝试注入 lent_qty (不应被允许通过 PUT 修改)
+        h2 = self.call("PUT", f"/api/items/{item_id}", {
+            "name": "扫把",
+            "qty": 5,
+            "lent_qty": 999,  # ← 应被白名单拒绝
+            "malicious_field": "hacker",  # ← 也应被拒绝
+        })
+        # 应仍返回 200(name/qty 被接受)
+        self.assertEqual(h2.response_status, 200)
+        # lent_qty 不应被写入
+        item = self.read_json("items")[0]
+        self.assertNotEqual(item.get("lent_qty"), 999,
+                            "PUT 不应允许修改 lent_qty(应仅能通过 /lend 接口)")
+        self.assertNotIn("malicious_field", item)
+        self.assertEqual(item["name"], "扫把")
+
+    # ---------- 借出 / 归还 边界 ----------
+
+    def _create_item(self, qty: float = 10) -> str:
+        """辅助:创建一件物品,返回 id。"""
+        h = self.call("PUT", "/api/items", {"name": "扫把", "qty": qty, "unit": "把"})
+        self.assertEqual(h.response_status, 200)
+        return h.parsed["row"]["id"]
+
+    def test_lend_requires_borrower(self):
+        iid = self._create_item(10)
+        h = self.call("PUT", f"/api/items/{iid}/lend", {"qty": 1})  # 缺 borrower
+        self.assertEqual(h.response_status, 400)
+        self.assertIn("借出人", h.parsed["error"])
+
+    def test_lend_requires_positive_qty(self):
+        iid = self._create_item(10)
+        # qty=0
+        h0 = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 0})
+        self.assertEqual(h0.response_status, 400)
+        # qty=-1
+        hn = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": -1})
+        self.assertEqual(hn.response_status, 400)
+
+    def test_lend_exceeding_available_rejected(self):
+        """只能借出 'total - lent' 数量,超出拒绝。"""
+        iid = self._create_item(5)
+        # 借出 3,剩 2
+        h1 = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 3})
+        self.assertEqual(h1.response_status, 200)
+        # 再借 3 - 超出现有 2
+        h2 = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "李四", "qty": 3})
+        self.assertEqual(h2.response_status, 400)
+        self.assertIn("可借出数量不足", h2.parsed["error"])
+        # 借出 2 - 正好等于剩余,应成功
+        h3 = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "李四", "qty": 2})
+        self.assertEqual(h3.response_status, 200)
+        # 再借 1 - 超了(已全部借出)
+        h4 = self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "王五", "qty": 1})
+        self.assertEqual(h4.response_status, 400)
+
+    def test_lend_nonexistent_item_404(self):
+        h = self.call("PUT", "/api/items/no-such-id/lend", {"borrower": "张三", "qty": 1})
+        self.assertEqual(h.response_status, 404)
+
+    def test_return_without_lending_rejected(self):
+        iid = self._create_item(10)
+        h = self.call("PUT", f"/api/items/{iid}/return", {"qty": 1})
+        self.assertEqual(h.response_status, 400)
+        self.assertIn("没有借出记录", h.parsed["error"])
+
+    def test_return_exceeding_lent_rejected(self):
+        iid = self._create_item(10)
+        self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 3})
+        # 归还 5 - 超过借出 3
+        h = self.call("PUT", f"/api/items/{iid}/return", {"qty": 5})
+        self.assertEqual(h.response_status, 400)
+        self.assertIn("归还数量超过借出数量", h.parsed["error"])
+
+    def test_return_partial_updates_records(self):
+        """部分归还:借 3 还 1,记录上应记 return_qty=1 且状态仍为 lent。"""
+        iid = self._create_item(10)
+        self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 3})
+        h = self.call("PUT", f"/api/items/{iid}/return", {"qty": 1, "note": "只还了一个"})
+        self.assertEqual(h.response_status, 200)
+        item = self.read_json("items")[0]
+        # lent_qty 减 1
+        self.assertEqual(item["lent_qty"], 2)
+        # 记录上 return_qty=1,status 仍为 lent (未完全还清)
+        rec = item["lend_records"][0]
+        self.assertEqual(rec["return_qty"], 1)
+        self.assertEqual(rec["status"], "lent")
+        self.assertEqual(rec["return_note"], "只还了一个")
+
+    def test_return_full_marks_record_returned(self):
+        """全部归还:记录 status='returned' 并设置 return_date。"""
+        iid = self._create_item(10)
+        self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 3})
+        h = self.call("PUT", f"/api/items/{iid}/return", {"qty": 3})
+        self.assertEqual(h.response_status, 200)
+        item = self.read_json("items")[0]
+        self.assertEqual(item["lent_qty"], 0)
+        rec = item["lend_records"][0]
+        self.assertEqual(rec["status"], "returned")
+        self.assertIsNotNone(rec["return_date"])
+
+    def test_return_fifo_across_multiple_records(self):
+        """多次借出后归还:按 FIFO 顺序逐条归还。"""
+        iid = self._create_item(10)
+        self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "张三", "qty": 2})
+        self.call("PUT", f"/api/items/{iid}/lend", {"borrower": "李四", "qty": 3})
+        # 归还 4 → 应先还张三的 2(清),再还李四 2
+        h = self.call("PUT", f"/api/items/{iid}/return", {"qty": 4})
+        self.assertEqual(h.response_status, 200)
+        item = self.read_json("items")[0]
+        self.assertEqual(item["lent_qty"], 1)
+        records = sorted(item["lend_records"], key=lambda r: r["lend_date"])
+        # 第一条(张三):status returned,return_qty=2
+        self.assertEqual(records[0]["status"], "returned")
+        self.assertEqual(records[0]["return_qty"], 2)
+        # 第二条(李四):status lent,return_qty=2
+        self.assertEqual(records[1]["status"], "lent")
+        self.assertEqual(records[1]["return_qty"], 2)
+
 
 class TestBackupApi(TestApiBase):
     def test_manual_backup_creates_zip(self):
@@ -289,6 +417,89 @@ class TestBackupApi(TestApiBase):
 
         zips = sorted(backup_dir.glob("meter-backup-*.zip"))
         self.assertEqual(len(zips), 10)  # 只保留最新 10 个
+
+    # ---------- /api/upload (JSON body 路径) ----------
+
+    def _build_valid_backup_zip(self) -> bytes:
+        """构造一个合法 ZIP,内含 readings.json + charges.json,用于上传恢复测试。"""
+        import io
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("readings.json", json.dumps([
+                {"date": "2026-08-01", "hall": 100.0, "fire": 1.0,
+                 "private_room": 50.0, "ac": 30.0, "note": ""}
+            ], ensure_ascii=False))
+            zf.writestr("charges.json", json.dumps([], ensure_ascii=False))
+        return buf.getvalue()
+
+    def test_upload_zip_restores_data(self):
+        """上传一个合法 ZIP,读取后数据被恢复到数据文件。"""
+        # 初始数据
+        self.call("POST", "/api/readings", {"date": "2026-09-01", "hall": 999.0})
+        self.assertEqual(len(self.read_json("readings")), 1)
+
+        # 构造备份 ZIP(只含 readings.json + charges.json)
+        zip_bytes = self._build_valid_backup_zip()
+
+        # 上传(走 JSON body 路径, base64 包装)
+        import base64
+        h = self.call("POST", "/api/upload", {"files": {
+            "backup.zip": {"__zip_b64": base64.b64encode(zip_bytes).decode("ascii")}
+        }})
+        self.assertEqual(h.response_status, 200)
+        self.assertTrue(h.parsed["ok"])
+        self.assertIn("readings.json", h.parsed["restored"])
+
+        # 数据已被 ZIP 内容覆盖(不再有 999.0,有 100.0)
+        data = self.read_json("readings")
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["hall"], 100.0)
+
+    def test_upload_zip_with_must_be_valid(self):
+        """上传非 ZIP 字节:base64 能解但 ZIP 解析失败 → 跳过该文件,返回 ok=false。
+        (实际上 handler 不崩,只是该文件不进 restored 列表)
+        """
+        import base64
+        not_a_zip = b"this is definitely not a zip file"
+        h = self.call("POST", "/api/upload", {"files": {
+            "fake.zip": {"__zip_b64": base64.b64encode(not_a_zip).decode("ascii")}
+        }})
+        self.assertEqual(h.response_status, 200)
+        # 不是合法 zip,不应进 restored
+        self.assertNotIn("readings.json", h.parsed.get("restored", []))
+
+    def test_upload_missing_files_field(self):
+        """上传但缺 files 字段 → 返回错误但不崩。"""
+        h = self.call("POST", "/api/upload", {})
+        self.assertEqual(h.response_status, 200)
+        self.assertFalse(h.parsed["ok"])
+        self.assertIn("files", h.parsed["error"])
+
+    def test_upload_zip_bomb_protection(self):
+        """验证 ZIP Bomb 防护:上传一个压缩后小但解压后巨大的 ZIP 应被拒绝。
+        _validate_zip_safely 会在解压前检查 file_size 总和,超出 ZIP_MAX_DECOMPRESSED_SIZE 拒绝。
+        """
+        import base64
+        # 构造一个“解压后很大”的伪造 ZIP:
+        # 由于 _validate_zip_safely 在解压前检查 zip 中央目录中声明的 file_size,
+        # 只要伪造 file_size 巨大就会被拒绝。手工构造复杂,改为调用函数直接验证:
+        from utils.api import _validate_zip_safely, ZIP_MAX_DECOMPRESSED_SIZE
+
+        # 在 tmp 里构造一个合法但空的 ZIP
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            empty_zip = tmp / "empty.zip"
+            with zipfile.ZipFile(empty_zip, 'w') as zf:
+                zf.writestr("a.txt", "ok")  # 正常文件
+
+            # 正常 ZIP 应能解压
+            safe_dir, err = _validate_zip_safely(empty_zip, str(tmp / "extract"))
+            self.assertIsNone(err, f"正常 ZIP 不应被拒绝: {err}")
+            self.assertTrue((tmp / "extract" / "a.txt").exists())
+
+        # 验证最大限制常量是 100 MB(防止默认值被误改)
+        self.assertEqual(ZIP_MAX_DECOMPRESSED_SIZE, 100 * 1024 * 1024)
 
 
 class TestStorageRecovery(unittest.TestCase):

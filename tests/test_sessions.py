@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
-from handlers.admin import (  # noqa: E402
+from handlers.auth import (  # noqa: E402
     _SESSIONS,
     _SESSIONS_LOCK,
     SESSION_TIMEOUT_SECONDS,
@@ -117,9 +117,9 @@ class TestSessionTTL(unittest.TestCase):
 
     def test_cleanup_removes_only_expired(self):
         """清理函数只移除过期会话。"""
-        import handlers.admin as admin_mod
+        import handlers.auth as auth_mod
         # 重置 last_cleanup_time 确保清理不会被限流抑制
-        admin_mod._last_cleanup_time = 0
+        auth_mod._last_cleanup_time = 0
         now = time.time()
         # 一个活跃会话
         _SESSIONS["active"] = {

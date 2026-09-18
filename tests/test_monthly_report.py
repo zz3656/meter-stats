@@ -58,6 +58,79 @@ class TestMonthlyReport(unittest.TestCase):
         r = calculate_monthly_report(READINGS, CHARGES, month)
         return r, {d["date"]: d for d in r["days"]}
 
+    def setUp(self):
+        # 清缓存,防止上一个测试的 6 月缓存污染本测试的真实 fixture。
+        # calculate_monthly_report 按 month 键缓存,即使参数不同也命中相同 key。
+        from report import invalidate_report_cache
+        invalidate_report_cache()
+
+    def test_charge_on_reading_day_left_open_right_closed(self):
+        """充值日期 == 抄表日 Y 时,应划入下一段(X.date < c.date <= Y.date)。
+        例如 6/13 抄表且 6/13 充值 100 度,应算入 6/13→6/16 段。
+        """
+        # 构造最小场景: 6/1 抄表[hall=100], 6/5 抄表[hall=80], 6/5 充值[hall=10]
+        # (6/1, 6/5] = (100 - 80 + 10) × 160 = 4800,4 天均摊=1200
+        readings = [
+            {"date": "2026-06-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-05", "hall": 80.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        # setUp 已清缓存,这里不需重复。
+        charges = [
+            {"date": "2026-06-05", "hall": 10.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        r = calculate_monthly_report(readings, charges, "2026-06")
+        days = {d["date"]: d for d in r["days"]}
+        # 6/1 hall 应为 1200(总费用 4800/4 天的首天),验证半开半闭: 6/5 充值
+        # 属于 (6/1, 6/5] 段,被均摊到 6/1-6/4 这 4 天。
+        self.assertEqual(days["2026-06-01"]["hall"], 1200.0)
+
+    def test_multi_meter_different_multipliers(self):
+        """4 块表倍率不同(hall=160, fire=1, private_room=160, ac=160):
+        同一充值记录中的不同字段应各自 × 各自倍率,不能串。
+        """
+        # 6/1 抄表: hall=100, fire=100, pr=100, ac=100
+        # 6/8 抄表: hall= 50, fire= 90, pr= 80, ac= 60
+        # 期间(6/1, 6/8]充值: hall=5, fire=50, pr=10, ac=20
+        # 期望:
+        #   hall       = (100-50+5)×160  / 7 = 8800/7 = 1257.1
+        #   fire       = (100-90+50)×1   / 7 = 60/7   = 8.6
+        #   private_rm = (100-80+10)×160 / 7 = 4800/7 = 685.7
+        #   ac         = (100-60+20)×160 / 7 = 9600/7 = 1371.4
+        readings = [
+            {"date": "2026-06-01", "hall": 100.0, "fire": 100.0, "private_room": 100.0, "ac": 100.0},
+            {"date": "2026-06-08", "hall": 50.0, "fire": 90.0, "private_room": 80.0, "ac": 60.0},
+        ]
+        # setUp 已清缓存。
+        charges = [
+            {"date": "2026-06-05", "hall": 5.0, "fire": 50.0, "private_room": 10.0, "ac": 20.0},
+        ]
+        r = calculate_monthly_report(readings, charges, "2026-06")
+        days = {d["date"]: d for d in r["days"]}
+        d1 = days["2026-06-01"]
+        self.assertEqual(d1["hall"], 1257.1)
+        self.assertEqual(d1["fire"], 8.6)
+        self.assertEqual(d1["private_room"], 685.7)
+        self.assertEqual(d1["ac"], 1371.4)
+
+    def test_charge_outside_range_excluded(self):
+        """不在任何抄表对之间的充值不应影响用电计算。
+        场景: 6/1 和 6/5 抄表, 6/10 充值(在 6/5 之后,不在任何区间)。
+        """
+        readings = [
+            {"date": "2026-06-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-05", "hall": 80.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        # setUp 已清缓存。
+        charges = [
+            {"date": "2026-06-10", "hall": 1000.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        r = calculate_monthly_report(readings, charges, "2026-06")
+        days = {d["date"]: d for d in r["days"]}
+        # 不计入任何段: hall = (100-80)×160/4 = 3200/4 = 800
+        self.assertEqual(days["2026-06-01"]["hall"], 800.0)
+        # total_kwh 也不应包含额外充值(800×4 = 3200,不含 6/10 的 1000)
+        self.assertEqual(r["summary"]["total_kwh"], 3200.0)
+
     def test_june_total_matches_user_excel(self):
         """6 月汇总必须精确等于用户 Excel 的'本月共计'列。"""
         r, _ = self._report("2026-06")
