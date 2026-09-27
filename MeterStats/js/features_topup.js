@@ -156,7 +156,7 @@ function updateTopupDaysLeft(row) {
 
 // 用户输入表读数(取整充值)→ 反向计算该块表的实际度数 + 金额,并刷新合计
 function onTopupMeterInput(inputEl) {
-  const row = inputEl.closest('div[style*="background"]');
+  const row = inputEl.closest('.topup-meter-card');
   const actualInput = row.querySelector('.topup-actual');
   const yuanSpan = row.querySelector('.topup-yuan');
   const mult = parseFloat(inputEl.getAttribute('data-mult'));
@@ -169,7 +169,7 @@ function onTopupMeterInput(inputEl) {
 }
 // 用户输入实际度数(取整充值)→ 反向计算该块表的表读数 + 金额,并刷新合计
 function onTopupActualInput(inputEl) {
-  const row = inputEl.closest('div[style*="background"]');
+  const row = inputEl.closest('.topup-meter-card');
   const meterInput = row.querySelector('.topup-meter');
   const yuanSpan = row.querySelector('.topup-yuan');
   const mult = parseFloat(inputEl.getAttribute('data-mult'));
