@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `c60a26d`
+提交 `03e411a`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,6 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
+- 充值计算弹窗行选择器使用正确的CSS类名 — 将 closest('div[style*="background"]') 改为 closest('.
 - XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
@@ -131,7 +132,6 @@ docker compose up -d
 
 ### ♻️ 重构
 
-- 删除冗余的'空调电费趋势'区块 — 每周汇报页面下方原有一个'空调电费趋势'独立区块, / 显示空调表上周/上上周对比、日均、变化百分比等内容。
 - 拆分超大 JS 文件 + 解决跨文件隐式依赖 — 拆分(全部 ≤ 450 行约束): / - render_charts.
 - 拆分 admin.py 1162 行 → 4 个职责清晰子模块 — 将原 handlers/admin.
 - 精简 release notes 生成脚本,输出更简洁 — - 过滤噪音 commit([skip ci]、自动同步 changelog、bump version) / - 按 type 分组(subject 去重,只保
@@ -155,5 +155,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...c60a26d)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...03e411a)
 
