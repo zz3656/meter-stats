@@ -19,6 +19,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Optional
 
+from urllib.parse import parse_qs
+
 from storage import load_json, save_json, get_lock, log
 from utils import send_json, read_body
 
@@ -27,6 +29,30 @@ def get_data_paths() -> dict:
     """全局获取 DATA_PATHS 映射。"""
     import app_handler as _h
     return _h.DATA_PATHS
+
+
+def _parse_pagination(path: str) -> tuple[int, int]:
+    """从查询参数解析分页: ?page=1&limit=50 → (page, limit)。默认 page=1, limit=0(无限制)。"""
+    qs = parse_qs(path.split("?", 1)[-1] if "?" in path else "")
+    try:
+        page = max(1, int(qs.get("page", ["1"])[0]))
+    except (ValueError, IndexError):
+        page = 1
+    try:
+        limit = max(1, int(qs.get("limit", ["0"])[0]))
+    except (ValueError, IndexError):
+        limit = 0  # 0 = 无限制
+    return page, limit
+
+
+def _paginate(data: list, page: int, limit: int) -> tuple[list, int]:
+    """分页数据。返回 (page_data, total_count)。"""
+    total = len(data)
+    if limit <= 0:
+        return data, total
+    start = (page - 1) * limit
+    end = start + limit
+    return data[start:end], total
 
 
 class JsonModelHandler:
@@ -66,7 +92,23 @@ class JsonModelHandler:
 
     # ------- 通用 CRUD -------
     def handle_get(self, handler, path_clean: str = "") -> None:
-        send_json(handler, 200, self._load())
+        """GET 列表接口，支持可选分页: ?page=1&limit=50。
+        无分页参数时返回全部数据(向后兼容)。
+        有分页时返回 { data: [...], total: N, page: M, limit: L }。
+        """
+        data = self._load()
+        page, limit = _parse_pagination(path_clean)
+        if limit <= 0:
+            # 无分页: 向后兼容，直接返回列表
+            send_json(handler, 200, data)
+        else:
+            page_data, total = _paginate(data, page, limit)
+            send_json(handler, 200, {
+                "data": page_data,
+                "total": total,
+                "page": page,
+                "limit": limit,
+            })
 
     def handle_post(self, handler, path_clean: str = "") -> None:
         body = read_body(handler)

@@ -73,6 +73,8 @@ class Handler(BaseHTTPRequestHandler):
         self._dispatch("OPTIONS")
 
     def _dispatch(self, method: str):
+        import time
+        start = time.time()
         if self.path.startswith("/api/"):
             # 请求体大小限制: 防止超大 body 拖垮服务 (1MB)
             content_length = int(self.headers.get("Content-Length", 0))
@@ -86,7 +88,9 @@ class Handler(BaseHTTPRequestHandler):
                 route(method, self, self.path)
             except Exception as e:
                 from storage import log
-                log(f"[ERROR] {method} {self.path}: {e}")
+                elapsed = time.time() - start
+                client_ip = self.headers.get("X-Forwarded-For", self.client_address[0] if hasattr(self, 'client_address') else "?")
+                log(f"[{elapsed*1000:.0f}ms] {method} {self.path} 4xx/5xx from {client_ip}: {e}")
                 import traceback
                 log(traceback.format_exc())
                 from utils import send_json
