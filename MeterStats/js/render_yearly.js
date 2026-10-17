@@ -93,7 +93,7 @@ function renderYearlyReport(data) {
 }
 
 function copyYearlyTSV(data) {
-  const lines = ['工程部管理系统年度汇总报表', `统计年份,${data.year}`, ''];
+  const lines = ['工程部管理系统年度汇总报表', `统计年份\t${data.year}`, ''];
   lines.push(['月份', '1#大厅', '2#消防', '3#包厢', '4#空调', '合计(度)', '电费(元)'].join('\t'));
   data.months.forEach(m => {
     lines.push([m.month, m.by_meter.hall, m.by_meter.fire, m.by_meter.private_room, m.by_meter.ac, m.total_kwh, m.total_cost].join('\t'));
@@ -104,7 +104,7 @@ function copyYearlyTSV(data) {
 
 // 月度报告复制 TSV(粘贴到 Excel 自动成表):每日明细 + 每表总用电 + 合计 + 电费
 function copyReportTSV(data) {
-  const lines = ['工程部管理系统月度统计报表', `统计月份,${data.month}`, ''];
+  const lines = ['工程部管理系统月度统计报表', `统计月份\t${data.month}`, ''];
   lines.push(['日期', '1#大厅', '2#消防', '3#包厢', '4#空调', '合计(度)'].join('\t'));
   data.days.forEach(d => {
     lines.push([d.date, d.hall, d.fire, d.private_room, d.ac, d.total].join('\t'));
