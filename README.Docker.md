@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.0
 
-提交 `03e411a`
+提交 `1ca698e`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- 充值计算弹窗行选择器使用正确的CSS类名 — 将 closest('div[style*="background"]') 改为 closest('.
+- 复制TSV标题行使用Tab分隔符修复Numbers错位
 - XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
@@ -155,5 +155,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...03e411a)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...1ca698e)
 
