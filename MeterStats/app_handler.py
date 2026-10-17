@@ -74,6 +74,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _dispatch(self, method: str):
         if self.path.startswith("/api/"):
+            # 请求体大小限制: 防止超大 body 拖垮服务 (1MB)
+            content_length = int(self.headers.get("Content-Length", 0))
+            MAX_BODY = 1 * 1024 * 1024  # 1 MB
+            if content_length > MAX_BODY:
+                from utils import send_json
+                send_json(self, 413, {"error": f"请求体过大 (最大 {MAX_BODY // 1024}KB)"})
+                return
             try:
                 from routing import route
                 route(method, self, self.path)
@@ -147,6 +154,10 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", mime)
         self.send_header("Content-Length", str(len(body)))
+        # 安全响应头: 防点击劫持 + MIME 嗅探 + XSS 过滤
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-XSS-Protection", "1; mode=block")
         # ⚠️ 关键: js/css/html 都不要缓存(避免 CDN/浏览器缓存旧版代码)
         # Cloudflare 默认会缓存这些静态文件,即使我们没有显式声明 cache-control。
         if is_html or is_js_or_css:
