@@ -10,8 +10,7 @@
 
 Please report security vulnerabilities privately via:
 
-- Email: your-email@example.com
-- GitHub Security Advisories: https://github.com/meter-stats/meter-stats/security/advisories
+- GitHub Security Advisories: https://github.com/zz3656/meter-stats/security/advisories
 
 Please do **NOT** open a public issue for security vulnerabilities.
 

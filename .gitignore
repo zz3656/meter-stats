@@ -62,3 +62,6 @@ build-dmg.sh
 build-app.sh
 sign-and-notarize.sh
 DOCKER-HUB-SECRETS-GUIDE.md
+
+# Xcode project (local only)
+MeterStats.xcodeproj/
