@@ -190,13 +190,4 @@ async function fetchSnapshot() {
   }
 }
 
-// 后端写入
-async function saveReadingRemote(row) {
-  return api('POST', '/api/readings', row);
-}
-async function updateReadingRemote(date, fields) {
-  return api('PUT', `/api/readings/${date}`, fields);
-}
-async function deleteReadingRemote(date) {
-  return api('DELETE', `/api/readings/${date}`);
-}
+// (API 函数已在 data_global.js 中定义,core_accessibility.js 不再重复)

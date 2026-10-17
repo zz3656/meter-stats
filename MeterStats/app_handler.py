@@ -13,8 +13,10 @@ from utils.api import inject_version_to_html as _inject_version_to_html
 
 ROOT = Path(__file__).resolve().parent
 
+from constants import DEFAULT_PORT
+
 # 端口由 server.py 设置
-PORT = 8765
+PORT = DEFAULT_PORT
 
 # 静态文件版本 token:启动时由 server.py 计算并设置到这里,
 # 用于在 index.html 注入 ?v=<token> 绕过 CDN 缓存。
@@ -116,6 +118,8 @@ class Handler(BaseHTTPRequestHandler):
             mime = "application/javascript; charset=utf-8"
         elif file_path.suffix == ".json":
             mime = "application/json; charset=utf-8"
+        elif file_path.suffix == ".svg":
+            mime = "image/svg+xml; charset=utf-8"
 
         is_html = file_path.suffix == ".html"
         is_js_or_css = file_path.suffix in (".js", ".css")

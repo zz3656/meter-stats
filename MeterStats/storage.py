@@ -168,6 +168,16 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
                 parent = data_dir / backup_rel
             else:
                 parent = data_dir / "backup"
+
+    # 缓存 settings.json（只读一次，后续复用）
+    _settings_cache = None
+    try:
+        settings_src_path = data_dir / "settings.json"
+        if settings_src_path.exists():
+            _settings_cache = json.loads(settings_src_path.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
     utc_now = datetime.now(timezone.utc)
@@ -239,7 +249,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
     # 按保留天数清理过期自动备份(只清理 auto-bak- 前缀,不影响手动备份 meter-backup-)
     try:
-        retention_days = int(json.loads((data_dir / "settings.json").read_text(encoding="utf-8")).get("backup_retention_count", 5))
+        retention_days = int(_settings_cache.get("backup_retention_count", 5)) if _settings_cache else 5
     except Exception:
         retention_days = 5
     now = datetime.now(timezone.utc)

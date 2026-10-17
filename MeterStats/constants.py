@@ -46,6 +46,9 @@ METER_COLORS: dict[str, str] = {
 # Aliases for report.py compatibility
 PRICE = ELECTRICITY_PRICE
 
+# ============ 端口与网络配置 ============
+DEFAULT_PORT = 8765
+
 # ============ 角色 ============
 ROLE_ADMIN = "admin"
 ROLE_SUPERVISOR = "supervisor"

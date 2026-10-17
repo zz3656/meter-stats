@@ -47,8 +47,9 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 from storage import get_data_dir, init_data_files, log
+from constants import DEFAULT_PORT
 
-PORT = int(os.environ.get("METER_PORT", "8765"))
+PORT = int(os.environ.get("METER_PORT", str(DEFAULT_PORT)))
 # 从 VERSION 文件读取版本号（支持打包 app 中 version 打包到资源）
 # 注意:Python 3.13 才给 Path.read_text 加 strip 参数,3.11/3.12 都没有。
 # 这里用 .strip() 手动处理,兼容所有 Python 版本。

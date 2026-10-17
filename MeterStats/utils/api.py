@@ -12,9 +12,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from constants import DEFAULT_PORT
+
 # ---- CORS 配置 ----
 # 默认同源（local 开发）。通过 METER_CORS_ORIGIN=* 可放开（docker/远程部署用）。
-_DEFAULT_ORIGIN = f"http://localhost:{os.environ.get('METER_PORT', '8765')}"
+_default_port = os.environ.get("METER_PORT", str(DEFAULT_PORT))
+_DEFAULT_ORIGIN = f"http://localhost:{_default_port}"
 CORS_ORIGIN = os.environ.get("METER_CORS_ORIGIN", _DEFAULT_ORIGIN)
 
 CORS = {

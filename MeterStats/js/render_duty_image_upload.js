@@ -59,7 +59,8 @@ function renderUploadedImages(source, filenames, container) {
     return;
   }
   container.innerHTML = filenames.map(fn => {
-    const imgSrc = getDutyImageUrl(fn);
+    const safeFn = escapeHtml(fn);
+    const imgSrc = getDutyImageUrl(safeFn);
     return `
       <div class="duty-image-preview-item">
         <img src="${imgSrc}" class="duty-image-thumb" style="width:60px;height:60px;" onclick="openLightbox('${imgSrc}')" title="点击查看大图" />
