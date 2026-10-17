@@ -89,8 +89,13 @@ def handle_get_export(handler):
 
 def handle_get_monthly_report(handler):
     """GET /api/monthly-report?month=2026-07"""
+    import re as _re
     qs = parse_qs(urlparse(handler.path).query)
     month = qs.get("month", [datetime.now().strftime("%Y-%m")])[0]
+    # 验证月份格式: YYYY-MM
+    if not _re.match(r"^\d{4}-\d{2}$", month):
+        send_json(handler, 400, {"error": "month 参数格式错误,应为 YYYY-MM"})
+        return
     readings = _load("readings")
     charges = _load("charges")
     report = calculate_monthly_report(readings, charges, month)
@@ -99,8 +104,13 @@ def handle_get_monthly_report(handler):
 
 def handle_get_yearly_report(handler):
     """GET /api/yearly-report?year=2026"""
+    import re as _re
     qs = parse_qs(urlparse(handler.path).query)
     year = qs.get("year", [str(datetime.now().year)])[0]
+    # 验证年份格式: YYYY
+    if not _re.match(r"^\d{4}$", year):
+        send_json(handler, 400, {"error": "year 参数格式错误,应为 YYYY"})
+        return
     readings = _load("readings")
     charges = _load("charges")
     report = calculate_yearly_report(readings, charges, year)
