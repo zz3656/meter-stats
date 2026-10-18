@@ -28,36 +28,9 @@ if (dutyTimeEl) {
   }, 60_000);
 }
 
-// 启动时先检查认证状态，再拉后端数据
+// 启动时先加载数据，再检查认证状态
 (async () => {
-  // 先检查认证：无 token 则显示登录页，阻止后续渲染
-  const ADMIN_TOKEN = localStorage.getItem('meter_admin_token');
-  if (ADMIN_TOKEN) {
-    // 有旧 token，验证是否仍有效（新容器会话已失效）
-    try {
-      const r = await fetch('/api/auth/me?token=' + encodeURIComponent(ADMIN_TOKEN));
-      const res = await r.json();
-      if (!res.user) {
-        // 旧 token 无效，清除并显示登录页
-        localStorage.removeItem('meter_admin_token');
-        const loginPage = document.getElementById('login-page');
-        if (loginPage) loginPage.style.display = 'flex';
-        return;  // 不渲染数据
-      }
-    } catch (e) {
-      // 网络错误，清除 token 并显示登录页
-      localStorage.removeItem('meter_admin_token');
-      const loginPage = document.getElementById('login-page');
-      if (loginPage) loginPage.style.display = 'flex';
-      return;  // 不渲染数据
-    }
-  } else {
-    // 没有 token，显示登录页
-    const loginPage = document.getElementById('login-page');
-    if (loginPage) loginPage.style.display = 'flex';
-    return;  // 不渲染数据
-  }
-  // 认证通过，继续渲染数据
+  // 无论是否有 token，都先加载数据（快照接口不需要认证）
   await renderAll();
   // 抄表提醒:距上次抄表 ≥ 3 天显示横幅
   if (CURRENT_READINGS && CURRENT_READINGS.length > 0) {
