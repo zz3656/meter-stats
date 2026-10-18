@@ -239,17 +239,7 @@ function switchSection(sectionId) {
   if (target) target.style.display = 'flex';
 
   // 自动展开所属分组:找到点击项所在的 group,如果不是 collapsed 则展开
-  const activeBtn = document.querySelector(`.sidebar-item[data-section="${sectionId
-
-  // Tab 切换时重新渲染对应 section 的数据
-  if (sectionId === 'reading-record') {
-    const histSel = document.getElementById('history-month');
-    if (histSel) renderHistory(CURRENT_READINGS);
-  }
-  if (sectionId === 'charge-record') {
-    const chargeSel = document.getElementById('charge-month');
-    if (chargeSel) renderChargeLog(CURRENT_CHARGES);
-  }}"]`);
+  const activeBtn = document.querySelector(`.sidebar-item[data-section="${sectionId}"]`);
   if (activeBtn) {
     const group = activeBtn.closest('.sidebar-group');
     if (group && group.classList.contains('collapsed')) {
