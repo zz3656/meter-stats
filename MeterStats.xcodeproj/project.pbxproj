@@ -1,0 +1,274 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B001 /* MeterStatsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = B011; };
+		B002 /* ServerManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B012; };
+		B003 /* server.py in Resources */ = {isa = PBXBuildFile; fileRef = B021; };
+		B004 /* app_handler.py in Resources */ = {isa = PBXBuildFile; fileRef = B022; };
+		B005 /* report.py in Resources */ = {isa = PBXBuildFile; fileRef = B023; };
+		B006 /* storage.py in Resources */ = {isa = PBXBuildFile; fileRef = B024; };
+		B007 /* routing.py in Resources */ = {isa = PBXBuildFile; fileRef = B025; };
+		B008 /* index.html in Resources */ = {isa = PBXBuildFile; fileRef = B026; };
+		B009 /* style.css in Resources */ = {isa = PBXBuildFile; fileRef = B027; };
+		B00A /* app.js in Resources */ = {isa = PBXBuildFile; fileRef = B028; };
+		B00B /* admin.js in Resources */ = {isa = PBXBuildFile; fileRef = B029; };
+		B00C /* favicon.svg in Resources */ = {isa = PBXBuildFile; fileRef = B030; };
+		B00D /* favicon-16.png in Resources */ = {isa = PBXBuildFile; fileRef = B031; };
+		B00E /* favicon-32.png in Resources */ = {isa = PBXBuildFile; fileRef = B032; };
+		B00F /* Linclub.entitlements in Resources */ = {isa = PBXBuildFile; fileRef = B033; };
+		B010 /* handlers/ in Resources */ = {isa = PBXBuildFile; fileRef = B034; };
+		B0110 /* utils/ in Resources */ = {isa = PBXBuildFile; fileRef = B035; };
+		B0111 /* AppIcon.icns in Resources */ = {isa = PBXBuildFile; fileRef = B036; };
+		B038 /* constants.py in Resources */ = {isa = PBXBuildFile; fileRef = B048; };
+		B0112 /* VERSION in Resources */ = {isa = PBXBuildFile; fileRef = B037; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B041 /* MeterStats.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MeterStats.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		B011 /* MeterStatsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeterStatsApp.swift; sourceTree = "<group>"; };
+		B012 /* ServerManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerManager.swift; sourceTree = "<group>"; };
+		B021 /* server.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = server.py; sourceTree = "<group>"; };
+		B022 /* app_handler.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = app_handler.py; sourceTree = "<group>"; };
+		B023 /* report.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = report.py; sourceTree = "<group>"; };
+		B024 /* storage.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = storage.py; sourceTree = "<group>"; };
+		B025 /* routing.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = routing.py; sourceTree = "<group>"; };
+		B026 /* index.html */ = {isa = PBXFileReference; lastKnownFileType = text.html; path = index.html; sourceTree = "<group>"; };
+		B027 /* style.css */ = {isa = PBXFileReference; lastKnownFileType = text.css; path = style.css; sourceTree = "<group>"; };
+		B028 /* app.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.js; path = app.js; sourceTree = "<group>"; };
+		B029 /* admin.js */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.js; path = admin.js; sourceTree = "<group>"; };
+		B030 /* favicon.svg */ = {isa = PBXFileReference; lastKnownFileType = text; path = favicon.svg; sourceTree = "<group>"; };
+		B031 /* favicon-16.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "favicon-16.png"; sourceTree = "<group>"; };
+		B032 /* favicon-32.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "favicon-32.png"; sourceTree = "<group>"; };
+		B033 /* Linclub.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Linclub.entitlements; sourceTree = "<group>"; };
+		B034 /* handlers */ = {isa = PBXFileReference; lastKnownFileType = folder; path = handlers; sourceTree = "<group>"; };
+		B035 /* utils */ = {isa = PBXFileReference; lastKnownFileType = folder; path = utils; sourceTree = "<group>"; };
+		B036 /* AppIcon.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = AppIcon.icns; sourceTree = "<group>"; };
+		B048 /* constants.py */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.python; path = constants.py; sourceTree = "<group>"; };
+		B037 /* VERSION */ = {isa = PBXFileReference; lastKnownFileType = text.plain; path = VERSION; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		B071 = {
+			isa = PBXGroup;
+			children = (
+				B072,
+				B073,
+				B041,
+			);
+			sourceTree = "<group>";
+		};
+		B072 = {
+			isa = PBXGroup;
+			children = (
+				B011,
+				B012,
+			);
+			path = "MeterStats";
+			sourceTree = "<group>";
+		};
+		B073 = {
+			isa = PBXGroup;
+			children = (
+				B021, B022, B023, B024, B025,
+				B026, B027, B028, B029, B030,
+				B031, B032, B033, B034, B035,
+				B036, B037, B048,
+			);
+			path = "MeterStats";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B081 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B091;
+			buildPhases = (
+				B101,
+				B102,
+				B103,
+			);
+			dependencies = ();
+			name = MeterStats;
+			productInstallationSink = "PBXProductInstallationSinkDefaultValue";
+			productName = MeterStats;
+			productReference = B041;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B0A1 = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1640;
+				LastUpgradeCheck = 1640;
+				TargetAttributes = {
+					B081 = {
+						CreatedOnToolsVersion = 16.4;
+					};
+				};
+			};
+			buildConfigurationList = B101p;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+				zh_Hans,
+			);
+			mainGroup = B071;
+			productRefGroup = B071;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B081,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B101 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B001,
+				B002,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B102 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B103 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B003, B004, B005, B006, B007,
+				B008, B009, B00A, B00B, B00C,
+				B00D, B00E, B00F, B010, B0110,
+				B0111, B0112, B038,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		B0B1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				TARGETED_DEVICE_FAMILY = "(1)";
+			};
+			name = Debug;
+		};
+		B0B2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				SDKROOT = macosx;
+				SUPPORTED_PLATFORMS = macosx;
+				TARGETED_DEVICE_FAMILY = "(1)";
+			};
+			name = Release;
+		};
+		B0C1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_USE_TRANSACTIONAL_COPY = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_ALLOWED_NO_SWIFT = NO;
+				CODE_SIGNING_REQUIRED = YES;
+				INFOPLIST_FILE = MeterStats/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "工程部管理系统";
+				INFOPLIST_KEY_CFBundleExecutable = "$(EXECUTABLE_NAME)";
+				INFOPLIST_KEY_CFBundleIdentifier = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				INFOPLIST_KEY_CFBundleInfoDictionaryVersion = "6.0";
+				INFOPLIST_KEY_CFBundleName = "$(PRODUCT_NAME)";
+				INFOPLIST_KEY_CFBundlePackageType = APPL;
+				INFOPLIST_KEY_CFBundleShortVersionString = "0.1.0";
+				INFOPLIST_KEY_CFBundleVersion = "1";
+				INFOPLIST_KEY_LSMinimumSystemVersion = "14.0";
+				MACOSX_BUNDLE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meter.stats;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 5.0;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+			};
+			name = Debug;
+		};
+		B0C2 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_USE_TRANSACTIONAL_COPY = YES;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGNING_ALLOWED = YES;
+				CODE_SIGNING_ALLOWED_NO_SWIFT = NO;
+				CODE_SIGNING_REQUIRED = YES;
+				INFOPLIST_FILE = MeterStats/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "工程部管理系统";
+				INFOPLIST_KEY_CFBundleExecutable = "$(EXECUTABLE_NAME)";
+				INFOPLIST_KEY_CFBundleIdentifier = "$(PRODUCT_BUNDLE_IDENTIFIER)";
+				INFOPLIST_KEY_CFBundleInfoDictionaryVersion = "6.0";
+				INFOPLIST_KEY_CFBundleName = "$(PRODUCT_NAME)";
+				INFOPLIST_KEY_CFBundlePackageType = APPL;
+				INFOPLIST_KEY_CFBundleShortVersionString = "0.1.0";
+				INFOPLIST_KEY_CFBundleVersion = "1";
+				INFOPLIST_KEY_LSMinimumSystemVersion = "14.0";
+				MACOSX_BUNDLE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.meter.stats;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 5.0;
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				STRIP_INSTALLED_PRODUCT = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B091 /* Build configuration list for PBXNativeTarget "MeterStats" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0C1,
+				B0C2,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B101p /* Build configuration list for PBXProject "MeterStats" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0B1,
+				B0B2,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+	};
+	rootObject = B0A1;
+}
