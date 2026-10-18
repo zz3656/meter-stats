@@ -131,7 +131,7 @@ _GET_ADMIN = {
     "/api/admin/backup-config": handle_get_backup_config,
     "/api/admin/dir-listing": handle_get_dir_listing,
     "/api/admin/audit": handle_get_audit_log,
-    "/api/admin/migrate-water": handle_get_migrate_status,
+    "/api/admin/migrate-water-status": handle_get_migrate_status,
     "/api/admin/data-files": handle_get_data_files,
     "/api/admin/sessions": handle_get_sessions,
     "/api/admin/report-cache": handle_get_report_cache,
