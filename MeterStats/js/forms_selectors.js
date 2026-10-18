@@ -58,12 +58,11 @@ function refreshMonthSelectors() {
   // 录入历史:月份筛选下拉,默认最后月;值变化时重新渲染
   const histSel = document.getElementById('history-month');
   if (histSel) {
-    const prev = histSel.value;
     histSel.innerHTML = opts;
-    const newVal = prev && months.includes(prev) ? prev : (months.length > 0 ? months[months.length - 1] : '');
+    // 抄表记录下拉框保持空值(全部)，不默认选中某月导致过滤后无数据显示
+    const newVal = months.length > 0 ? months[months.length - 1] : '';
     if (histSel.value !== newVal) {
       histSel.value = newVal;
-      renderHistory(CURRENT_READINGS);
     }
   }
 
@@ -91,12 +90,11 @@ function refreshMonthSelectors() {
     const copts = cMonths.length === 0
       ? '<option value="">(暂无数据)</option>'
       : cMonths.map(m => `<option value="${m}">${m}</option>`).join('');
-    const prev = chargeSel.value;
     chargeSel.innerHTML = copts;
-    const newVal = prev && cMonths.includes(prev) ? prev : (cMonths.length > 0 ? cMonths[cMonths.length - 1] : '');
+    // 充值记录下拉框保持空值(全部)，不默认选中某月导致过滤后无数据显示
+    const newVal = cMonths.length > 0 ? cMonths[cMonths.length - 1] : '';
     if (chargeSel.value !== newVal) {
       chargeSel.value = newVal;
-      renderChargeLog(CURRENT_CHARGES);
     }
   }
 

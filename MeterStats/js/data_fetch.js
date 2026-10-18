@@ -17,6 +17,11 @@ async function renderAll() {
   populateDutyMonthSelector();
   checkDutyReminder();
   refreshMonthSelectors();
+  // 下拉框填充后，重新渲染抄表和充值记录（因为下拉框的选中值已改变）
+  const histSel = document.getElementById('history-month');
+  if (histSel) renderHistory(CURRENT_READINGS);
+  const chargeSel = document.getElementById('charge-month');
+  if (chargeSel) renderChargeLog(CURRENT_CHARGES);
   refreshDayCopySelect(CURRENT_READINGS, CURRENT_CHARGES);
   updateStatusBar(CURRENT_READINGS, CURRENT_CHARGES);
   // 水电数据迁移检测（只在首次加载时检查一次）
