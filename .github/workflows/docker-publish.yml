@@ -39,6 +39,7 @@ jobs:
           file: docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
+          no-cache: true
           tags: |
             zz3656/meter-stats:latest
             zz3656/meter-stats:${{ steps.version.outputs.version }}
