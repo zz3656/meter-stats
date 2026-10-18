@@ -280,6 +280,15 @@ function switchSection(sectionId) {
   if (sectionId === 'report-yearly' && _yearlyChart) {
     setTimeout(() => _yearlyChart.resize(), 60);
   }
+  // Tab 切换时重新渲染抄表记录和充值记录的数据
+  if (sectionId === 'reading-record') {
+    const histSel = document.getElementById('history-month');
+    if (histSel) renderHistory(CURRENT_READINGS);
+  }
+  if (sectionId === 'charge-record') {
+    const chargeSel = document.getElementById('charge-month');
+    if (chargeSel) renderChargeLog(CURRENT_CHARGES);
+  }
 }
 
 // 侧栏分组折叠
