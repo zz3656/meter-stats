@@ -67,9 +67,15 @@ def _write_pid(data_dir: Path):
 # 浏览器/CDN 看到新 URL,绕过缓存回源拉新文件。
 # 这是修复 CDN(如 Cloudflare)缓存导致前端看不到代码修复的关键机制。
 def compute_version_token():
-    """根据 app.js / admin.js / style.css 的内容哈希生成版本 token。"""
+    """根据 app.js / admin.js / style.css / js/*.js 的内容哈希生成版本 token。"""
     import hashlib
     files = ["app.js", "admin.js", "style.css", "index.html"]
+    root = Path(__file__).resolve().parent
+    # 子目录 JS 文件也要参与哈希，确保修改后 token 更新
+    js_dir = root / "js"
+    if js_dir.exists():
+        for p in sorted(js_dir.glob("*.js")):
+            files.append(str(p.relative_to(root)))
     h = hashlib.sha256()
     root = Path(__file__).resolve().parent
     for fname in files:
