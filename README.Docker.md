@@ -92,9 +92,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 MeterStats v0.1.0
+## 📦 MeterStats v0.1.1
 
-提交 `c42f1fd`
+提交 `4812ffa`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,6 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- 版本号标签改为从 MeterStats/VERSION 动态读取
 - XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
@@ -146,6 +145,10 @@ docker compose up -d
 - README 添加 data/ 目录使用警告,说明不应手动修改
 - 重写 README + DockerHub 描述;清理冗余文件 — - .
 
+### 🔧 杂项
+
+- 版本号 0.1.0 → 0.1.1（修复容器崩溃、前端JS错误）
+
 ### ⬆️ 升级
 
 ⚠️ **建议升级**:本次包含问题修复
@@ -155,5 +158,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...c42f1fd)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...4812ffa)
 
