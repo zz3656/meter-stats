@@ -41,7 +41,9 @@ async function fetchSnapshot() {
         if (data) {
             for (const [key, value] of Object.entries(data)) {
                 if (key.startsWith('_')) continue;
-                const globalKey = `CURRENT_${key.toUpperCase()}`;
+                // 特殊映射: readings_water → CURRENT_WATER_READINGS (不是 CURRENT_READINGS_WATER)
+                const specialMap = { 'readings_water': 'CURRENT_WATER_READINGS' };
+                const globalKey = specialMap[key] || `CURRENT_${key.toUpperCase()}`;
                 if (globalKey in window) {
                     window[globalKey] = value;
                 }
