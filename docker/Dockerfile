@@ -11,6 +11,9 @@
 
 FROM python:3.11-slim
 
+ARG BUILD_ID=0
+RUN echo "Build $BUILD_ID"
+
 LABEL maintainer="meter-team"
 LABEL description="场所工程部电表用量统计工具 — Web 服务"
 
