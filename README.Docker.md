@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats v0.1.1
 
-提交 `ce6295e`
+提交 `8ab822a`
 
 **升级 Docker 容器**:
 ```bash
@@ -112,7 +112,7 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- build-push-action 添加 no-cache 确保路由修复生效
+- 添加 BUILD_ID 破坏缓存 + workflow 传 github.sha 确保 JS 修复生效
 - XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
@@ -155,5 +155,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...ce6295e)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...8ab822a)
 
