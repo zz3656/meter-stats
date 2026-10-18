@@ -58,6 +58,13 @@ def get_data_dir() -> Path:
             print(f"[METER]   3. 或检查旧位置: ~/Documents/electricity-stats/data/")
         return d
 
+    # Docker 环境：使用 /data 目录（通过 docker-compose.yml 挂载）
+    if os.environ.get("METER_DOCKER") or os.path.exists("/.dockerenv"):
+        d = Path("/data").resolve()
+        d.mkdir(parents=True, exist_ok=True)
+        print(f"[METER] 数据目录(来自 Docker): {d}", flush=True)
+        return d
+
     # 2. macOS 标准位置
     standard = Path.home() / "Library" / "Application Support" / "com.meter.stats"
 
