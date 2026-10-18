@@ -28,6 +28,10 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Read version from MeterStats/VERSION
+        id: version
+        run: echo "version=$(cat MeterStats/VERSION | tr -d '[:space:]')" >> $GITHUB_OUTPUT
+
       - name: Build and push multi-platform image
         uses: docker/build-push-action@v6
         with:
@@ -37,7 +41,7 @@ jobs:
           push: true
           tags: |
             zz3656/meter-stats:latest
-            zz3656/meter-stats:v0.1.0
+            zz3656/meter-stats:${{ steps.version.outputs.version }}
 
       - name: Update Docker Hub repository description
         env:
