@@ -159,7 +159,9 @@ function copyTextWithFallback(text, successMsg) {
 // 每日用电折线图 — 4 块表各自折线 + 充电叠加
 function renderTrendChart(readings, charges) {
   readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
-  const ctx = document.getElementById('chart-trend').getContext('2d');
+  const el = document.getElementById('chart-trend');
+  if (!el) return;  // 元素不存在时静默跳过（旧镜像无此元素）
+  const ctx = el.getContext('2d');
   if (!readings || readings.length === 0) {
     ctx.canvas.parentElement.innerHTML = '<div class="empty">录入抄表数据后查看每日用电</div>';
     return;
