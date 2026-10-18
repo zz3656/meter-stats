@@ -211,15 +211,25 @@ async function exportReportToWord() {
   }
 }
 
-document.getElementById('btn-export-word').addEventListener('click', exportReportToWord);
+  // Wrap DOM-accessing code in DOMContentLoaded to ensure elements exist
+  document.addEventListener('DOMContentLoaded', () => {
+    const exportBtn = document.getElementById('btn-export-word');
+    if (exportBtn) exportBtn.addEventListener('click', exportReportToWord);
 
-document.getElementById('report-month').addEventListener('change', loadMonthlyReport);
-document.getElementById('history-month').addEventListener('change', () => renderHistory(CURRENT_READINGS));
-document.getElementById('water-history-month').addEventListener('change', () => {
-  renderHistory(CURRENT_READINGS);
-  // water table is rendered inside renderHistory using CURRENT_WATER_READINGS directly
-});
-document.getElementById('charge-month').addEventListener('change', () => renderChargeLog(CURRENT_CHARGES));
+    const reportMonth = document.getElementById('report-month');
+    if (reportMonth) reportMonth.addEventListener('change', loadMonthlyReport);
+
+    const historyMonth = document.getElementById('history-month');
+    if (historyMonth) historyMonth.addEventListener('change', () => renderHistory(CURRENT_READINGS));
+
+    const waterHistoryMonth = document.getElementById('water-history-month');
+    if (waterHistoryMonth) waterHistoryMonth.addEventListener('change', () => {
+      renderHistory(CURRENT_READINGS);
+    });
+
+    const chargeMonth = document.getElementById('charge-month');
+    if (chargeMonth) chargeMonth.addEventListener('change', () => renderChargeLog(CURRENT_CHARGES));
+  });
 
 // 侧栏切换
 const SIDEBAR_VISIBLE_SECTIONS = new Set([
