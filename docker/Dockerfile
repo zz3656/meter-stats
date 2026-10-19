@@ -17,6 +17,9 @@ RUN echo "Build $BUILD_ID"
 LABEL maintainer="meter-team"
 LABEL description="场所工程部电表用量统计工具 — Web 服务"
 
+# 禁止 Python 生成 .pyc 文件，避免 stale 缓存干扰
+ENV PYTHONDONTWRITEBYTECODE=1
+
 # 创建非 root 用户运行应用
 RUN groupadd -r app && useradd -r -g app -d /data -s /sbin/nologin app
 
@@ -32,12 +35,17 @@ COPY MeterStats/*.js ./
 COPY MeterStats/js/ js/
 COPY MeterStats/*.svg ./
 COPY MeterStats/*.png ./
+# 复制 macOS 应用图标（供 .app 构建使用）
+COPY MeterStats/*.icns ./
 # VERSION 文件无后缀,glob 不匹配,单独复制(server.py 启动时需要)
 COPY MeterStats/VERSION ./
 COPY MeterStats/handlers/ handlers/
 COPY MeterStats/utils/ utils/
 
 # 复制 entrypoint 脚本
+# 清理 __pycache__，避免旧 .pyc 文件干扰
+RUN find /app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

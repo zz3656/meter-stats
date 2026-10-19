@@ -46,6 +46,11 @@ import sys
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
+# 确保当前目录（运行时文件所在目录）优先于系统模块被导入。
+# macOS 上 /usr/lib/python3/constants.py 会覆盖项目 constants.py，
+# 导致 ImportError: cannot import name 'DEFAULT_PORT' from 'constants'。
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 from storage import get_data_dir, init_data_files, log
 from constants import DEFAULT_PORT
 

@@ -66,3 +66,7 @@ function checkDutyReminder() {
 // 把关键函数暴露到 window,让 admin.js(strict mode 单独作用域)能调用恢复后刷新整个页面
 window.renderAll = renderAll;
 window.refreshAll = refreshAll;  // 兼容旧的调用
+window.switchSection = switchSection;  // Tab 切换（HTML onclick 需要全局函数）
+window.switchSettingsPage = switchSettingsPage;  // 设置页面切换（HTML onclick 需要全局函数）
+window.toggleGroup = toggleGroup;  // 侧栏分组折叠（HTML onclick 需要全局函数）
+window.toggleSidebar = toggleSidebar;  // 侧栏折叠（HTML onclick 需要全局函数）

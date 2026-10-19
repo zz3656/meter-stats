@@ -172,31 +172,43 @@ async function exportReportToWord() {
   btn.disabled = true;
   btn.textContent = '⏳ 复制中...';
   try {
-    if (navigator.clipboard && window.ClipboardItem) {
-      const blob = new Blob([html], { type: 'text/html' });
-      await navigator.clipboard.write([new ClipboardItem({ 'text/html': blob })]);
+    // 生成纯文本 TSV 格式 (Numbers / Excel 正确解析为表格)
+    const tsv = buildReportTSV();
+    
+    // 优先使用 Swift 桥接 (WKWebView 内可靠)
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
+      console.log('[clipboard] Swift 桥接可用，发送 TSV');
+      window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(tsv);
     } else {
-      // 回退:用临时 div + execCommand('copy')
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      div.style.position = 'fixed';
-      div.style.left = '-9999px';
-      document.body.appendChild(div);
-      const range = document.createRange();
-      range.selectNodeContents(div);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand('copy');
-      sel.removeAllRanges();
-      document.body.removeChild(div);
+      console.warn('[clipboard] Swift 桥接不可用，回退到 navigator.clipboard');
+      if (navigator.clipboard && window.ClipboardItem) {
+        // 同时提供 HTML 和 TSV，让 Numbers 优先用 TSV 解析为表格
+        const htmlBlob = new Blob([html], { type: 'text/html' });
+        const tsvBlob = new Blob([tsv], { type: 'text/plain' });
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': tsvBlob })
+        ]);
+      } else {
+        // 回退:用临时 div + execCommand('copy')
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        div.style.position = 'fixed';
+        div.style.left = '-9999px';
+        document.body.appendChild(div);
+        const range = document.createRange();
+        range.selectNodeContents(div);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand('copy');
+        sel.removeAllRanges();
+        document.body.removeChild(div);
+      }
     }
     // 复制成功:绿色按钮 + 大字提示(保持禁用,3秒后恢复)
-    btn.textContent = '✓ 已复制';
-    btn.style.background = '#10b981';
-    btn.style.borderColor = '#10b981';
-    btn.style.color = '#fff';
-    showAlert('✓ Word 表格已复制,去 Word 粘贴 (Cmd+V)', 'success');
+    const bridgeUsed = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard;
+    const bridgeMsg = bridgeUsed ? '✅ 已通过 Swift 桥接写入剪贴板（TSV 格式）' : '⚠️ Swift 桥接不可用，使用浏览器 API 复制';
+    showAlert(bridgeMsg + ' → 去 Numbers 粘贴 (Cmd+V)', bridgeUsed ? 'success' : 'warn');
     setTimeout(() => {
       btn.disabled = false;
       btn.textContent = origText;
@@ -211,10 +223,61 @@ async function exportReportToWord() {
   }
 }
 
+// 生成 TSV 格式 (Numbers / Excel 正确解析为表格)
+function buildReportTSV() {
+  if (!_currentReport) return '';
+  const d = _currentReport;
+  const [yy, mm] = d.month.split('-');
+  const daysInMonth = new Date(parseInt(yy), parseInt(mm), 0).getDate();
+
+  let lines = [];
+  // 表头 (第一行)
+  lines.push(['日期', '1#大厅', '2#消防', '3#后勤包厢', '4#空调', '合计(度)'].join('\t'));
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const d_str = formatDate(new Date(parseInt(yy), parseInt(mm) - 1, day));
+    const row = d.days.find(r => r.date === d_str);
+    if (row && row.is_reading_day) {
+      lines.push([
+        String(day),
+        fmtKwh(row.hall),
+        fmtKwh(row.fire),
+        fmtKwh(row.private_room),
+        fmtKwh(row.ac),
+        fmtKwh(row.total)
+      ].join('\t'));
+    } else if (row) {
+      lines.push([
+        String(day),
+        fmtKwh(row.hall),
+        fmtKwh(row.fire),
+        fmtKwh(row.private_room),
+        fmtKwh(row.ac),
+        fmtKwh(row.total)
+      ].join('\t'));
+    } else {
+      lines.push([String(day), '', '', '', '', ''].join('\t'));
+    }
+  }
+
+  // 汇总区
+  const s = d.summary;
+  lines.push('');  // 空行分隔
+
+  // 各表总用电
+  lines.push(['各表总用电', fmtKwh(s.by_meter.hall), fmtKwh(s.by_meter.fire),
+    fmtKwh(s.by_meter.private_room), fmtKwh(s.by_meter.ac), fmtKwh(s.total_kwh)].join('\t'));
+  // 月度合计
+  lines.push(['月度合计', '', '', '', '', fmtKwh(s.total_kwh)].join('\t'));
+  // 本月电费
+  lines.push(['本月电费', '', '', '', '', '¥ ' + s.total_cost.toLocaleString('zh-CN', { minimumFractionDigits: 2 })].join('\t'));
+
+  return lines.join('\n');
+}
+
   // Wrap DOM-accessing code in DOMContentLoaded to ensure elements exist
   document.addEventListener('DOMContentLoaded', () => {
-    const exportBtn = document.getElementById('btn-export-word');
-    if (exportBtn) exportBtn.addEventListener('click', exportReportToWord);
+
 
     const reportMonth = document.getElementById('report-month');
     if (reportMonth) reportMonth.addEventListener('change', loadMonthlyReport);

@@ -10,7 +10,7 @@
 
 services:
   meter-stats:
-    image: zz3656/meter-stats:latest
+    image: meter-stats:local
     container_name: meter-stats
     restart: unless-stopped
     ports:

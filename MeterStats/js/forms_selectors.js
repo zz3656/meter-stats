@@ -55,12 +55,15 @@ function refreshMonthSelectors() {
     }
   }
 
-  // 录入历史:月份筛选下拉,默认最后月;值变化时重新渲染
+  // 录入历史:月份筛选下拉,默认当前月;值变化时重新渲染
   const histSel = document.getElementById('history-month');
   if (histSel) {
     histSel.innerHTML = opts;
-    // 抄表记录下拉框保持空值(全部)，不默认选中某月导致过滤后无数据显示
-    const newVal = months.length > 0 ? months[months.length - 1] : '';
+    // 默认当前月份(YYYY-MM)，切换时按选中月份过滤
+    const currentMonth = todayStr().slice(0, 7);
+    const newVal = months.length > 0
+      ? (months.includes(currentMonth) ? currentMonth : months[months.length - 1])
+      : '';
     if (histSel.value !== newVal) {
       histSel.value = newVal;
     }
@@ -92,10 +95,8 @@ function refreshMonthSelectors() {
       : cMonths.map(m => `<option value="${m}">${m}</option>`).join('');
     chargeSel.innerHTML = copts;
     // 充值记录下拉框保持空值(全部)，不默认选中某月导致过滤后无数据显示
-    const newVal = cMonths.length > 0 ? cMonths[cMonths.length - 1] : '';
-    if (chargeSel.value !== newVal) {
-      chargeSel.value = newVal;
-    }
+    chargeSel.innerHTML = copts;
+    chargeSel.value = '';  // 默认显示全部，不自动过滤到单月
   }
 
   // 月度水电:月份下拉(有水电表底的月份)

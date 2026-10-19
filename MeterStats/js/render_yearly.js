@@ -104,8 +104,7 @@ function copyYearlyTSV(data) {
 
 // 月度报告复制 TSV(粘贴到 Excel 自动成表):每日明细 + 每表总用电 + 合计 + 电费
 function copyReportTSV(data) {
-  const lines = ['工程部管理系统月度统计报表', `统计月份\t${data.month}`, ''];
-  lines.push(['日期', '1#大厅', '2#消防', '3#包厢', '4#空调', '合计(度)'].join('\t'));
+  const lines = ['日期', '1#大厅', '2#消防', '3#包厢', '4#空调', '合计(度)'];
   data.days.forEach(d => {
     lines.push([d.date, d.hall, d.fire, d.private_room, d.ac, d.total].join('\t'));
   });
@@ -115,7 +114,15 @@ function copyReportTSV(data) {
     data.summary.by_meter.private_room, data.summary.by_meter.ac, data.summary.total_kwh].join('\t'));
   lines.push(['月度合计', '', '', '', '', data.summary.total_kwh].join('\t'));
   lines.push(['本月电费', '', '', '', '', `¥ ${data.summary.total_cost.toFixed(2)}`].join('\t'));
-  copyTextWithFallback(lines.join('\n'), '✓ 月度报告已复制,可粘贴到 Excel');
+  const tsv = lines.join('\n');
+  
+  // 优先使用 Swift 桥接 (WKWebView 内可靠,Numbers 正确解析表格)
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
+    window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(tsv);
+    showAlert('✅ 已通过 Swift 桥接写入剪贴板（TSV 格式）→ 去 Numbers 粘贴 (Cmd+V)', 'success');
+  } else {
+    copyTextWithFallback(tsv, '✓ 月度报告已复制,可粘贴到 Excel');
+  }
 }
 
 // 每月用电复制:复制当前月各区域度数 + 金额 + 对比上月,可直接粘贴到群

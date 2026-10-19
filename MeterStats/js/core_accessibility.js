@@ -133,8 +133,10 @@ window.CURRENT_DUTY = [];
 async function fetchItems() {
   try {
     const data = await api('GET', '/api/items');
-    CURRENT_ITEMS = data;
-    return data;
+    // 后端 handle_get 始终返回分页格式 {data, total, page, limit}
+    // 提取实际数组（向后兼容：如果直接返回数组则直接用）
+    CURRENT_ITEMS = Array.isArray(data) ? data : (data.data || []);
+    return CURRENT_ITEMS;
   } catch (e) {
     console.warn('后端不可用,items 用空数组:', e);
     CURRENT_ITEMS = [];
@@ -145,8 +147,8 @@ async function fetchItems() {
 async function fetchPurchases() {
   try {
     const data = await api('GET', '/api/purchases');
-    CURRENT_PURCHASES = data;
-    return data;
+    CURRENT_PURCHASES = Array.isArray(data) ? data : (data.data || []);
+    return CURRENT_PURCHASES;
   } catch (e) {
     console.warn('后端不可用,purchases 用空数组:', e);
     CURRENT_PURCHASES = [];
@@ -157,8 +159,10 @@ async function fetchPurchases() {
 async function fetchDuty() {
   try {
     const data = await api('GET', '/api/duty');
-    CURRENT_DUTY = data;
-    return data;
+    // 后端 handle_get 始终返回分页格式 {data, total, page, limit}
+    // 提取实际数组（向后兼容：如果直接返回数组则直接用）
+    CURRENT_DUTY = Array.isArray(data) ? data : (data.data || []);
+    return CURRENT_DUTY;
   } catch (e) {
     console.warn('后端不可用,duty 用空数组:', e);
     CURRENT_DUTY = [];

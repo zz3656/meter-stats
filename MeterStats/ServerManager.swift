@@ -84,7 +84,7 @@ final class ServerManager {
         }
 
         // SwiftPM .process("Resources") 不拷贝子目录，需要手动复制
-        for subdir in ["handlers", "utils"] {
+        for subdir in ["handlers", "js", "utils"] {
             let srcDir = bundleResources.appendingPathComponent(subdir)
             let dstDir = runtime.appendingPathComponent(subdir)
             guard FileManager.default.fileExists(atPath: srcDir.path) else { continue }
@@ -111,9 +111,12 @@ final class ServerManager {
         try ensureRuntimeFiles()
 
         let proc = Process()
-        proc.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        proc.arguments = ["python3", "server.py"]
-        proc.currentDirectoryURL = projectRoot
+        // 直接使用 /usr/bin/python3，避免 /usr/bin/env python3 在打包 app 中找不到 Python
+        proc.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
+        // server.py 已包含 sys.path.insert(0, ...) 修复，确保模块优先级
+        proc.arguments = ["server.py"]
+        // 工作目录设为运行时目录（包含 server.py 和所有依赖文件）
+        proc.currentDirectoryURL = getRuntimeDir()
 
         let logDir = projectRoot.appendingPathComponent("logs")
         try? FileManager.default.createDirectory(at: logDir, withIntermediateDirectories: true)

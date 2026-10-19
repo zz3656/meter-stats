@@ -67,7 +67,7 @@ from handlers.auth import (
     _cleanup_expired_sessions,
     _LOGIN_ATTEMPTS,
     _LOGIN_ATTEMPTS_LOCK,
-    _LOGIN_MAX_ATTEMPTS,
+    _LOGIN_MAX_FAILED,
     _LOGIN_WINDOW_SECONDS,
     _LOGIN_COOLDOWN_SECONDS,
     _check_login_rate_limit,
@@ -97,6 +97,6 @@ __all__ = [
     "_SESSIONS", "_SESSIONS_LOCK", "SESSION_TIMEOUT_SECONDS",
     "_last_cleanup_time", "_cleanup_expired_sessions",
     "_LOGIN_ATTEMPTS", "_LOGIN_ATTEMPTS_LOCK",
-    "_LOGIN_MAX_ATTEMPTS", "_LOGIN_WINDOW_SECONDS", "_LOGIN_COOLDOWN_SECONDS",
+    "_LOGIN_MAX_FAILED", "_LOGIN_WINDOW_SECONDS", "_LOGIN_COOLDOWN_SECONDS",
     "_check_login_rate_limit", "_record_login_attempt",
 ]

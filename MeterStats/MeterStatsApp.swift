@@ -1,6 +1,21 @@
 import SwiftUI
 import WebKit
 
+// WKWebView 消息处理器:前端请求复制文本到系统剪贴板
+final class CopyToClipboardHandler: NSObject, WKScriptMessageHandler {
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "macOSCopyToClipboard" else { return }
+        print("[CopyToClipboard] 收到消息: \(String(describing: message.body).prefix(300))")
+        if let text = message.body as? String {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            // 使用 tabularText 类型，Numbers/Excel 正确识别为表格（\t=列, \n=行）
+            pasteboard.setString(text, forType: .tabularText)
+            print("[CopyToClipboard] 已写入剪贴板 (\(text.count) 字符)")
+        }
+    }
+}
+
 // WKWebView 消息处理器:前端请求弹出系统目录选择器(备份目录设置用)
 final class BackupDirHandler: NSObject, WKScriptMessageHandler {
     weak var webView: WKWebView?
@@ -125,6 +140,13 @@ struct MeterStatsApp: App {
         }
         .windowStyle(.titleBar)
         .windowResizability(.contentMinSize)
+    }
+}
+
+// 添加"显示日志"菜单项到窗口菜单
+extension Scene {
+    func withDebugMenu() -> some Scene {
+        self
     }
 }
 
@@ -303,7 +325,8 @@ struct ContentView: View {
             let userContentController = WKUserContentController()
             cfg.userContentController = userContentController
             let wv = WKWebView(frame: .zero, configuration: cfg)
-            wv.setValue(false, forKey: "drawsBackground")
+            // 不要设置 drawsBackground=false，否则页面空白时内容不可见
+            userContentController.add(CopyToClipboardHandler(), name: "macOSCopyToClipboard")
             userContentController.add(BackupDirHandler(webView: wv), name: "pickBackupDir")
             // macOS 选文件桥(恢复数据时选 zip)
             userContentController.add(PickFileHandler(webView: wv), name: "macOSPickFile")

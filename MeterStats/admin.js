@@ -62,6 +62,7 @@ function doLogin() {
       return;
     }
     ADMIN_TOKEN = res.token;
+    localStorage.setItem('meter_admin_token', res.token);  // 持久化 token
     setLoggedIn(res.user);
     if (window.renderAll) window.renderAll();
   }).catch(e => {

@@ -31,7 +31,6 @@ function renderMonthlyReport(data) {
   
   tableEl.style.display = 'block';
   emptyEl.style.display = 'none';
-  document.getElementById('btn-export-word').style.display = 'inline-block';
   document.getElementById('btn-copy-report').style.display = 'inline-block';
 
   tbody.innerHTML = '';
@@ -100,7 +99,6 @@ async function loadMonthlyReport() {
   emptyEl.style.display = 'block';
   emptyEl.textContent = '加载中...';
   document.getElementById('monthly-report-table').style.display = 'none';
-  document.getElementById('btn-export-word').style.display = 'none';
 
   const data = await fetchMonthlyReport(month);
   if (token !== _reportLoadToken) return;

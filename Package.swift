@@ -29,6 +29,7 @@ let package = Package(
                 .process("storage.py"),
                 .process("routing.py"),
                 .copy("handlers"),
+                .copy("js"),
                 .copy("utils"),
                 .process("VERSION"),
                 .process("favicon.svg"),

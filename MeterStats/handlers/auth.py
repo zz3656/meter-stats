@@ -32,9 +32,10 @@ _last_cleanup_time: float = 0
 # 登录速率限制
 _LOGIN_ATTEMPTS: dict = {}  # username -> [{timestamp, success}]
 _LOGIN_ATTEMPTS_LOCK = threading.Lock()
-_LOGIN_MAX_ATTEMPTS = 10  # 窗口内最大尝试次数
-_LOGIN_WINDOW_SECONDS = 5 * 60  # 5 分钟滑动窗口
-_LOGIN_COOLDOWN_SECONDS = 2 * 60  # 超限后冷却 2 分钟
+# 1 分钟内最多允许 5 次错误尝试,超限后冷却 5 分钟
+_LOGIN_MAX_FAILED = 5       # 窗口内最大错误尝试次数
+_LOGIN_WINDOW_SECONDS = 60  # 1 分钟滑动窗口
+_LOGIN_COOLDOWN_SECONDS = 5 * 60  # 超限后冷却 5 分钟
 
 
 def _cleanup_expired_sessions():
@@ -64,8 +65,8 @@ def _check_login_rate_limit(username: str) -> tuple[bool, str]:
     """检查登录尝试是否超过速率限制。
 
     使用滑动窗口算法:
-    - 5 分钟内最多尝试 10 次
-    - 超限后进入 2 分钟冷却期
+    - 1 分钟内最多错误尝试 5 次
+    - 超限后进入 5 分钟冷却期
     - 只记录密码错误的尝试
 
     返回: (allowed, message)
@@ -85,11 +86,11 @@ def _check_login_rate_limit(username: str) -> tuple[bool, str]:
             last_failure = max(failed_attempts, key=lambda a: a["timestamp"])["timestamp"]
             cooldown_remaining = _LOGIN_COOLDOWN_SECONDS - (now - last_failure)
             if cooldown_remaining > 0:
-                remaining_min = int(cooldown_remaining / 60) + 1
-                return False, f"尝试次数过多,请在 {remaining_min} 分钟后再试"
+                remaining_sec = int(cooldown_remaining / 60) + 1
+                return False, f"尝试次数过多,请在 {remaining_sec} 分钟后再试"
 
-        # 检查窗口内总尝试次数
-        if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
+        # 检查窗口内错误尝试次数
+        if len(failed_attempts) >= _LOGIN_MAX_FAILED:
             return False, f"尝试次数过多,请在 {_LOGIN_WINDOW_SECONDS // 60} 分钟后再试"
 
     return True, ""

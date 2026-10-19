@@ -41,6 +41,9 @@ touch /data/.write_test 2>/dev/null || {
 rm -f /data/.write_test
 
 # 切换到 app 用户运行服务
+# 启动前先清理 __pycache__，避免 stale .pyc 文件干扰
+find /app -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+
 # python:3.11-slim includes runuser (shadow) and su-exec (busybox)
 if command -v su-exec &>/dev/null; then
     exec su-exec app python3 server.py

@@ -132,6 +132,41 @@ def init_data_files(data_dir: Path) -> dict:
     except Exception as e:
         log(f"  [WARN] 启动自动备份后台线程失败: {e}")
 
+    # 每日定时自动备份（每天 0 点执行一次）
+    try:
+        import threading as _threading
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+        next_run = tomorrow.isoformat()
+
+        def _daily_backup_loop():
+            """每天 0 点执行一次自动备份。"""
+            while True:
+                now = datetime.now(timezone.utc)
+                # 计算到次日 0 点的秒数
+                tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+                seconds_to_midnight = (tomorrow - now).total_seconds()
+
+                # 等待到次日 0 点（最多等不到一天，备份成功后会重新计算）
+                try:
+                    __import__("time").sleep(seconds_to_midnight)
+                except (KeyboardInterrupt, SystemExit):
+                    break
+
+                # 到达 0 点，执行备份（force=False = 每日一次）
+                try:
+                    backup_data(data_dir, force=False)
+                except Exception as e:
+                    log(f"[DAILY BACKUP] 失败: {e}")
+
+        t = _threading.Thread(target=_daily_backup_loop, daemon=True)
+        t.start()
+        log(f"  [DAILY BACKUP] 定时备份线程已启动（下次执行: {next_run} UTC）")
+    except Exception as e:
+        log(f"  [WARN] 启动定时备份线程失败: {e}")
+
     return files
 
 
@@ -201,8 +236,8 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        log(f"[BACKUP] 无法创建目录 {backup_dir}: {e}")
-        raise
+        log(f"[BACKUP] 无法创建目录 {backup_dir}: {e}，跳过自动备份")
+        return None  # 不崩溃，静默跳过
     for name in DATA_FILES.values():
         src = data_dir / name
         if src.exists():

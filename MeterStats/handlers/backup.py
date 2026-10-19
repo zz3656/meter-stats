@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from utils import send_json, read_body
-from storage import backup_data, DATA_FILES, log
+from storage import backup_data, DATA_FILES, log, _cache_clear
 from handlers._base import get_data_paths
 from utils.api import _validate_zip_safely
 
@@ -293,6 +293,9 @@ def handle_post_restore(handler):
         send_json(handler, 200, {"ok": False, "error": "ZIP 文件格式错误"})
     except Exception as e:
         send_json(handler, 200, {"ok": False, "error": f"恢复失败: {e}"})
+    finally:
+        # 清除 JSON 缓存，确保恢复后的数据立即可读（mtime 缓存未更新）
+        _cache_clear()
 
 
 def handle_post_upload(handler):
@@ -454,3 +457,5 @@ def handle_post_upload(handler):
         "restored": restored,
         "pre_backup": str(pre_backup) if pre_backup else None,
     })
+    # 清除 JSON 缓存，确保上传/恢复后的数据立即可读
+    _cache_clear()

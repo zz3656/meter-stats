@@ -11,12 +11,13 @@ window.METER = {
     STORAGE_KEY_CHARGES: 'meter_charges_cache',
 };
 
-let CURRENT_READINGS = []; // 抄表数据
-let CURRENT_CHARGES = []; // 充值数据
-let CURRENT_WATER_READINGS = []; // 水电表底数据 (main_meter/sub_meter/water)
-let CURRENT_ITEMS = []; // 物品列表
-let CURRENT_PURCHASES = []; // 申购列表
-let CURRENT_DUTY = []; // 值班记录
+// 全局数据 — 必须挂在 window 上，因为 fetchSnapshot() 通过 window[globalKey] 赋值
+window.CURRENT_READINGS = []; // 抄表数据
+window.CURRENT_CHARGES = []; // 充值数据
+window.CURRENT_WATER_READINGS = []; // 水电表底数据 (main_meter/sub_meter/water)
+window.CURRENT_ITEMS = []; // 物品列表
+window.CURRENT_PURCHASES = []; // 申购列表
+window.CURRENT_DUTY = []; // 值班记录
 
 // API 调用封装 (各模块通过 METER.api 访问)
 async function _api(method, path, body) {
@@ -68,8 +69,12 @@ async function fetchWaterReadings() {
     catch (e) { console.warn('fetchWaterReadings 失败:', e); CURRENT_WATER_READINGS = []; return []; }
 }
 async function fetchItems() {
-    try { const data = await _api('GET', '/api/items'); CURRENT_ITEMS = data; return data; }
-    catch (e) { console.warn('fetchItems 失败:', e); CURRENT_ITEMS = []; return []; }
+    try { const data = await _api('GET', '/api/items'); 
+        // 后端 handle_get 始终返回分页格式 {data, total, page, limit}
+        // 提取实际数组（向后兼容：如果直接返回数组则直接用）
+        CURRENT_ITEMS = Array.isArray(data) ? data : (data.data || []); 
+        return CURRENT_ITEMS; 
+    } catch (e) { console.warn('fetchItems 失败:', e); CURRENT_ITEMS = []; return []; }
 }
 async function fetchPurchases() {
     try { const data = await _api('GET', '/api/purchases'); CURRENT_PURCHASES = data; return data; }
