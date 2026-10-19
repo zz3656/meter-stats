@@ -92,9 +92,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 MeterStats v0.1.1
+## 📦 MeterStats veade78be
 
-提交 `638f128`
+提交 `49be1a4`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,6 +103,7 @@ docker compose up -d
 ```
 
 
+- 修复月度报告复制(TSV+Swift桥接)+删除导出Word按钮 + 新图标 + 前后端分页兼容
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -112,7 +113,9 @@ docker compose up -d
 
 ### 🐛 问题修复
 
-- compute_version_token 加入 js/*.js 确保前端 JS 修改后 token 更新
+- 修复模板字符串语法错误 + Tab 切换后数据不显示 — - features_utilities.
+- 切换 Tab 后数据不显示 — switchSection 中重新渲染 — 根因: renderAll() 在页面加载时只执行一次，渲染到隐藏的 section。
+- 抄表充值记录不显示 — refreshMonthSelectors后重新渲染 — - forms_selectors.
 - XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
 - ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
 - url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
@@ -155,5 +158,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...638f128)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...49be1a4)
 
