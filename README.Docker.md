@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats veade78be
 
-提交 `49be1a4`
+提交 `953b1b8`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,6 @@ docker compose up -d
 ```
 
 
-- 修复月度报告复制(TSV+Swift桥接)+删除导出Word按钮 + 新图标 + 前后端分页兼容
 - 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
 - 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
 - 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
@@ -149,6 +148,10 @@ docker compose up -d
 - README 添加 data/ 目录使用警告,说明不应手动修改
 - 重写 README + DockerHub 描述;清理冗余文件 — - .
 
+### 🔧 杂项
+
+- 清理过时文件 + 更新文档
+
 ### ⬆️ 升级
 
 ⚠️ **建议升级**:本次包含问题修复
@@ -158,5 +161,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...49be1a4)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...953b1b8)
 
