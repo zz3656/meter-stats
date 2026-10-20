@@ -259,7 +259,7 @@ jobs:
             products/*.dmg
           retention-days: 30
 
-      # ── 发布 Release(覆盖式 latest) ────────────────────────
+      # ── 发布 Release(带版本号 tag，保留历史版本) ────────────────
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -267,13 +267,9 @@ jobs:
           SHA: ${{ github.sha }}
         run: |
           set -e
-          TAG="latest"
+          # 使用版本号作为 tag，而不是 "latest"
+          TAG="v${VERSION}"
           echo "==> 发布 Release: $TAG (MeterStats v${VERSION}, commit ${SHA:0:7})"
-
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "ℹ️ Release $TAG 已存在,删除后重建"
-            gh release delete "$TAG" --yes --cleanup-tag || true
-          fi
 
           # 生成结构化更新说明
           # 脚本独立维护在 scripts/gen_release_notes.py,避免 heredoc 嵌套 + YAML 解析问题
@@ -292,11 +288,16 @@ jobs:
             exit 1
           fi
 
+          # 创建 release (如果已存在则覆盖)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "ℹ️ Release $TAG 已存在,删除后重建"
+            gh release delete "$TAG" --yes --cleanup-tag || true
+          fi
+
           gh release create "$TAG" products/*.dmg \
             --target "$SHA" \
-            --title "MeterStats v${VERSION}" \
-            --notes "$NOTES" \
-            --latest
+            --title "工程部管理系统 v${VERSION}" \
+            --notes "$NOTES"
 
           # 把 notes 写到文件,后续步骤可同步到 Docker Hub
           echo "$NOTES" > /tmp/release-notes.md
