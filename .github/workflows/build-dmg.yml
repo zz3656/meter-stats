@@ -46,7 +46,7 @@ jobs:
           if [[ "${{ github.event.inputs.version }}" != "" ]]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(cat MeterStats/VERSION | tr -d ' \n\r')
+            VERSION=$(cat VERSION | tr -d ' \n\r')
           fi
           if [ -z "$VERSION" ]; then
             echo "❌ 无法确定版本号"
