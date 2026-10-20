@@ -92,9 +92,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 vv0.1.1
+## 📦 工程部管理系统 v0.1.1
 
-提交 `01fd9b9`
+提交 `e1bc635`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,7 @@ docker compose up -d
 ```
 
 
-- 修复版本号显示 — MeterStats/VERSION 被覆盖为 commit hash，改为从根目录 VERSION 读取
+- VERSION 文件统一为纯版本号（无 v 前缀），避免 GitHub Actions 生成 vv0.1.1
 
 ### ⬆️ 升级
 
@@ -114,5 +114,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/veade78be...01fd9b9)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/vv0.1.1...e1bc635)
 
