@@ -92,9 +92,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 veade78be
+## 📦 工程部管理系统 vv0.1.1
 
-提交 `6592594`
+提交 `01fd9b9`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,12 +103,7 @@ docker compose up -d
 ```
 
 
-- 修复 Docker 日志时间（尊重 TZ 环境变量）+ 更新 A2v12 图标 + 更新文档 — - storage.
-
-### 🐛 问题修复
-
-- 修复 GitHub Actions Release 构建 — 使用版本号 tag 替代 latest，保留历史版本
-- 修复 Docker 日志时间，尊重 TZ 环境变量（v0.1.1）
+- 修复版本号显示 — MeterStats/VERSION 被覆盖为 commit hash，改为从根目录 VERSION 读取
 
 ### ⬆️ 升级
 
@@ -119,5 +114,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...6592594)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/veade78be...01fd9b9)
 
