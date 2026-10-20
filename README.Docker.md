@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 v0.1.1
 
-提交 `e1bc635`
+提交 `8a49496`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,16 +103,15 @@ docker compose up -d
 ```
 
 
-- VERSION 文件统一为纯版本号（无 v 前缀），避免 GitHub Actions 生成 vv0.1.1
+- 同步版本号到所有组件
 
 ### ⬆️ 升级
 
-⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/vv0.1.1...e1bc635)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/vv0.1.1...8a49496)
 
