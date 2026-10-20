@@ -20,7 +20,7 @@
 │   ├── admin.js                     # 管理后台逻辑
 │   ├── handlers/                    # 各模块 API handler
 │   └── utils/                       # 工具函数
-├── docker/                          # Docker 部署（纯 Web 服务版）
+├── docker/                          # Docker 部署（纯后端服务版）
 │   ├── Dockerfile
 │   ├── docker-compose.yml
 │   └── entrypoint.sh                # Docker 适配入口
@@ -52,7 +52,7 @@ python3 -m unittest discover -s tests -v
 ### Docker 开发
 
 ```bash
-# 启动（Web 版，无需 macOS）
+# 启动（无需 macOS)）
 docker compose up -d
 
 # 查看日志
@@ -97,7 +97,7 @@ docker compose exec meter-stats bash
   - web: ...
   - macOS: ...
   - docker: ...
-  - 三端: ...
+  - 双端: ...
 ```
 
 ### type 必填
@@ -120,7 +120,7 @@ docker compose exec meter-stats bash
 
 | scope | 说明 | release notes 显示 |
 |---|---|---|
-| `web` / `frontend` | Web/Docker 前端 | 🌐 Web/Docker 前端 |
+| `web` / `frontend` | macOS 前端 | 🍎 macOS 前端 |
 | `macos` / `mac` / `mac-app` | macOS 原生 App | 🍎 macOS 原生 App |
 | `docker` / `container` | Docker 部署 | 🐳 Docker 部署 |
 | `backend` / `server` | 后端 Python | 📦 backend |
@@ -140,8 +140,8 @@ feat(charges): 支持批量导入历史充值记录
   2. 前端 charges-batch.html 上传 Excel 解析后调用
 
 影响范围:
-  - web: 需要重新加载页面
-  - 三端: 后端 API 升级,需重启服务
+  - macOS: 需要重新安装应用
+  - 双端: 后端 API 升级,需重启服务
 
 验证步骤:
   1. 准备 5 条 JSON 测试数据

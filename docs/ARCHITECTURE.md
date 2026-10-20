@@ -30,9 +30,8 @@
 
 | 形态 | 入口 | 用途 |
 |------|------|------|
-| macOS App | `MeterStats.app/Contents/Resources/server.py` | 单机日常使用 |
-| Docker | `docker-compose.yml` | 局域网/小团队共享 |
-| 浏览器(纯 HTML) | `index.html` + 静态服务器 | 临时查看 |
+| macOS App | `MeterStats.app/Contents/Resources/server.py` | 工程部本地机 |
+|| Docker | `docker-compose.yml` | NAS / Linux 服务器 |
 
 ---
 
@@ -68,6 +67,7 @@
 │                          │  - auth.py           │                  │
 │                          │  - users.py          │                  │
 │                          │  - readings.py       │                  │
+│                          │  - readings_water.py │                  │
 │                          │  - charges.py        │                  │
 │                          │  - items.py          │                  │
 │                          │  - purchases.py      │                  │
@@ -223,17 +223,20 @@
 | 模块 | 职责 |
 |------|------|
 | `render_stats.js` | 当月统计卡片(4 表 + 合计) |
-| `render_charts.js` | 每日用电折线图 + 单天饼图 + 月度饼图 |
-| `render_charge_alert.js` | 充值预警卡片(剩余天数 + 建议充值金额) |
-| `render_records.js` | 抄表/水电历史记录表 |
-| `render_tables.js` | 物品/申购/工作记录表格 |
-| `render_edit.js` | 编辑弹窗(充值/水电/物品借出归还)+ `escapeHtml` |
-| `render_monthly.js` | 月度报告页 + 工作记录图片上传/压缩 |
-| `render_weekly.js` | 每周汇报(4 表对比、趋势卡片、复制到剪贴板) |
-| `render_weekly_trend.js` | 每周汇报的"4 块表详细趋势"卡片 |
-| `render_yearly.js` | 年度汇总页 |
-| `render_reports.js` | 月度报告页 + 单日汇报复制 |
-| `render_duty_images.js` | 工作记录图片灯箱(独立文件避免循环依赖) |
+|| `render_charts.js` | 每日用电折线图 + 单天饼图 + 月度饼图 |
+|| `render_pie_charts.js` | 独立饼图组件(复用 render_charts) |
+|| `render_charge_alert.js` | 充值预警卡片(剩余天数 + 建议充值金额) |
+|| `render_records.js` | 抄表/水电历史记录表 |
+|| `render_tables.js` | 物品/申购/工作记录表格 |
+|| `render_edit.js` | 编辑弹窗(充值/水电/物品借出归还)+ `escapeHtml` |
+|| `render_monthly.js` | 月度报告页 + 工作记录图片上传/压缩 |
+|| `render_duty_image_upload.js` | 工作记录图片上传(独立文件避免循环依赖) |
+|| `render_duty_images.js` | 工作记录图片灯箱 |
+|| `render_weekly.js` | 每周汇报(4 表对比、趋势卡片、复制到剪贴板) |
+|| `render_weekly_trend.js` | 每周汇报的"4 块表详细趋势"卡片 |
+|| `render_weekly_utils.js` | 每周汇报工具函数 |
+|| `render_yearly.js` | 年度汇总页 |
+|| `render_reports.js` | 月度报告页 + 单日汇报复制 |
 
 ### Forms(表单处理)
 

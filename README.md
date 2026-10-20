@@ -78,23 +78,14 @@ docker run -d --name meter-stats \
 >
 > 如需彻底免提示,需配置 Apple Developer ID 证书并走签名+公证流程(打 `v*` tag 自动执行)。
 
-### 方式四：源码本地运行
-
-```bash
-# 要求 Python 3.9+(零 pip 依赖)
-cd MeterStats
-./run.sh    # 一键启动;数据写入 MeterStats/.data(已 gitignore)
-```
-
-## 📦 三端部署
+## 📦 双端部署
 
 | 端 | 入口 | 产物 | 适用 |
 |---|---|---|---|
-| 🌐 Web | `python3 server.py` | Docker 镜像 `zz3656/meter-stats` | 服务器/NAS / 远程访问 |
 | 🍎 macOS | Swift + Python | `MeterStats.app` (DMG) | 工程部本地机 |
-| 🐳 Docker | docker-compose | 多平台镜像 (amd64 + arm64) | 飞牛 OS / Linux 服务器 |
+| 🐳 Docker | docker-compose | 多平台镜像 (amd64 + arm64) | NAS / Linux 服务器 |
 
-> macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份后端,所以三端**共享同一份业务代码**(`MeterStats/` 下的 Python handlers)。
+| macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份后端,所以**共享同一份业务代码**(`MeterStats/` 下的 Python handlers)。
 
 ## 📋 环境变量
 
@@ -148,21 +139,34 @@ docker compose down && docker compose up -d
 ```
 .
 ├── MeterStats/                  # 后端 + macOS bundle 内容(共享)
-│   ├── handlers/                # API 路由处理
+│   ├── handlers/              # API 路由处理
 │   │   ├── _base.py             # JsonModelHandler 基类
-│   │   ├── readings.py
-│   │   ├── charges.py
-│   │   ├── items.py
-│   │   ├── purchases.py
-│   │   ├── duty.py              # 值班录入
-│   │   ├── admin.py
-│   │   ├── backup.py
-│   │   ├── reports.py
-│   │   ├── settings.py
-│   │   └── permissions.py
+│   │   ├── readings.py          # 电表抄表 CRUD
+│   │   │   ├── readings_water.py  # 水电表底 CRUD
+│   │   │   ├── charges.py       # 充值记录 CRUD
+│   │   │   ├── items.py         # 物品管理
+│   │   │   ├── purchases.py     # 申购流程
+│   │   │   ├── duty.py          # 值班记录
+│   │   │   ├── reports.py       # 报表生成
+│   │   │   ├── backup.py        # 备份业务逻辑
+│   │   │   ├── backup_admin.py  # 备份 HTTP 入口
+│   │   │   ├── admin.py         # 管理门面(re-export)
+│   │   │   ├── admin_tools.py   # 目录浏览/审计日志/水电迁移
+│   │   │   ├── settings.py      # 系统设置
+│   │   │   ├── auth.py          # 登录/鉴权
+│   │   │   ├── permissions.py   # 三级权限
+│   │   │   ├── users.py         # 用户管理
+│   │   │   └── dataimport.py    # CSV 导入
 │   ├── utils/api.py             # send_json / read_body / CORS
 │   ├── index.html               # SPA 入口(所有页面都在这里)
-│   ├── app.js / admin.js        # 前端逻辑
+│   ├── js/                    # 前端 JS (按功能拆分,~40 文件)
+│   │   ├── init.js            # 初始化 + 路由
+│   │   ├── core_*.js          # 核心模块 (theme/meterConfig/accessibility)
+│   │   ├── data_*.js          # 数据获取/处理
+│   │   ├── forms_*.js         # 表单交互
+│   │   ├── render_*.js        # 渲染 (charts/tables/reports)
+│   │   └── features_*.js      # 功能模块 (topup/image_settings)
+│   ├── app.js / admin.js        # 前端逻辑(兼容旧入口)
 │   ├── style.css                # 主题变量 + 响应式
 │   ├── server.py                # 入口
 │   ├── ServerManager.swift      # macOS 启动 Python 后端
