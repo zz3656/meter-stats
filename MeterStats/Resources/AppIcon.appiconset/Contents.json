@@ -1,47 +1,16 @@
 {
-  "images": [
-    {
-      "size": "128x128",
-      "idiom": "mac",
-      "filename": "128x128.png"
-    },
-    {
-      "size": "16x16",
-      "idiom": "mac",
-      "filename": "16x16.png"
-    },
-    {
-      "size": "256x256",
-      "idiom": "mac",
-      "filename": "256x256.png"
-    },
-    {
-      "size": "256x256",
-      "idiom": "mac",
-      "filename": "256x256@2x.png"
-    },
-    {
-      "size": "32x32",
-      "idiom": "mac",
-      "filename": "32x32.png"
-    },
-    {
-      "size": "32x32",
-      "idiom": "mac",
-      "filename": "32x32@2x.png"
-    },
-    {
-      "size": "512x512",
-      "idiom": "mac",
-      "filename": "512x512.png"
-    },
-    {
-      "size": "512x512",
-      "idiom": "mac",
-      "filename": "512x512@2x.png"
+  "CFBundleIcons": {
+    "CFBundlePrimaryIcon": {
+      "CFBundleIconFiles": [
+        "16x16.png",
+        "32x32.png",
+        "48x48.png",
+        "128x128.png",
+        "256x256.png",
+        "512x512.png",
+        "1024x1024.png"
+      ],
+      "CFBundleIconName": "AppIcon"
     }
-  ],
-  "info": {
-    "author": "xcode"
   }
 }
