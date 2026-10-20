@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 MeterStats veade78be
 
-提交 `953b1b8`
+提交 `de00c51`
 
 **升级 Docker 容器**:
 ```bash
@@ -150,7 +150,7 @@ docker compose up -d
 
 ### 🔧 杂项
 
-- 清理过时文件 + 更新文档
+- 清理临时文件
 
 ### ⬆️ 升级
 
@@ -161,5 +161,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...953b1b8)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...de00c51)
 
