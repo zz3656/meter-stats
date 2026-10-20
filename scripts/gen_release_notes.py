@@ -151,7 +151,7 @@ def main() -> int:
     upgrade_section = "### ⬆️ 升级\n\n" + "\n".join(upgrade_hints) + "\n"
 
     header = "\n".join([
-        f"## 📦 MeterStats v{version}",
+        f"## 📦 工程部管理系统 v{version}",
         "",
         f"提交 `{sha_short}`",
         "",

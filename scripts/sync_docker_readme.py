@@ -28,9 +28,9 @@ def main(notes_path: str, version: str) -> int:
     if split_marker in original:
         original = original.split(split_marker)[0].rstrip()
 
-    # 提取最新 release block(从"## 📦 MeterStats v"开头的整段,直到下一个 ## 📦 或文件末尾)
+    # 提取最新 release block(从"## 📦 工程部管理系统 v"开头的整段,直到下一个 ## 📦 或文件末尾)
     version_blocks = re.findall(
-        r"## 📦 MeterStats v[^\n]+\n(?:(?!## 📦 MeterStats v).)*",
+        r"## 📦 工程部管理系统 v[^\n]+\n(?:(?!## 📦 工程部管理系统 v).)*",
         notes, re.DOTALL
     )
     new_block = version_blocks[-1] if version_blocks else notes

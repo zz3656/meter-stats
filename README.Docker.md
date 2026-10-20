@@ -1,4 +1,4 @@
-# 📊 电表统计 — Meter Stats
+# 📊 工程部管理系统 — Meter Stats
 
 > 面向酒吧工程部的电表数据管理工具。4 表抄表、充值、月度/年度报表、物品借还、申购、值班工作记录,三级权限。Docker 一键部署,浏览器直接访问。
 
@@ -92,7 +92,7 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 MeterStats veade78be
+## 📦 工程部管理系统 veade78be
 
 提交 `de00c51`
 

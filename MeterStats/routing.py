@@ -30,6 +30,7 @@ from handlers.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
     handle_get_yearly_report, handle_get_monthly_utilities,
     handle_get_snapshot, handle_get_report_cache,
+    handle_get_version,
 )
 from handlers.dataimport import handle_post_import, handle_get_import_template
 from handlers.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
@@ -60,6 +61,7 @@ from handlers.admin import (
 
 _GET_ROUTES = {
     "/api/health": handle_get_health,
+    "/api/version": handle_get_version,
     "/api/snapshot": handle_get_snapshot,
     "/api/export": handle_get_export,
     "/api/monthly-report": handle_get_monthly_report,

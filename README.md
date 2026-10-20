@@ -1,10 +1,10 @@
-# 📊 电表统计 — Meter Stats
+# 📊 工程部管理系统 — Meter Stats
 
-> 面向酒吧工程部的电表数据管理工具。支持 4 表抄表、充值、月度/年度报表、物品借还、申购、值班工作记录，三级权限管理。Web、macOS、Docker 三端部署，开箱即用。
+> 面向酒吧工程部的电表数据管理工具。支持 4 表抄表、充值、月度/年度报表、物品借还、申购、值班工作记录，三级权限管理。Docker 和 macOS 双端部署，开箱即用。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
-[![Platforms](https://img.shields.io/badge/platform-web%20%7C%20macOS%20%7C%20docker-lightgrey.svg)](#-部署方式)
+[![Platforms](https://img.shields.io/badge/platform-Docker%20%7C%20macOS-lightgrey.svg)](#-部署方式)
 
 ## ✨ 核心功能
 

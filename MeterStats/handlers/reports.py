@@ -38,6 +38,15 @@ def handle_get_health(handler):
     })
 
 
+def handle_get_version(handler):
+    """GET /api/version — 返回当前版本号。"""
+    try:
+        from server import VERSION
+        send_json(handler, 200, {"version": VERSION})
+    except Exception:
+        send_json(handler, 200, {"version": "unknown"})
+
+
 def handle_get_snapshot(handler):
     """GET /api/snapshot — 一次性返回所有模型数据,前端启动时用一次调用代替 5 次 GET。"""
     paths = get_data_paths()

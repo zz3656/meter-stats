@@ -1,6 +1,6 @@
-# Meter Stats — 电表统计
+# 📊 工程部管理系统 — Meter Stats
 
-酒吧工程部用的电表数据管理工具。Python 后端 (零 pip 依赖) + 纯 HTML/CSS/JS 前端，支持 macOS .app、Docker、本地 `python3 server.py` 三端部署。所有三端共享同一套后端代码 (`MeterStats/`)。
+> 面向酒吧工程部的电表数据管理工具。Python 后端 (零 pip 依赖) + 纯 HTML/CSS/JS 前端，支持 macOS .app、Docker 双端部署。所有端共享同一套后端代码 (`MeterStats/`)。
 
 ## 运行与构建
 

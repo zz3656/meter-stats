@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>MeterStats · 电表统计</title>
+<title>工程部管理系统 · Meter Stats</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -48,7 +48,7 @@
   <div class="header-left">
     <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="切换侧栏" aria-label="切换侧栏">☰</button>
     <h1>⚡ 工程部管理系统</h1>
-    <p>录入抄表读数 · 实时统计 · 历史趋势</p>
+    <p id="version-display" style="font-size:12px;color:var(--muted);margin:0;"></p>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button type="button" class="header-backup-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:7px 10px;">🌙</button>

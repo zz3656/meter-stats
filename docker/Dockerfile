@@ -1,5 +1,5 @@
 # ============================================================
-# 电表统计 — Docker 部署
+# 工程部管理系统 — Docker 部署
 # ============================================================
 # 构建:  docker build -f docker/Dockerfile -t zz3656/meter-stats .
 # 运行:  docker run -d --name meter-stats \

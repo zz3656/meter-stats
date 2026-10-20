@@ -45,6 +45,20 @@ function clearAuth() {
 }
 
 // ===== 登录 =====
+
+// 显示版本号（页面加载后立即获取）
+(function displayVersion() {
+  fetch('/api/version')
+    .then(r => r.json())
+    .then(res => {
+      const el = document.getElementById('version-display');
+      if (el && res.version) {
+        el.textContent = 'v' + res.version;
+      }
+    })
+    .catch(() => {});
+})();
+
 function doLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
