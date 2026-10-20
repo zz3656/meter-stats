@@ -161,5 +161,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.0...de00c51)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...de00c51)
 

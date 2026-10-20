@@ -12,5 +12,42 @@
       ],
       "CFBundleIconName": "AppIcon"
     }
-  }
+  },
+  "images": [
+    {
+      "size": "1024x1024",
+      "scale": "1x",
+      "filename": "1024x1024.png"
+    },
+    {
+      "size": "128x128",
+      "scale": "1x",
+      "filename": "128x128.png"
+    },
+    {
+      "size": "16x16",
+      "scale": "1x",
+      "filename": "16x16.png"
+    },
+    {
+      "size": "256x256",
+      "scale": "1x",
+      "filename": "256x256.png"
+    },
+    {
+      "size": "32x32",
+      "scale": "1x",
+      "filename": "32x32.png"
+    },
+    {
+      "size": "48x48",
+      "scale": "1x",
+      "filename": "48x48.png"
+    },
+    {
+      "size": "512x512",
+      "scale": "1x",
+      "filename": "512x512.png"
+    }
+  ]
 }
