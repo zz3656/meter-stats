@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 veade78be
 
-提交 `de00c51`
+提交 `6b0c698`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,54 +103,12 @@ docker compose up -d
 ```
 
 
-- 恢复流程直接弹文件选择器 + 支持 zip 备份上传 — - pickBackupDir 在浏览器/Docker 环境下,原本需要先弹一个确认模态框 / (showBrowserBackupPicker) → 用户点「
-- 录入集成+侧栏重构+UI统一+移动端适配 — - 每个记录页面在 header 加 ➕ 新增按钮(弹窗与侧栏录入共用 submitXxxAdd(source) 函数) / - 抄表/水电弹窗合并为带 Tab
-- 值班录入新增故障区域字段 — - 值班录入表单新增「故障区域」输入框(选填,如:1#大厅、2#消防) / - 工作记录表格新增「故障区域」列展示 / - 后端 duty.
-- 完善借出归还 — 新增历史记录表与归还弹窗 — - 物品记录页面新增「借出 / 归还 记录」表格,展示每次借出和后续归还情况 / - 归还流程从简单的二次确认弹窗改为完整弹窗:不要求借出人,可填归还数量(默认
-- 物品记录新增借出和归还功能 — - handlers/items.
-- 新增值班录入和工作记录功能 — - 新增 handlers/duty.
+- 添加版本号显示 + 统一项目命名 + 移除 Web 端 — - index.
+- 修复 Docker 日志时间（尊重 TZ 环境变量）+ 更新 A2v12 图标 + 更新文档 — - storage.
 
 ### 🐛 问题修复
 
-- 修复模板字符串语法错误 + Tab 切换后数据不显示 — - features_utilities.
-- 切换 Tab 后数据不显示 — switchSection 中重新渲染 — 根因: renderAll() 在页面加载时只执行一次，渲染到隐藏的 section。
-- 抄表充值记录不显示 — refreshMonthSelectors后重新渲染 — - forms_selectors.
-- XSS 防护 + 跨平台兼容 + 死代码清理 — XSS 防护: / - escapeHtml 单点权威化(从 render_edit.
-- ensure DATA_PATHS includes readings_water and add Docker data diagnostics — - Add 'readings_water' to DATA_PATHS in app_handler.
-- url.lastPath → url.lastPathComponent — Swift URL 类型的属性名是 lastPathComponent,不是 lastPath。
-- 修复 macOS app 点击恢复数据不弹文件选择器 — 根因:macOS WKWebView 默认不实现 WKUIDelegate,任何 <input type="file"> / 的 .
-- 注入 ?v=<token> 绕过 Cloudflare CDN 缓存旧版 app.js — 根因:Cloudflare CDN 默认缓存 .
-- 修复 fetchSnapshot/admin 恢复后页面不刷新导致用户看不到数据 — 两个相关 bug: / - fetchSnapshot 成功路径只写 localStorage 缓存,未赋值全局 / CURRENT_READINGS / CU
-- build-dmg shell 步骤改用 $version 取版本号($VERSION 为空) — 之前 $GITHUB_ENV 写入的是 'version=0.
-- 修正 build-dmg release artifact 文件名缺失版本号 — ${{ env.
-- 手动备份恢复数据到 docker 不生效 — 根因: / 1.
-- 修复 Build DMG 失败 + push 自动构建发布 — - 修复手动触发 Build DMG 失败:无 Apple secrets 时证书步骤无条件执行 / 导致 security import 失败。
-- 修复 build-dmg.yml 工作流 — - 移除已弃用的 altool 引用 / - 使用新的 notarytool 替代 altool --notarize 公证
-- 完善 build-dmg.yml 版本判断逻辑
-
-### ⚡ 性能优化
-
-- 缓存真 LRU + 日志统一 + toast 统一 + 响应式策略文档化 — storage.
-
-### ♻️ 重构
-
-- 拆分超大 JS 文件 + 解决跨文件隐式依赖 — 拆分(全部 ≤ 450 行约束): / - render_charts.
-- 拆分 admin.py 1162 行 → 4 个职责清晰子模块 — 将原 handlers/admin.
-- 精简 release notes 生成脚本,输出更简洁 — - 过滤噪音 commit([skip ci]、自动同步 changelog、bump version) / - 按 type 分组(subject 去重,只保
-- 拆分 handlers/ + utils/, 引入认证/会话/CORS/PBKDF2 — 把原 server.
-
-### ✅ 测试
-
-- 加强测试覆盖 72 → 88,覆盖关键边界用例 + 修真实 bug — items 借出/归还 9 个边界用例(全新覆盖): / - 借出需要 borrower / 数量必须 > 0 / - 借出超出可用数量拒绝(精确边界值)
-
-### 📖 文档
-
-- README 添加 data/ 目录使用警告,说明不应手动修改
-- 重写 README + DockerHub 描述;清理冗余文件 — - .
-
-### 🔧 杂项
-
-- 清理临时文件
+- 修复 Docker 日志时间，尊重 TZ 环境变量（v0.1.1）
 
 ### ⬆️ 升级
 
@@ -161,5 +119,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...de00c51)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...6b0c698)
 
