@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import datetime, timedelta, timezone
+from storage import _local_now
 from pathlib import Path
 from threading import RLock
 
@@ -209,13 +210,13 @@ _REPORT_CACHE_TTL = 5 * 60  # 5 分钟
 
 def _cache_report(month: str, report: dict) -> None:
     """将月报结果写入缓存。"""
-    now = datetime.now(timezone.utc).timestamp()
+    now = _local_now().timestamp()
     with _report_cache_lock:
         _report_cache[month] = (now, report)
 
 def _get_cached_report(month: str) -> dict | None:
     """从缓存获取月报。返回 None 表示缓存未命中或已过期。"""
-    now = datetime.now(timezone.utc).timestamp()
+    now = _local_now().timestamp()
     with _report_cache_lock:
         entry = _report_cache.get(month)
         if entry is None:
@@ -235,7 +236,7 @@ def _invalidate_report_cache() -> None:
 def _get_report_cache_stats() -> dict:
     """获取缓存统计（仅管理员查看）。"""
     with _report_cache_lock:
-        now = datetime.now(timezone.utc).timestamp()
+        now = _local_now().timestamp()
         entries = []
         for month, (cache_time, data) in _report_cache.items():
             age = now - cache_time

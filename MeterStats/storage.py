@@ -109,6 +109,25 @@ def get_data_dir() -> Path:
     standard.mkdir(parents=True, exist_ok=True)
     return standard
 
+# 从 TZ 环境变量获取本地时区（默认 Asia/Shanghai）
+def _get_local_tz():
+    tz_name = os.environ.get("TZ", "Asia/Shanghai").strip()
+    if not tz_name:
+        return timezone.utc
+    try:
+        import zoneinfo
+        return zoneinfo.ZoneInfo(tz_name)  # ZoneInfo 可直接传给 datetime.now()
+    except Exception:
+        # 兼容 Python < 3.9（无 zoneinfo）：回退到 UTC
+        return timezone.utc
+
+
+def _local_now():
+    """返回当前本地时间（考虑 TZ 环境变量）。"""
+    return datetime.now(_get_local_tz())
+
+
+
 
 def init_data_files(data_dir: Path) -> dict:
     """确保所有数据文件存在,不存在则创建空数组文件。
@@ -137,14 +156,14 @@ def init_data_files(data_dir: Path) -> dict:
         import threading as _threading
         from datetime import datetime, timezone, timedelta
 
-        now = datetime.now(timezone.utc)
+        now = _local_now()
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         next_run = tomorrow.isoformat()
 
         def _daily_backup_loop():
             """每天 0 点执行一次自动备份。"""
             while True:
-                now = datetime.now(timezone.utc)
+                now = _local_now()
                 # 计算到次日 0 点的秒数
                 tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
                 seconds_to_midnight = (tomorrow - now).total_seconds()
@@ -222,7 +241,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
-    utc_now = datetime.now(timezone.utc)
+    utc_now = _local_now()
     if force:
         stamp = utc_now.strftime("%Y%m%d_%H%M%S")
         backup_dir = parent / stamp
@@ -294,7 +313,7 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         retention_days = int(_settings_cache.get("backup_retention_count", 5)) if _settings_cache else 5
     except Exception:
         retention_days = 5
-    now = datetime.now(timezone.utc)
+    now = _local_now()
     cutoff_ts = (now - timedelta(days=retention_days)).timestamp()
     for f in parent.rglob("*.zip"):
         if f.is_file() and not f.name.startswith("auto-bak-"):
@@ -331,7 +350,7 @@ def _cleanup_legacy_backups(backup_parent: Path) -> None:
 
 
 def log(msg: str) -> None:
-    utc_now = datetime.now(timezone.utc)
+    utc_now = _local_now()
     ts = utc_now.strftime("%H:%M:%S")
     print(f"[{ts}] {msg}", flush=True)
 

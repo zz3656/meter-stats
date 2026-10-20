@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import threading
 from datetime import datetime, timezone
+from storage import _local_now
 from pathlib import Path
 from typing import Optional
 
@@ -45,7 +46,7 @@ def log_audit(
     if _audit_file is None:
         return
     entry = {
-        "ts": datetime.now(timezone.utc).isoformat(),
+        "ts": _local_now().isoformat(),
         "user": user,
         "role": role,
         "action": action,
