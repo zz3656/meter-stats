@@ -53,7 +53,11 @@ function clearAuth() {
     .then(res => {
       const el = document.getElementById('version-display');
       if (el && res.version) {
-        el.textContent = 'v' + res.version;
+        // 去掉版本号前缀的 'v'，避免显示 vv0.1.1
+        const v = res.version.startsWith('v') || res.version.startsWith('V')
+          ? res.version.slice(1)
+          : res.version;
+        el.textContent = 'v' + v;
       }
     })
     .catch(() => {});
