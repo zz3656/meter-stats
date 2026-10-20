@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 veade78be
 
-提交 `6b0c698`
+提交 `6592594`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,11 +103,11 @@ docker compose up -d
 ```
 
 
-- 添加版本号显示 + 统一项目命名 + 移除 Web 端 — - index.
 - 修复 Docker 日志时间（尊重 TZ 环境变量）+ 更新 A2v12 图标 + 更新文档 — - storage.
 
 ### 🐛 问题修复
 
+- 修复 GitHub Actions Release 构建 — 使用版本号 tag 替代 latest，保留历史版本
 - 修复 Docker 日志时间，尊重 TZ 环境变量（v0.1.1）
 
 ### ⬆️ 升级
@@ -119,5 +119,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...6b0c698)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...6592594)
 
