@@ -1,3 +1,4 @@
+// === 充值弹窗管理 ===
 
 // ===== 充值计算弹窗 =====
 // 注意:.modal-backdrop 默认 opacity:0 + pointer-events:none,必须加 .show 类才可见可点
@@ -11,6 +12,7 @@ function openTopupModal() {
 }
 function closeTopupModal() {
   const backdrop = document.getElementById('topup-modal-backdrop');
+// === 充值核心逻辑 ===
   if (backdrop) backdrop.classList.remove('show');
 }
 
@@ -84,6 +86,7 @@ function refreshChargeTopupSummary() {
 
 // 从摘要卡片打开弹窗并预填某块表的值
 function openTopupForMeter(meterKey) {
+// === 充值确认弹窗 ===
   openTopupModal();
   // 弹窗打开后预填该表的值
   setTimeout(() => {
@@ -100,6 +103,7 @@ function openTopupForMeter(meterKey) {
 }
 // 按预充天数 × 本月日均,算出每块表需充值表读数 + 金额(实时)
 function recalcTopup() {
+// === 充值工具函数 ===
   const daysEl = document.getElementById('topup-days-modal');
   const resultEl = document.getElementById('topup-result-modal');
   const totalEl = document.getElementById('topup-total-modal');
@@ -113,6 +117,7 @@ function recalcTopup() {
   }
   let totalMeter = 0, totalActual = 0, totalYuan = 0;
   const rows = CHARGE_METERS.map(m => {
+// === 充值记录表 ===
     const usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
     const daily = usage ? usage.daily : 0;  // 实际度数/天
     const actualKwh = daily * days;          // 实际度数(读数 × 倍率)
@@ -170,6 +175,7 @@ function onTopupMeterInput(inputEl) {
 // 用户输入实际度数(取整充值)→ 反向计算该块表的表读数 + 金额,并刷新合计
 function onTopupActualInput(inputEl) {
   const row = inputEl.closest('.topup-meter-card');
+// === 充值统计 ===
   const meterInput = row.querySelector('.topup-meter');
   const yuanSpan = row.querySelector('.topup-yuan');
   const mult = parseFloat(inputEl.getAttribute('data-mult'));
@@ -243,6 +249,7 @@ document.getElementById('lend-confirm').addEventListener('click', async () => {
   const id = document.getElementById('lend-item-id').value;
   const qty = parseInt(document.getElementById('lend-qty').value);
   const borrower = document.getElementById('lend-borrower').value.trim();
+// === 充值历史表 ===
   const note = document.getElementById('lend-note').value.trim();
 
   if (!qty || qty <= 0) {

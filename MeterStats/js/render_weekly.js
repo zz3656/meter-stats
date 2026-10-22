@@ -1,3 +1,4 @@
+// === 周报表核心 ===
 // ===== 每周汇报 =====
 // 目标周:选择最近一周,自动计算上周和上上周数据用于对比。
 // 工具函数(_readingsBetween / calcPeriodUsage / countTags / weekKey /
@@ -11,6 +12,7 @@ let _weeklyChart = null;
  * 填充目标周下拉(最近4周)
  */
 function populateWeeklyWeekSelector() {
+// === 周表工具函数 ===
   const sel = document.getElementById('weekly-target-week');
   if (!sel) return;
 
@@ -82,10 +84,12 @@ function loadWeeklyReport() {
   const mKeys = ['hall', 'fire', 'private_room', 'ac'];
   let totalTarget = 0, totalPrev = 0;
   const rows = mKeys.map(k => {
+// === 周表渲染 ===
     const t = calcPeriodUsage(readings, charges, k, targetStart, targetEnd);
     const p = calcPeriodUsage(readings, charges, k, prevStart, prevEnd);
 
     const tCost = t.kwh * ELECTRICITY_PRICE;
+// === 周报表工具函数集 ===
     const pCost = p.kwh * ELECTRICITY_PRICE;
     let changeStr = '—';
     let changeClass = '';

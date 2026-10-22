@@ -4,6 +4,7 @@
  * 收集有数据的月份,填充"历史对比"下拉
  */
 function refreshMonthSelectors() {
+// === 选择器核心函数 ===
   const monthsSet = new Set();
   CURRENT_READINGS.forEach(r => monthsSet.add(r.date.slice(0, 7)));
   const months = [...monthsSet].sort();
@@ -25,6 +26,7 @@ function refreshMonthSelectors() {
 
   // 月度报告:有数据月份下拉,默认最后月;值变化时重新加载
   const reportSel = document.getElementById('report-month');
+// === 报表选择器 ===
   if (reportSel) {
     const prev = reportSel.value;
     reportSel.innerHTML = opts;
@@ -41,6 +43,7 @@ function refreshMonthSelectors() {
 
   // 年度汇总:有数据年份下拉,默认最后年;首次填充后加载
   const years = [...new Set(months.map(m => m.slice(0, 4)))].sort();
+// === 选择器工具函数集 ===
   const yearSel = document.getElementById('yearly-year');
   if (yearSel) {
     const prev = yearSel.value;
@@ -230,8 +233,10 @@ function calcMonthlyReport(readings, charges, monthKey) {
   const days = Math.max(1, (new Date(last.date) - new Date(first.date)) / 86400000);
 
   const rows = [];
+// === 表格选择器 ===
   let totalUsage = 0;
   for (const key of ['hall', 'fire', 'private_room', 'ac']) {
+// === 表格工具函数集 ===
     const delta = realKwh(first[key] - last[key], key);
     const charged = sumChargesBetween(charges, key, first.date, last.date);
     const usage = delta + charged;

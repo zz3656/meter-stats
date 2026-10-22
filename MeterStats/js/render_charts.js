@@ -1,3 +1,4 @@
+// === 图表工具函数 ===
 // ===== 图表实例(全局变量) =====
 let trendChart = null;
 // 饼图实例 dailyPieChart / monthlyPieChart / _monthlyPieChart / pieChart
@@ -105,6 +106,7 @@ function copyDayUsage() {
       const diff = p.kwh - avg.daily;
       const pct = (diff / avg.daily) * 100;
       const arrow = diff >= 0 ? '↑' : '↓';
+// === 物品/充值表渲染 ===
       vsM = ` 较本月日均${arrow}${Math.abs(pct).toFixed(1)}%`;
       mTotal += avg.daily; mHas = true;
     }
@@ -172,6 +174,7 @@ function copyTextWithFallback(text, successMsg) {
 
 // 浏览器原生复制（用于非 WKWebView 环境，或 Swift 桥接失败时回退）
 function browserCopy(text, successMsg) {
+// === 水电报表渲染 ===
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(text).then(
       () => showAlert(successMsg, 'success'),
@@ -202,6 +205,7 @@ function fallbackCopy(text, successMsg) {
 
 // 每日用电折线图 — 4 块表各自折线 + 充电叠加
 function renderTrendChart(readings, charges) {
+// === Chart.js 图表绘制 ===
   readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
   const el = document.getElementById('chart-trend');
   if (!el) return;  // 元素不存在时静默跳过（旧镜像无此元素）

@@ -1,7 +1,9 @@
+// === Toast 通知核心 ===
 // ===== 全局 Toast 提示覆盖层 =====
 let _toastTimer = null;
 function showToast(msg, type = 'success') {
   const overlay = document.getElementById('toast-overlay');
+// === 工具函数 ===
   const box = document.getElementById('toast-content');
   if (!box) { console.warn('toast-content not found'); return; }
   clearTimeout(_toastTimer);
@@ -21,6 +23,7 @@ function showToast(msg, type = 'success') {
 }
 
 function showAlert(msg, type = 'success') {
+// === Toast 显示控制 ===
   showToast(msg, type);
 }
 
@@ -29,6 +32,7 @@ function showAlert(msg, type = 'success') {
 
 // 数据管理:自动备份开关(localStorage 持久化)
 const AUTO_BACKUP_KEY = 'meter_auto_backup';
+// === 辅助函数 ===
 function getAutoBackupEnabled() {
   return localStorage.getItem(AUTO_BACKUP_KEY) !== 'false'; // 默认开启
 }
@@ -52,6 +56,7 @@ function initAutoBackupToggle() {
 // 数据管理弹窗(已废弃:数据管理改为独立页面,统一通过 admin.js 实现)
 // 保留函数以防有外部代码还在调用,内部用 null check 防止报错
 function openDataMgmtModal() {
+// === 弹窗 Toast ===
   initAutoBackupToggle();
   loadDataMgmtBackupDir();
   const backdrop = document.getElementById('datamgmt-modal-backdrop');
@@ -59,6 +64,7 @@ function openDataMgmtModal() {
 }
 function closeDataMgmtModal() {
   const backdrop = document.getElementById('datamgmt-modal-backdrop');
+// === 工具函数集 ===
   if (backdrop) backdrop.classList.remove('show');
 }
 
@@ -222,8 +228,10 @@ function base64ToArrayBuffer(b64) {
 
 // 浏览器环境下的文件选择/上传
 function showBrowserFilePicker(mode, callback) {
+// === 表格 Toast ===
   // mode: 'pick' (选文件) | 'upload' (上传文件)
   const input = document.createElement('input');
+// === 其他工具函数 ===
   input.type = 'file';
   input.multiple = true;
   input.accept = '.json';

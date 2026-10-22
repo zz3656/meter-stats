@@ -1,4 +1,5 @@
 function renderItemTable(items) {
+// === 物品表 (items) ===
   const tbody = document.querySelector('#item-table tbody');
   if (!tbody) return;
   if (!items || items.length === 0) {
@@ -88,6 +89,7 @@ function renderLendHistory(items) {
 
   // 把所有 lend_records 收集成扁平记录，并附上物品名/单位
   const rows = [];
+// === 租借管理 (lend/return) ===
   (items || []).forEach(it => {
     const records = it.lend_records || [];
     records.forEach(r => {
@@ -163,6 +165,7 @@ function closeReturnModal() {
 
 // 申购记录表格
 function renderPurchaseTable(purchases) {
+// === 采购表 (purchases) ===
   const tbody = document.querySelector('#purchase-table tbody');
   if (!tbody) return;
   if (!purchases || purchases.length === 0) {
@@ -242,6 +245,7 @@ function renderPurchaseTable(purchases) {
 
 // 工作记录表格
 function renderDutyTable(dutyList, filterMonth) {
+// === 值班表 (duty) ===
   const tbody = document.querySelector('#duty-table tbody');
   const empty = document.getElementById('duty-list-empty');
   if (!tbody) return;

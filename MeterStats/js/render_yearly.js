@@ -1,3 +1,4 @@
+// === 年度报表核心 ===
 
 // ========== 年度汇总 ==========
 async function fetchYearlyReport(year) {
@@ -14,7 +15,9 @@ async function fetchYearlyReport(year) {
 window._yearlyChart = null;  // 年度柱状图实例(切换年份前必须 destroy)
 
 function renderYearlyReport(data) {
+// === 年度图表 ===
   const box = document.getElementById('yearly-result');
+// === 工具函数 ===
   const copyBtn = document.getElementById('btn-copy-yearly');
   // 销毁旧图表,避免 canvas 残留/重复
   if (_yearlyChart) { _yearlyChart.destroy(); _yearlyChart = null; }
@@ -31,6 +34,7 @@ function renderYearlyReport(data) {
   keys.forEach(k => totals[k] = data.months.reduce((s, m) => s + (m.by_meter[k] || 0), 0));
 
   const rows = data.months.map(m => `
+// === 年度表格渲染 ===
     <tr>
       <td class="col-date">${m.month}</td>
       <td>${fmtKwh(m.by_meter.hall)}</td>
@@ -66,6 +70,7 @@ function renderYearlyReport(data) {
 
   // 12 个月 4 表堆叠柱状图(主题色,与 legend 一致)
   const canvas = document.getElementById('chart-yearly');
+// === 年度报表工具函数集 ===
   _yearlyChart = new Chart(canvas, {
     type: 'bar',
     data: {

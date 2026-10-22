@@ -1,3 +1,4 @@
+// === 水电功能核心 ===
 
 // ========== 月度水电(总表/分表/厨房/水表)==========
 async function fetchMonthlyUtilities(month) {
@@ -12,6 +13,7 @@ async function fetchMonthlyUtilities(month) {
 }
 
 function renderMonthlyUtilities(data) {
+// === 水电图表 ===
   const box = document.getElementById('utilities-result');
   if (!data) { box.innerHTML = '<div class="report-empty">加载失败,请检查后端</div>'; return; }
   if (!data.has_data) { box.innerHTML = `<div class="report-empty">${data.msg || '该月未录入水电表底'}</div>`; return; }
@@ -207,6 +209,7 @@ function buildReportTSV() {
   for (let day = 1; day <= daysInMonth; day++) {
     const d_str = formatDate(new Date(parseInt(yy), parseInt(mm) - 1, day));
     const row = d.days.find(r => r.date === d_str);
+// === 水电表格渲染 ===
     if (row && row.is_reading_day) {
       lines.push([
         String(day),
@@ -250,6 +253,7 @@ function buildReportTSV() {
 
 
     const reportMonth = document.getElementById('report-month');
+// === 月度/年度报表 ===
     if (reportMonth) reportMonth.addEventListener('change', loadMonthlyReport);
 
     const historyMonth = document.getElementById('history-month');

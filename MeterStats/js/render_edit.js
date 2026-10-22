@@ -1,3 +1,4 @@
+// === 编辑表单核心 ===
 // escapeHtml 已移至 utils_helpers.js,直接用全局 window.escapeHtml
 
 // ========== 通用:检查是否当日记录 ==========
@@ -94,15 +95,18 @@ async function enterChargeEditMode(id) {
 };
 
 function closeChargeEditModal() {
+// === 编辑弹窗管理 ===
   const modalEl = document.getElementById('charge-edit-modal-backdrop');
   if (modalEl) modalEl.classList.remove('show');
 }
 
 // ========== 抄表记录编辑 — 弹窗形式 ==========
 async function enterEditMode(date, type = 'reading') {
+// === 表单渲染 ===
   if (!(await confirmNonTodayEdit('抄表记录', date))) return;
 
   const row = CURRENT_READINGS.find(r => r.date === date);
+// === 编辑表格 ===
   if (!row) return;
 
   const setVal = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val; };
@@ -112,6 +116,7 @@ async function enterEditMode(date, type = 'reading') {
   setVal('reading-edit-private_room', row.private_room ?? '');
   setVal('reading-edit-ac', row.ac ?? '');
   const rehEl = document.getElementById('reading-edit-rehearsal');
+// === 工具函数 ===
   if (rehEl) rehEl.checked = !!row.rehearsal;
   const progEl = document.getElementById('reading-edit-programming');
   if (progEl) progEl.checked = !!row.programming;
@@ -198,12 +203,14 @@ async function enterEditMode(date, type = 'reading') {
 };
 
 function closeReadingEditModal() {
+// === 编辑确认弹窗 ===
   const modalEl = document.getElementById('reading-edit-modal-backdrop');
   if (modalEl) modalEl.classList.remove('show');
 }
 
 // ========== 水电表底编辑 — 弹窗形式 ==========
 async function enterWaterEditMode(date) {
+// === 高级编辑工具 ===
   if (!(await confirmNonTodayEdit('水电表底', date))) return;
 
   const waterAll = await fetchWaterReadings();
@@ -286,6 +293,7 @@ async function enterWaterEditMode(date) {
 };
 
 function closeWaterEditModal() {
+// === 表单操作弹窗 ===
   const modalEl = document.getElementById('water-edit-modal-backdrop');
   if (modalEl) modalEl.classList.remove('show');
 }

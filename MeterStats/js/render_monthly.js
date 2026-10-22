@@ -1,3 +1,4 @@
+// === 月报表核心 ===
 // 全局提交锁：防止网络卡顿时的重复提交
 let _submitting = false;
 function isSubmitting() { return _submitting; }
@@ -80,6 +81,7 @@ async function submitPurchaseAdd(source) {
 
 // 物品录入弹窗
 function openItemAddModal() {
+// === 月度弹窗管理 ===
   document.getElementById('item-add-modal-backdrop').classList.add('show');
   // 默认日期 / 默认值不重要，物品录入不需要
   document.getElementById('item-add-name')?.focus();
@@ -90,11 +92,13 @@ function closeItemAddModal() {
 function openPurchaseAddModal() {
   // 默认日期 = 今天
   const dateEl = document.getElementById('purchase-add-date');
+// === 月报表渲染 ===
   if (dateEl && !dateEl.value) dateEl.value = todayStr();
   document.getElementById('purchase-add-modal-backdrop').classList.add('show');
   document.getElementById('purchase-add-name')?.focus();
 }
 function closePurchaseAddModal() {
+// === 月度弹窗工具 ===
   document.getElementById('purchase-add-modal-backdrop').classList.remove('show');
 }
 
@@ -120,6 +124,7 @@ document.getElementById('purchase-add-modal-backdrop')?.addEventListener('click'
 
 // 值班录入:共用提交函数(侧栏录入页 + 工作记录页弹窗 都用)
 async function submitDutyAdd(source) {
+// === 月表工具函数 ===
   if (_submitting) return;
   const sourceKey = source === 'sidebar' ? 'sidebar' : 'add';
   const ids = source === 'sidebar'
@@ -178,6 +183,7 @@ async function submitDutyAdd(source) {
 
 // 值班录入弹窗
 function openDutyAddModal() {
+// === 月度确认弹窗 ===
   const timeEl = document.getElementById('duty-add-time');
   if (timeEl) timeEl.value = nowDateTimeLocalStr();
   document.getElementById('duty-add-modal-backdrop').classList.add('show');
@@ -215,6 +221,7 @@ function openDutyHandleModal(id, duty) {
   document.getElementById('duty-handle-original-area').textContent = duty.fault_area || '—';
   // 处理时间默认当前
   const timeEl = document.getElementById('duty-handle-time');
+// === 其他工具函数 ===
   if (timeEl) timeEl.value = nowDateTimeLocalStr();
   document.getElementById('duty-handle-shift').value = ''; // 重置为选择
   document.getElementById('duty-handle-method').value = '';
@@ -228,10 +235,12 @@ function openDutyHandleModal(id, duty) {
   document.getElementById('duty-handle-method')?.focus();
 }
 function closeDutyHandleModal() {
+// === 月度弹窗控制 ===
   document.getElementById('duty-handle-modal-backdrop').classList.remove('show');
 }
 
 async function submitDutyHandle() {
+// === 月表工具函数集 ===
   if (_submitting) return;
   const id = document.getElementById('duty-handle-id').value;
   const raw_time = document.getElementById('duty-handle-time').value;
