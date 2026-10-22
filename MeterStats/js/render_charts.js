@@ -130,29 +130,73 @@ function copyDayUsage() {
   copyTextWithFallback(text, '✓ 单天用电已复制,可直接粘贴到群里');
 }
 
-// 复制文本:优先 Clipboard API(WKWebView 受限时 fallback 到 execCommand)
+// 复制文本:WKWebView 中直接写剪贴板不工作，通过 Swift 桥接写入系统剪贴板
 function copyTextWithFallback(text, successMsg) {
-  const done = () => showAlert(successMsg, 'success');
-  const fail = () => {
-    // WKWebView 兼容:隐藏 textarea + execCommand('copy')
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) { done(); return; }
-    } catch (e) { /* 继续走下方报错 */ }
-    showAlert('复制失败,请手动选择复制', 'error');
-  };
-  if (navigator.clipboard && window.ClipboardItem) {
-    navigator.clipboard.writeText(text).then(done, fail);
+  // WKWebView: 通过 Swift 桥接写入系统剪贴板（最可靠）
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
+    console.log('[clipboard] 通过 Swift 桥接写入剪贴板');
+    
+    // 设置超时检测：Swift 处理完成后会设置 window.__copyResult
+    let copied = false;
+    
+    // 发送消息到 Swift
+    window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(text);
+    
+    // 等待 Swift 回调（最多等 1 秒）
+    const checkInterval = setInterval(() => {
+      if (window.__copyResult === 'ok') {
+        clearInterval(checkInterval);
+        copied = true;
+        console.log('[clipboard] Swift 桥接确认复制成功');
+        showAlert(successMsg, 'success');
+      } else if (window.__copyResult === 'failed') {
+        clearInterval(checkInterval);
+        console.warn('[clipboard] Swift 桥接报告复制失败，回退到浏览器 API');
+        browserCopy(text, successMsg);
+      }
+    }, 50);
+    
+    // 1 秒后如果还没收到回调，回退到浏览器 API
+    setTimeout(() => {
+      if (!copied) {
+        clearInterval(checkInterval);
+        console.warn('[clipboard] Swift 桥接超时，回退到浏览器 API');
+        browserCopy(text, successMsg);
+      }
+    }, 1000);
   } else {
-    fail();
+    // 非 WKWebView（浏览器），直接用原生 API
+    browserCopy(text, successMsg);
+  }
+}
+
+// 浏览器原生复制（用于非 WKWebView 环境，或 Swift 桥接失败时回退）
+function browserCopy(text, successMsg) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(
+      () => showAlert(successMsg, 'success'),
+      () => fallbackCopy(text, successMsg)
+    );
+  } else {
+    fallbackCopy(text, successMsg);
+  }
+}
+
+// 最终 fallback: textarea + execCommand（复用）
+function fallbackCopy(text, successMsg) {
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showAlert(successMsg, 'success');
+  } catch (e) {
+    showAlert('复制失败,请手动选择复制', 'error');
   }
 }
 

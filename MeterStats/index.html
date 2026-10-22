@@ -860,25 +860,13 @@
       <div class="settings-panel">
         <div class="panel-title">📂 备份目录</div>
         <div id="backup-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
-        <div id="backup-dir-input-wrap" style="display:none;margin-bottom:8px;">
-          <input type="text" id="backup-dir-input" placeholder="输入备份目录完整路径" class="field-control" style="width:100%;font-size:12px;">
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn">选择目录</button>
-          <button class="btn btn-primary btn-xs" onclick="saveBackupDirInput()" id="save-backup-dir-btn">保存</button>
-        </div>
+        <input type="hidden" id="backup-dir-raw" value="">
       </div>
       <div class="settings-panel">
         <div class="panel-title">📷 图片目录</div>
         <div id="image-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
         <div id="image-dir-stats" class="panel-desc" style="margin-bottom:10px;font-size:13px;color:var(--text-muted);"></div>
-        <div id="image-dir-input-wrap" style="display:none;margin-bottom:8px;">
-          <input type="text" id="image-dir-input" placeholder="输入图片目录完整路径" class="field-control" style="width:100%;font-size:12px;">
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()" id="pick-image-dir-btn">选择目录</button>
-          <button class="btn btn-primary btn-xs" onclick="saveImageDirInput()" id="save-image-dir-btn">保存</button>
-        </div>
+        <input type="hidden" id="image-dir-raw" value="">
       </div>
       <div class="settings-panel">
         <div class="auto-backup-row">
@@ -891,35 +879,40 @@
             <label class="panel-desc">保留</label>
             <input type="number" id="admin-backup-retention" min="1" class="field-control" placeholder="5">
             <label class="panel-desc">天</label>
-            <button class="btn btn-primary btn-xs" onclick="saveBackupRetention()">保存</button>
           </div>
         </div>
+      </div>
+      <!-- 统一保存/取消按钮 -->
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button class="btn btn-primary" onclick="saveDataMgmtSettings()" id="data-mgmt-save-btn">💾 保存设置</button>
+        <button class="btn btn-secondary" onclick="cancelDataMgmtChanges()" id="data-mgmt-cancel-btn">取消</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;min-width:140px;" id="admin-backup-btn">💾 手动备份</button>
         <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;min-width:140px;">↩️ 恢复数据</button>
       </div>
+      <!-- NAS 同步 -->
+      <div class="settings-panel" style="margin-bottom:0;">
+        <div class="panel-title"><span>🔄 从 NAS 同步数据</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" id="nas-sync-url-input" placeholder="NAS 地址，如 lin.icafe.top" class="field-control" style="flex:1;font-size:12px;">
+          <button class="btn btn-primary btn-sm" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);">从 NAS 上的 Docker 实例拉取最新抄表和充值数据覆盖本地。需要 Mac 能访问 NAS 网络。</div>
+      </div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">💡 手动备份每次点击都会新建(meter-backup- 前缀)，最多保留 10 个，超出自动删除最旧</div>
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
-          <span>📥 数据导入 (CSV)</span>
+          <span>📥 从备份恢复</span>
         </div>
-        <div class="field" style="margin-bottom:10px;">
-          <select id="import-model" class="field-control" style="width:100%;">
-            <option value="readings">抄表读数 (readings)</option>
-            <option value="charges">充值记录 (charges)</option>
-            <option value="items">物品 (items)</option>
-            <option value="purchases">采购 (purchases)</option>
-          </select>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
+          从系统自动备份或手动备份的 ZIP 压缩包恢复数据。恢复前会自动备份当前数据，可随时回滚。
         </div>
-        <div class="field" style="margin-bottom:10px;">
-          <input type="file" id="import-file" accept=".csv" class="field-control">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <input type="file" id="restore-zip-file" accept=".zip" class="field-control" style="flex:1;" onchange="onRestoreZipSelect(this)">
+          <button class="btn btn-danger btn-sm" onclick="restoreFromSelectedZip()" id="restore-zip-btn" disabled>📥 恢复</button>
         </div>
-        <div style="display:flex;gap:8px;margin-bottom:4px;">
-          <button class="btn btn-secondary btn-sm" onclick="doImport()" style="flex:1;" id="import-btn">📤 导入 CSV</button>
-          <button class="btn btn-secondary btn-sm" onclick="downloadImportTemplate()" style="flex:1;" id="import-template-btn">📋 下载模板</button>
-        </div>
-        <div id="import-result" style="font-size:12px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;min-height:20px;"></div>
+        <div id="restore-zip-result" style="font-size:12px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;min-height:20px;"></div>
       </div>
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
@@ -1518,6 +1511,7 @@
   <script src="js/forms_close.js"></script>
   <script src="js/forms_selectors.js"></script>
   <script src="js/init.js"></script>
+  <script src="js/nas_sync.js"></script>
   <!-- 兼容入口 -->
   <script src="app.js"></script>
   <script src="admin.js"></script>

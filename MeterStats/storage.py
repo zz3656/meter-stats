@@ -71,7 +71,12 @@ def get_data_dir() -> Path:
     # 3. 旧默认位置(兼容)
     legacy = Path.home() / "Documents" / "electricity-stats" / "data"
 
-    # 如果已经在标准位置,直接用
+    # 如果标准位置有 .data/ 子目录，优先使用它（App 内运行时 METER_DATA_DIR 指向这里）
+    data_subdir = standard / ".data"
+    if data_subdir.exists() and any(data_subdir.glob("*.json")):
+        return data_subdir
+
+    # 如果已经在标准位置(顶层),直接用
     if standard.exists() and any(standard.glob("*.json")):
         standard.mkdir(parents=True, exist_ok=True)
         return standard

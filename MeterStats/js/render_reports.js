@@ -92,8 +92,16 @@ function prevMonthKey(monthKey) {
   return `${y}-${String(m - 1).padStart(2, '0')}`;
 }
 async function loadMonthlyReport() {
-  const month = document.getElementById('report-month').value;
+  const monthSelect = document.getElementById('report-month');
+  let month = monthSelect?.value;
+
+  // 如果下拉框没有值，自动使用最新月份（后端返回的第一个）
+  if (!month && CURRENT_READINGS?.length > 0) {
+    const lastDate = CURRENT_READINGS[CURRENT_READINGS.length - 1].date;
+    month = lastDate.slice(0, 7); // YYYY-MM
+  }
   if (!month) return;
+
   const token = ++_reportLoadToken;
   const emptyEl = document.getElementById('report-empty');
   emptyEl.style.display = 'block';

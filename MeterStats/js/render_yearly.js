@@ -99,29 +99,157 @@ function copyYearlyTSV(data) {
     lines.push([m.month, m.by_meter.hall, m.by_meter.fire, m.by_meter.private_room, m.by_meter.ac, m.total_kwh, m.total_cost].join('\t'));
   });
   lines.push(['年度合计', '', '', '', '', data.year_total_kwh, data.year_total_cost].join('\t'));
-  copyTextWithFallback(lines.join('\n'), '✓ 年度汇总已复制,可粘贴到 Excel');
+  const tsv = lines.join('\n');
+
+  // 生成 HTML 表格(Numbers/Excel 粘贴时优先使用)
+  const html = '<table><thead><tr>' +
+    ['月份','1#大厅','2#消防','3#包厢','4#空调','合计(度)','电费(元)'].map(h => `<th>${h}</th>`).join('') +
+    '</tr></thead><tbody>' +
+    data.months.map(m => `<tr><td>${m.month}</td><td>${m.by_meter.hall}</td><td>${m.by_meter.fire}</td><td>${m.by_meter.private_room}</td><td>${m.by_meter.ac}</td><td>${m.total_kwh}</td><td>¥ ${m.total_cost.toFixed(2)}</td></tr>`).join('') +
+    `<tr><td colspan="5"><b>年度合计</b></td><td>${data.year_total_kwh}</td><td>¥ ${data.year_total_cost.toFixed(2)}</td></tr>` +
+    '</tbody>';
+
+  if (navigator.clipboard && window.ClipboardItem) {
+    const htmlBlob = new Blob([html], { type: 'text/html' });
+    const tsvBlob = new Blob([tsv], { type: 'text/plain' });
+    navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': tsvBlob })]).then(
+      () => showAlert('✓ 年度汇总已复制,可粘贴到 Excel/Numbers', 'success'),
+      () => copyTextWithFallback(tsv, '✓ 年度汇总已复制,可粘贴到 Excel')
+    );
+  } else {
+    copyTextWithFallback(tsv, '✓ 年度汇总已复制,可粘贴到 Excel');
+  }
 }
 
-// 月度报告复制 TSV(粘贴到 Excel 自动成表):每日明细 + 每表总用电 + 合计 + 电费
+// 月度报告复制(粘贴到 Excel/Numbers 自动成表):每日明细 + 每表总用电 + 合计 + 电费
+// 不含标题行，直接输出表格数据，方便 Numbers/Excel 粘贴时自动成表
 function copyReportTSV(data) {
-  const lines = ['日期', '1#大厅', '2#消防', '3#包厢', '4#空调', '合计(度)'];
-  data.days.forEach(d => {
-    lines.push([d.date, d.hall, d.fire, d.private_room, d.ac, d.total].join('\t'));
-  });
-  lines.push('');
-  // 每块电表总用电(与页面汇总卡一致)
-  lines.push(['各表总用电', data.summary.by_meter.hall, data.summary.by_meter.fire,
-    data.summary.by_meter.private_room, data.summary.by_meter.ac, data.summary.total_kwh].join('\t'));
-  lines.push(['月度合计', '', '', '', '', data.summary.total_kwh].join('\t'));
-  lines.push(['本月电费', '', '', '', '', `¥ ${data.summary.total_cost.toFixed(2)}`].join('\t'));
-  const tsv = lines.join('\n');
-  
-  // 优先使用 Swift 桥接 (WKWebView 内可靠,Numbers 正确解析表格)
-  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
-    window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(tsv);
-    showAlert('✅ 已通过 Swift 桥接写入剪贴板（TSV 格式）→ 去 Numbers 粘贴 (Cmd+V)', 'success');
+  // ========== HTML 表格 (Numbers/Excel 粘贴时直接成表，最可靠) ==========
+  const headerCells = ['日期','1#大厅','2#消防','3#包厢','4#空调','合计(度)']
+    .map(h => `<th>${h}</th>`).join('');
+
+  // 数据行
+  const dataRows = data.days.map(d =>
+    `<tr><td>${d.date}</td><td>${d.hall}</td><td>${d.fire}</td><td>${d.private_room}</td><td>${d.ac}</td><td>${d.total}</td></tr>`
+  ).join('');
+
+  // 汇总行: 第一列 + 其余数据列
+  const summaryRows = [
+    ['各表总用电', data.summary.by_meter.hall, data.summary.by_meter.fire,
+     data.summary.by_meter.private_room, data.summary.by_meter.ac, data.summary.total_kwh],
+    ['月度合计', '', '', '', '', data.summary.total_kwh],
+    ['本月电费', '', '', '', '', `¥ ${data.summary.total_cost.toFixed(2)}`]
+  ].map(row => {
+    const dataCells = row.slice(1).map(v => `<td>${v}</td>`).join('');
+    return `<tr><td>${row[0]}</td>${dataCells}</tr>`;
+  }).join('');
+
+  const html = `<table><thead><tr>${headerCells}</tr></thead><tbody>${dataRows}${summaryRows}</tbody></table>`;
+
+  // App 端:Swift 桥接处理纯文本 (含 \t)，写入 .tabularText
+  // Docker 端:用 clipboard.write() 同时写入 HTML + TSV，粘贴到表格软件自动成表
+  // 注意: WKWebView (App 端) 不支持 navigator.clipboard API，必须走 Swift 桥接
+  // 延迟检查 handler（wkWebView 可能在页面加载后注册 handler）
+  let retryCount = 0;
+  const MAX_RETRIES = 50; // 5秒超时 (50 * 100ms)
+  const checkAndCopy = () => {
+    retryCount++;
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
+      return true;
+    }
+    if (window.webkit && retryCount < MAX_RETRIES) {
+      setTimeout(checkAndCopy, 100);
+      return false;
+    }
+    // 超时：Swift 桥接不可用，走 DOM 回退（浏览器路径）
+    console.log('[copyReport] Swift 桥接不可用，走 DOM 回退');
+    return false;
+  };
+  if (checkAndCopy()) {
+    // App 端: 通过 Swift 桥接写入剪贴板。同时发送 HTML 和 TSV，Swift 端都写入
+    const lines = ['日期', '大厅', '消防', '包厢', '空调', '合计(度)'].join('\t');
+    const dataLines = data.days.map(d =>
+      [d.date, d.hall, d.fire, d.private_room, d.ac, d.total].join('\t')
+    ).join('\n');
+    const summaryLines = [
+      ['各表总用电', data.summary.by_meter.hall, data.summary.by_meter.fire,
+       data.summary.by_meter.private_room, data.summary.by_meter.ac, data.summary.total_kwh].join('\t'),
+      ['月度合计', '', '', '', '', data.summary.total_kwh].join('\t'),
+      ['本月电费', '', '', '', '', `¥ ${data.summary.total_cost.toFixed(2)}`].join('\t')
+    ].join('\n');
+    const tsv = [lines, dataLines, '', summaryLines].join('\n');
+
+    // 发送 HTML 和 TSV 到 Swift，Swift 端写入 .string + .tabularText
+    const payload = JSON.stringify({ html: html, tsv: tsv });
+    window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(payload);
+    showAlert('✓ 月度报告已复制,可直接粘贴到 Numbers/Excel', 'success');
+  } else if (navigator.clipboard && navigator.clipboard.write && window.ClipboardItem) {
+    // 浏览器: 用多格式写入 (HTML + TSV)，Numbers/Excel 优先使用 HTML
+    const htmlBlob = new Blob([html], { type: 'text/html' });
+    const lines = ['日期', '大厅', '消防', '包厢', '空调', '合计(度)'].join('\t');
+    const dataLines = data.days.map(d =>
+      [d.date, d.hall, d.fire, d.private_room, d.ac, d.total].join('\t')
+    ).join('\n');
+    const summaryLines = [
+      ['各表总用电', data.summary.by_meter.hall, data.summary.by_meter.fire,
+       data.summary.by_meter.private_room, data.summary.by_meter.ac, data.summary.total_kwh].join('\t'),
+      ['月度合计', '', '', '', '', data.summary.total_kwh].join('\t'),
+      ['本月电费', '', '', '', '', `¥ ${data.summary.total_cost.toFixed(2)}`].join('\t')
+    ].join('\n');
+    const tsvBlob = new Blob([[['日期', '大厅', '消防', '包厢', '空调', '合计(度)'].join('\t'),
+      dataLines, '', summaryLines].join('\n')], { type: 'text/plain' });
+    navigator.clipboard.write([new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': tsvBlob })]).then(
+      () => showAlert('✓ 月度报告已复制,可直接粘贴到 Numbers/Excel', 'success'),
+      () => {
+        // 如果 ClipboardItem 失败，用隐藏的 <table> DOM + execCommand('copy')
+        copyTableViaDOM(html, '✓ 月度报告已复制');
+      }
+    );
   } else {
-    copyTextWithFallback(tsv, '✓ 月度报告已复制,可粘贴到 Excel');
+    // App 内 fallback: WKWebView 不支持 execCommand('copy')，
+    // 临时把表格插入页面顶部让用户手动复制（Ctrl+A → Ctrl+C）
+    console.log('[copyReport] App 内无 Swift 桥接，显示表格供手动复制');
+    const container = document.getElementById('report-container');
+    if (container) {
+      // 移除之前的临时表格（如果有）
+      const old = document.getElementById('__copyTempTable');
+      if (old) old.remove();
+
+      const tempDiv = document.createElement('div');
+      tempDiv.id = '__copyTempTable';
+      tempDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:white;padding:20px;max-height:80vh;overflow:auto;';
+      tempDiv.innerHTML = '<h3>📋 复制说明：选中下方表格后 Ctrl+C 粘贴到 Excel/Numbers</h3>' + html;
+      container.insertBefore(tempDiv, container.firstChild);
+      showAlert('表格已显示在页面顶部，请手动选中后 Ctrl+C 复制', 'info');
+    } else {
+      showAlert('复制失败，请截图保存', 'error');
+    }
+  }
+}
+
+// 通过隐藏的 <table> DOM 元素 + execCommand('copy') 复制
+// 这是最兼容的方案：浏览器从 DOM 结构复制，粘贴到 Numbers/Excel 自动成表
+function copyTableViaDOM(html, successMsg) {
+  try {
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    div.style.position = 'fixed';
+    div.style.opacity = '0';
+    document.body.appendChild(div);
+
+    const range = document.createRange();
+    range.selectNodeContents(div);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+
+    document.execCommand('copy');
+    document.body.removeChild(div);
+    sel.removeAllRanges();
+
+    showAlert(successMsg, 'success');
+  } catch (e) {
+    showAlert('复制失败,请手动选择复制', 'error');
   }
 }
 

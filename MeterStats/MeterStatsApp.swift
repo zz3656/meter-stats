@@ -3,24 +3,66 @@ import WebKit
 
 // WKWebView 消息处理器:前端请求复制文本到系统剪贴板
 final class CopyToClipboardHandler: NSObject, WKScriptMessageHandler {
+    weak var webView: WKWebView? = nil
+
+    init(webView: WKWebView? = nil) {
+        self.webView = webView
+    }
+    
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "macOSCopyToClipboard" else { return }
         print("[CopyToClipboard] 收到消息: \(String(describing: message.body).prefix(300))")
-        if let text = message.body as? String {
-            let pasteboard = NSPasteboard.general
-            pasteboard.clearContents()
-            // 使用 tabularText 类型，Numbers/Excel 正确识别为表格（\t=列, \n=行）
-            pasteboard.setString(text, forType: .tabularText)
-            print("[CopyToClipboard] 已写入剪贴板 (\(text.count) 字符)")
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+
+        var parsedOk = false
+        
+        // 尝试 1: body 已经是 [String: Any] (WKWebView 自动解析)
+        if let dictBody = message.body as? [String: Any],
+           let html = dictBody["html"] as? String,
+           let tsv = dictBody["tsv"] as? String {
+            pasteboard.setString(tsv, forType: .string)
+            pasteboard.setString(tsv, forType: .tabularText)
+            pasteboard.setString(html, forType: .html)
+            print("[CopyToClipboard] ✓ 已写入剪贴板 (HTML: \(html.count) 字符, TSV: \(tsv.count) 字符)")
+            parsedOk = true
         }
+        
+        // 尝试 2: body 是 JSON 字符串，需要手动解析
+        if !parsedOk, let textBody = message.body as? String {
+            if let jsonData = try? textBody.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+               let html = json["html"] as? String,
+               let tsv = json["tsv"] as? String {
+                pasteboard.setString(tsv, forType: .string)
+                pasteboard.setString(tsv, forType: .tabularText)
+                pasteboard.setString(html, forType: .html)
+                print("[CopyToClipboard] ✓ 已写入剪贴板 (HTML: \(html.count) 字符, TSV: \(tsv.count) 字符)")
+                parsedOk = true
+            }
+        }
+
+        if !parsedOk {
+            // 旧格式: 纯字符串 (含 \t)
+            if let text = message.body as? String {
+                pasteboard.setString(text, forType: .string)
+                pasteboard.setString(text, forType: .tabularText)
+                print("[CopyToClipboard] ✓ 已写入剪贴板 (\(text.count) 字符, 旧格式)")
+            } else {
+                print("[CopyToClipboard] ✗ 无法解析 body: \(type(of: message.body))")
+            }
+        }
+
+        // 回调 JS 告知结果（通过 evaluateJavaScript）
+        webView?.evaluateJavaScript("window.__copyResult = 'ok';", completionHandler: nil)
     }
 }
 
 // WKWebView 消息处理器:前端请求弹出系统目录选择器(备份目录设置用)
 final class BackupDirHandler: NSObject, WKScriptMessageHandler {
-    weak var webView: WKWebView?
+    weak var webView: WKWebView? = nil
 
-    init(webView: WKWebView) {
+    init(webView: WKWebView? = nil) {
         self.webView = webView
     }
 
@@ -59,9 +101,9 @@ final class BackupDirHandler: NSObject, WKScriptMessageHandler {
 // 协议: JS postMessage({ accept: ".zip" }),Swift 弹文件选择器,返回
 // { name, content } (base64) 或 null(用户取消)。
 final class PickFileHandler: NSObject, WKScriptMessageHandler {
-    weak var webView: WKWebView?
+    weak var webView: WKWebView? = nil
 
-    init(webView: WKWebView) {
+    init(webView: WKWebView? = nil) {
         self.webView = webView
     }
 
@@ -151,6 +193,10 @@ extension Scene {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSLog("[App] AppDelegate.applicationDidFinishLaunching")
+    }
+
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         true
     }
@@ -278,6 +324,7 @@ struct ContentView: View {
     }
 
     private func bootstrap() async {
+        NSLog("[App] bootstrap() called — step: %d", bootStep.rawValue)
         // 1. 优先用 PID 文件检测残留（比端口扫描更精确）
         if ServerManager.shared.isServerPidAlive {
             await setStep(.checking_pid)
@@ -296,17 +343,21 @@ struct ContentView: View {
         await setStep(.startingPython)
         do {
             try ServerManager.shared.start()
+            NSLog("[App] ✓ Python 后端启动成功")
         } catch {
             await MainActor.run {
                 failMessage = "无法启动 Python: \(error.localizedDescription)"
                 bootStep = .none
             }
+            NSLog("[App] ✗ Python 启动失败: %@", error.localizedDescription)
             return
         }
 
         // 3. 等健康端点响应
         await setStep(.waitingBackend)
+        NSLog("[App] 等待后端就绪 (timeout: 8s)...")
         let ready = await ServerManager.shared.waitForReady(timeout: 8.0)
+        NSLog("[App] 后端就绪: %d", ready ? 1 : 0)
         guard ready else {
             await MainActor.run {
                 failMessage = "后端启动超时,请检查 logs/server.log"
@@ -317,19 +368,26 @@ struct ContentView: View {
 
         // 4. 创建 WKWebView 并加载
         await setStep(.loadingPage)
+        // 先同步清除缓存，再创建 WKWebView
+        let dataStore = WKWebsiteDataStore.default()
+        await dataStore.removeData(
+            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            modifiedSince: Date.distantPast
+        )
+
         await MainActor.run {
             let cfg = WKWebViewConfiguration()
-            cfg.websiteDataStore = .default()
+            cfg.websiteDataStore = dataStore
             // 注册备份目录选择桥(前端 window.webkit.messageHandlers.pickBackupDir)
             // ⚠️ 必须创建 WKWebView 之前挂到 config(WKWebViewConfiguration 是值快照)
             let userContentController = WKUserContentController()
             cfg.userContentController = userContentController
+            // ⚠️ 必须在 WKWebView 创建之前注册所有 handler（userContentController 是值快照）
+            userContentController.add(CopyToClipboardHandler(webView: nil), name: "macOSCopyToClipboard")
+            NSLog("[App] ✓ CopyToClipboard handler registered as 'macOSCopyToClipboard'")
+            userContentController.add(BackupDirHandler(webView: nil), name: "pickBackupDir")
+            userContentController.add(PickFileHandler(webView: nil), name: "macOSPickFile")
             let wv = WKWebView(frame: .zero, configuration: cfg)
-            // 不要设置 drawsBackground=false，否则页面空白时内容不可见
-            userContentController.add(CopyToClipboardHandler(), name: "macOSCopyToClipboard")
-            userContentController.add(BackupDirHandler(webView: wv), name: "pickBackupDir")
-            // macOS 选文件桥(恢复数据时选 zip)
-            userContentController.add(PickFileHandler(webView: wv), name: "macOSPickFile")
             // WKUIDelegate: 让所有 <input type="file"> 也能弹原生选择器(兜底)
             wv.uiDelegate = WebViewUIDelegate()
             let req = URLRequest(url: URL(string: "http://localhost:8765")!)

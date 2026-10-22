@@ -19,6 +19,8 @@
 | 🔧 **值班工作记录** | 类型(维修/更换/拆除)+ 故障区域 + 班次(白/中/夜班) + 处理状态(已处理/未处理);按月筛选 |
 | 🔐 **三级权限** | 员工(读写)/ 主管(读+写+删)/ 管理员(全部 + 用户管理);SHA-256 密码 + Session Token |
 | 💾 **数据备份** | 启动时每日自动备份(可配置保留天数 ZIP);支持手动备份/上传恢复/下载 |
+| 🔄 **NAS 同步** | 从 NAS Docker 实例拉取全部数据到本地;解决 WKWebView 跨域问题;支持配置远程地址 |
+| 📋 **App 内复制** | 月度报告复制到剪贴板,Numbers/Excel 自动成表;App 内通过 Swift 桥接写入 .string + .tabularText + .html |
 | 🎨 **UI** | 浅色/深色/跟随系统三档主题;完整移动端响应式;侧栏分组 + 抽屉;弹窗底部 sheet |
 | 📤 **导出** | CSV 导出(自定义列);月报 TSV 复制 |
 
@@ -74,8 +76,8 @@ docker run -d --name meter-stats \
 > ⚠️ **关于首次打开被拦截**:未配置 Apple Developer ID 签名/公证时,应用是 ad-hoc 本地签名,首次打开 macOS 会提示「Apple 无法验证是否包含恶意软件」。**应用本身安全**,只需手动放行一次:
 > 1. **右键点击应用 → 打开** → 弹窗中再点「打开」(最简单)
 > 2. 或:系统设置 → 隐私与安全性 → 点「仍要打开」
-> 3. 或终端:`xattr -dr com.apple.quarantine "/Applications/MeterStats.app"`
->
+> 3. 或终端:`xattr -dr com.apple.quarantine \"/Applications/MeterStats.app\"`
+
 > 如需彻底免提示,需配置 Apple Developer ID 证书并走签名+公证流程(打 `v*` tag 自动执行)。
 
 ## 📦 双端部署
@@ -85,7 +87,7 @@ docker run -d --name meter-stats \
 | 🍎 macOS | Swift + Python | `MeterStats.app` (DMG) | 工程部本地机 |
 | 🐳 Docker | docker-compose | 多平台镜像 (amd64 + arm64) | NAS / Linux 服务器 |
 
-| macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份后端,所以**共享同一份业务代码**(`MeterStats/` 下的 Python handlers)。
+macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份后端,所以**共享同一份业务代码**(`MeterStats/` 下的 Python handlers)。
 
 ## 📋 环境变量
 
@@ -204,6 +206,7 @@ docker compose down && docker compose up -d
 | GET | `/api/export?models=readings,charges,items,purchases` | CSV 导出 |
 | POST | `/api/auth/login` `/api/backup` `/api/restore` `/api/upload` | 鉴权 / 备份 |
 | GET/POST/PUT/DELETE | `/api/admin/users` `/api/admin/meter` `/api/admin/backup-config` | 管理后台 |
+| GET/POST | `/api/proxy/nas-data` `/api/admin/sync-from-nas` | NAS 数据同步 |
 
 ## 🔒 安全
 

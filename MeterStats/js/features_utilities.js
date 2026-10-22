@@ -175,40 +175,10 @@ async function exportReportToWord() {
     // 生成纯文本 TSV 格式 (Numbers / Excel 正确解析为表格)
     const tsv = buildReportTSV();
     
-    // 优先使用 Swift 桥接 (WKWebView 内可靠)
-    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard) {
-      console.log('[clipboard] Swift 桥接可用，发送 TSV');
-      window.webkit.messageHandlers.macOSCopyToClipboard.postMessage(tsv);
-    } else {
-      console.warn('[clipboard] Swift 桥接不可用，回退到 navigator.clipboard');
-      if (navigator.clipboard && window.ClipboardItem) {
-        // 同时提供 HTML 和 TSV，让 Numbers 优先用 TSV 解析为表格
-        const htmlBlob = new Blob([html], { type: 'text/html' });
-        const tsvBlob = new Blob([tsv], { type: 'text/plain' });
-        await navigator.clipboard.write([
-          new ClipboardItem({ 'text/html': htmlBlob, 'text/plain': tsvBlob })
-        ]);
-      } else {
-        // 回退:用临时 div + execCommand('copy')
-        const div = document.createElement('div');
-        div.innerHTML = html;
-        div.style.position = 'fixed';
-        div.style.left = '-9999px';
-        document.body.appendChild(div);
-        const range = document.createRange();
-        range.selectNodeContents(div);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.execCommand('copy');
-        sel.removeAllRanges();
-        document.body.removeChild(div);
-      }
-    }
-    // 复制成功:绿色按钮 + 大字提示(保持禁用,3秒后恢复)
-    const bridgeUsed = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.macOSCopyToClipboard;
-    const bridgeMsg = bridgeUsed ? '✅ 已通过 Swift 桥接写入剪贴板（TSV 格式）' : '⚠️ Swift 桥接不可用，使用浏览器 API 复制';
-    showAlert(bridgeMsg + ' → 去 Numbers 粘贴 (Cmd+V)', bridgeUsed ? 'success' : 'warn');
+    // 直接写纯文本到剪贴板
+    copyTextWithFallback(tsv, '✓ 月度报告已复制,可直接粘贴到群里');
+    
+    // 恢复按钮
     setTimeout(() => {
       btn.disabled = false;
       btn.textContent = origText;

@@ -356,6 +356,118 @@ def handle_put_backup_config(handler):
         })
 
 
+# ============ 代理 NAS 数据（解决跨域）============
+
+def handle_get_proxy_nas_data(handler):
+    """GET/POST /api/proxy/nas-data — 代理从 NAS 拉取数据文件
+
+    前端通过此接口获取 NAS 上的所有 JSON 数据文件内容。
+    解决了 WKWebView 中跨域请求 NAS 被浏览器拒绝的问题。
+
+    GET 参数: url=<nas_url>
+    POST body: { nasUrl: "<nas_url>" }
+    返回: { ok: true, files: { ... } } 或 { ok: false, error: "..." }
+    """
+    from urllib.parse import parse_qs
+
+    # 支持 GET 和 POST 两种方式
+    nas_url = ""
+
+    # 先尝试 POST body（前端用 api() 函数调用）
+    content_type = handler.headers.get("Content-Type", "")
+    if "application/json" in content_type:
+        body = read_body(handler)
+        nas_url = body.get("nasUrl", "").strip().rstrip("/")
+
+    # 再尝试 GET 参数（兼容直接浏览器访问）
+    if not nas_url:
+        path = handler.path.split('?')
+        if len(path) >= 2:
+            query = parse_qs(path[1])
+            nas_url = query.get("url", [""])[0].strip().rstrip("/")
+
+    if not nas_url:
+        send_json(handler, 200, {"ok": False, "error": "NAS 地址不能为空"})
+        return
+
+    # 补全协议
+    if not nas_url.startswith("http://") and not nas_url.startswith("https://"):
+        nas_url = "http://" + nas_url
+
+    api_url = f"{nas_url}/api/admin/data-files"
+
+    # 通过本地后端发起请求（不走浏览器，无 CORS 限制）
+    try:
+        import urllib.request
+        req = urllib.request.Request(api_url)
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            import json
+            body = json.loads(resp.read().decode("utf-8"))
+
+        if not isinstance(body, dict) or not body.get("ok"):
+            send_json(handler, 200, {"ok": False, "error": body.get("error", "NAS 返回异常")})
+            return
+
+        send_json(handler, 200, {"ok": True, "files": body.get("files", {})})
+
+    except Exception as e:
+        log(f"[PROXY] 从 NAS 获取数据失败: {e}")
+        send_json(handler, 200, {"ok": False, "error": f"无法连接 NAS: {e}"})
+
+
+# ============ 写入 NAS 数据到本地（解决跨域第二步）============
+
+def handle_post_sync_from_nas(handler):
+    """POST /api/admin/sync-from-nas — 接收 JSON 格式的文件数据并写入本地
+
+    前端从 NAS Docker 实例拉取所有 JSON 文件内容（通过 /api/proxy/nas-data），
+    然后通过此接口写入本地数据目录。
+
+    请求体: { files: { "readings.json": "...", "settings.json": "..." } }
+    返回: { ok: true, restored: [...], message: "..." }
+    """
+    data_dir = _get_data_paths().get("readings")
+    if not data_dir:
+        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+        return
+
+    target_dir = data_dir.parent
+
+    # 读取 JSON body
+    body = read_body(handler)
+    files = body.get("files", {})
+
+    if not files:
+        send_json(handler, 200, {"ok": False, "error": "没有数据文件"})
+        return
+
+    # 恢复前自动备份当前数据
+    pre_backup = backup_data(target_dir, force=True)
+
+    restored = []
+    errors = []
+    for name, content in files.items():
+        if not isinstance(content, str):
+            errors.append(f"跳过 {name}: 不是字符串")
+            continue
+        target_file = target_dir / name
+        if name in DATA_FILES.values() or name == "settings.json":
+            try:
+                target_file.write_text(content, encoding="utf-8")
+                restored.append(name)
+                log(f"  同步写入 {name}")
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+
+    send_json(handler, 200, {
+        "ok": True,
+        "restored": restored,
+        "errors": errors if errors else None,
+        "pre_backup": str(pre_backup) if pre_backup else "无",
+        "message": f"✅ 已同步 {len(restored)} 个文件" + (f", {len(errors)} 个失败" if errors else ""),
+    })
+
+
 # ============ 上传恢复 ============
 
 def handle_post_restore_upload(handler):

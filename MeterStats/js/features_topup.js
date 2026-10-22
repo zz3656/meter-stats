@@ -285,8 +285,31 @@ document.getElementById('return-confirm')?.addEventListener('click', async () =>
 
 // 月度报告复制:点击后按钮变「已复制」禁用,3秒后恢复(与每日/每月用电同款反馈)
 const btnCopyReport = document.getElementById('btn-copy-report');
-btnCopyReport.addEventListener('click', () => {
-  if (!_currentReport) return;
+btnCopyReport.addEventListener('click', async () => {
+  // 如果 _currentReport 为 null，先尝试加载月度报告数据
+  if (!_currentReport) {
+    const monthSelect = document.getElementById('report-month');
+    let month = monthSelect?.value;
+    // 自动使用最新月份
+    if (!month && CURRENT_READINGS?.length > 0) {
+      month = CURRENT_READINGS[CURRENT_READINGS.length - 1].date.slice(0, 7);
+    }
+    if (month) {
+      // 异步加载数据后再复制
+      try {
+        const data = await fetchMonthlyReport(month);
+        if (data) {
+          _currentReport = data;
+        }
+      } catch(e) {
+        console.error('[copyReport] 加载失败:', e);
+      }
+    }
+  }
+  if (!_currentReport) {
+    showAlert('请先选择月份加载数据', 'error');
+    return;
+  }
   const original = btnCopyReport.textContent;
   btnCopyReport.disabled = true;
   btnCopyReport.textContent = '✓ 已复制';

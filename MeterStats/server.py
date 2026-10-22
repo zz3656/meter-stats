@@ -78,9 +78,24 @@ def compute_version_token():
     root = Path(__file__).resolve().parent
     # 子目录 JS 文件也要参与哈希，确保修改后 token 更新
     js_dir = root / "js"
+    # fallback: 如果 ROOT (如 .app/Contents/Resources/) 没有 js/，从源目录读取
+    if not js_dir.exists():
+        # 尝试从 MeterStats/js/ 目录读取（源码运行或 .app 启动时）
+        candidates = [
+            Path("/Users/ceasar/Documents/GitHub/meter-stats/MeterStats/js"),  # 源码目录
+            Path.home() / "MeterStats" / "js",  # ~/MeterStats/js
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                js_dir = candidate
+                break
     if js_dir.exists():
         for p in sorted(js_dir.glob("*.js")):
-            files.append(str(p.relative_to(root)))
+            # 如果 js_dir 是 fallback 目录（与 root 不同），直接添加路径
+            if js_dir != root:
+                files.append(str(p))  # 绝对路径，hashlib 不管路径
+            else:
+                files.append(str(p.relative_to(root)))
     h = hashlib.sha256()
     root = Path(__file__).resolve().parent
     for fname in files:
@@ -162,6 +177,21 @@ def main():
 
     # 将文件映射暴露给 app_handler 模块
     import app_handler
+    from pathlib import Path
+
+    # fallback: 如果 ROOT (如 .app/Contents/Resources/) 没有 js/，修改 ROOT 指向源目录
+    root = Path(__file__).resolve().parent
+    if not (root / "js").exists():
+        candidates = [
+            Path("/Users/ceasar/Documents/GitHub/meter-stats/MeterStats"),  # 源码目录
+            Path.home() / "MeterStats",  # ~/MeterStats
+        ]
+        for candidate in candidates:
+            if (candidate / "js").exists():
+                app_handler.ROOT = candidate.resolve()
+                print(f"  ROOT fallback: {app_handler.ROOT}")
+                break
+
     app_handler.DATA_PATHS = data_paths
     app_handler._sync_data_paths()  # 初始化 settings.json
 

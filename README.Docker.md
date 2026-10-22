@@ -92,7 +92,7 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.1.1
+## 📦 工程部管理系统 v0.2.0
 
 提交 `8a49496`
 
@@ -113,5 +113,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/vv0.1.1...8a49496)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...8a49496)
 

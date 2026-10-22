@@ -43,6 +43,8 @@ from handlers.backup_admin import (
     handle_post_backup_download,
     handle_post_backup_delete,
     handle_post_restore_upload,
+    handle_post_sync_from_nas,
+    handle_get_proxy_nas_data,
 )
 
 # Admin tools
@@ -87,6 +89,8 @@ __all__ = [
     "handle_get_backup_download", "handle_get_backup_delete",
     "handle_post_backup_download", "handle_post_backup_delete",
     "handle_post_restore_upload",
+    "handle_post_sync_from_nas",
+    "handle_get_proxy_nas_data",
     # Admin tools
     "handle_get_dir_listing", "handle_get_audit_log",
     "handle_get_migrate_status", "handle_post_migrate_water",

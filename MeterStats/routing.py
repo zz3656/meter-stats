@@ -48,6 +48,10 @@ from handlers.admin import (
     handle_get_backup_download, handle_get_backup_delete,
     handle_post_backup_download, handle_post_backup_delete,
     handle_post_restore_upload,
+    # NAS 同步 (兼容旧代码)
+    handle_post_sync_from_nas,
+    # NAS 代理 (解决跨域)
+    handle_get_proxy_nas_data,
     # Admin tools (兼容旧代码)
     handle_get_dir_listing, handle_get_audit_log,
     handle_get_migrate_status, handle_post_migrate_water,
@@ -75,6 +79,7 @@ _GET_ROUTES = {
     "/api/purchases": handle_get_purchases,
     "/api/meters": handle_get_meters_public,
     "/api/duty": handle_get_duty,
+    "/api/proxy/nas-data": handle_get_proxy_nas_data,
 }
 
 _POST_PREFIX = {
@@ -82,6 +87,8 @@ _POST_PREFIX = {
     "/api/restore": handle_post_restore,
     "/api/upload": handle_post_upload,
     "/api/admin/restore-upload": handle_post_restore_upload,
+    "/api/admin/sync-from-nas": handle_post_sync_from_nas,
+    "/api/proxy/nas-data": handle_get_proxy_nas_data,
     "/api/admin/backup-download": handle_post_backup_download,
     "/api/admin/backup-delete": handle_post_backup_delete,
     "/api/admin/migrate-water": handle_post_migrate_water,

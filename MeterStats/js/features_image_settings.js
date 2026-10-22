@@ -1,12 +1,10 @@
-// ===== 图片目录管理 =====
+// ===== 图片目录管理（统一保存模式）=====
 const IMAGE_API = '/api/admin/images';
 
-// 加载图片目录配置
+// 加载图片目录配置（仅用于显示，不再单独保存）
 function loadImageDirConfig() {
   const dirEl = document.getElementById('image-dir-display');
   const statsEl = document.getElementById('image-dir-stats');
-  const pickBtn = document.getElementById('pick-image-dir-btn');
-  const saveBtn = document.getElementById('save-image-dir-btn');
 
   if (!dirEl) return;
 
@@ -14,15 +12,11 @@ function loadImageDirConfig() {
     fetch(IMAGE_API + getAuthParam())
       .then(r => r.json()).then(res => {
         if (!res.ok) return;
-        if (res.customizable === false) {
-          dirEl.textContent = '🔒 ' + res.image_dir;
-        } else {
-          dirEl.textContent = '📁 ' + res.image_dir + ' (默认: ' + res.default_image_dir + ')';
-        }
+        dirEl.textContent = '📁 ' + res.image_dir;
+        // 缓存到 hidden input（供统一保存使用）
+        const rawInput = document.getElementById('image-dir-raw');
+        if (rawInput) rawInput.value = res.image_dir;
         if (statsEl) statsEl.textContent = '📊 图片数量: ' + res.image_count + ' 张, 总大小: ' + formatBytes(res.total_size);
-        // 根据 customizable 控制按钮显隐
-        if (pickBtn) pickBtn.style.display = res.customizable === false ? 'none' : '';
-        if (saveBtn) saveBtn.style.display = res.customizable === false ? 'none' : '';
       }).catch(() => {
         dirEl.textContent = '⚠️ 后端未更新，请重启服务后生效';
         if (statsEl) statsEl.textContent = '';
@@ -37,47 +31,29 @@ function loadImageDirConfig() {
   }
 }
 
-// 显示目录输入框
+// 选择图片目录（写入 hidden input，等待统一保存）
 function pickImageDirInput() {
-  const dirEl = document.getElementById('image-dir-display');
-  const inputWrap = document.getElementById('image-dir-input-wrap');
-  const input = document.getElementById('image-dir-input');
-  if (!dirEl || !inputWrap || !input) return;
-
-  let currentPath = '';
-  const match = dirEl.textContent.match(/📁 (\S+)/) || dirEl.textContent.match(/🔒 (\S+)/);
-  if (match) currentPath = match[1];
-
-  input.value = currentPath;
-  inputWrap.style.display = 'block';
-  input.focus();
-}
-
-// 保存图片目录
-async function saveImageDirInput() {
-  const input = document.getElementById('image-dir-input');
-  const inputWrap = document.getElementById('image-dir-input-wrap');
-  if (!input) return;
-  const path = input.value.trim();
-  if (!path) {
-    showToast('请输入目录路径', 'warn');
-    return;
-  }
-  try {
-    const res = await fetch(IMAGE_API + getAuthParam(), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_dir: path }),
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir) {
+    window.__backupDirChosen = function(dir) {
+      if (dir) {
+        document.getElementById('image-dir-raw').value = dir;
+      }
+    };
+    window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
+  } else {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true;
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', () => {
+      if (input.files.length > 0) {
+        const firstPath = input.files[0].webkitRelativePath;
+        const folderName = firstPath.split('/')[0];
+        document.getElementById('image-dir-raw').value = folderName;
+      }
+      input.parentNode?.removeChild(input);
     });
-    const json = await res.json();
-    if (json.ok) {
-      showToast('图片目录已保存: ' + json.image_dir, 'success');
-      inputWrap.style.display = 'none';
-      loadImageDirConfig();
-    } else {
-      showToast('保存失败: ' + (json.error || '未知错误'), 'error');
-    }
-  } catch (e) {
-    showToast('保存失败: ' + e.message, 'error');
+    input.click();
   }
 }
