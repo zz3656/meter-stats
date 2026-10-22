@@ -45,24 +45,6 @@ function clearAuth() {
 }
 
 // ===== 登录 =====
-
-// 显示版本号（页面加载后立即获取）
-(function displayVersion() {
-  fetch('/api/version')
-    .then(r => r.json())
-    .then(res => {
-      const el = document.getElementById('version-display');
-      if (el && res.version) {
-        // 去掉版本号前缀的 'v'，避免显示 vv0.1.1
-        const v = res.version.startsWith('v') || res.version.startsWith('V')
-          ? res.version.slice(1)
-          : res.version;
-        el.textContent = 'v' + v;
-      }
-    })
-    .catch(() => {});
-})();
-
 function doLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
@@ -80,9 +62,8 @@ function doLogin() {
       return;
     }
     ADMIN_TOKEN = res.token;
-    localStorage.setItem('meter_admin_token', res.token);  // 持久化 token
     setLoggedIn(res.user);
-    if (window.renderAll) window.renderAll();
+    loadData();
   }).catch(e => {
     errEl.textContent = '网络错误: ' + e.message;
     errEl.style.display = 'block';
@@ -130,21 +111,18 @@ function loadAdminUsers() {
       const tbody = document.getElementById('users-table-body');
       if (!tbody) return;
       const users = res || [];
-      tbody.innerHTML = users.map(u => {
-        const safeName = window.escapeHtml(u.name || '');
-        const safeUser = window.escapeHtml(u.username || '');
-        return `
+      tbody.innerHTML = users.map(u => `
         <tr>
-          <td>${safeUser}</td>
-          <td>${safeName}</td>
+          <td>${u.username}</td>
+          <td>${u.name}</td>
           <td>${ROLE_NAMES[u.role] || u.role}</td>
           <td>${u.enabled ? '✅ 启用' : '❌ 禁用'}</td>
           <td class="ta-right">
-            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${safeUser}')">编辑</button>
+            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
             ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
           </td>
-        </tr>`;
-      }).join('');
+        </tr>
+      `).join('');
     }).catch(e => showAlert('加载用户失败: ' + e.message, 'error'));
 }
 
@@ -276,319 +254,79 @@ function saveMeterSettings() {
 // ===== 数据管理 =====
 
 // 加载备份目录配置
-// ===== 数据管理页面：统一保存/取消逻辑 =====
-
-// 全局状态：缓存当前页面的所有配置值（用于取消时恢复）
-let _dataMgmtState = null;
-
-// 页面加载时读取所有配置并缓存
-function loadDataMgmtPage() {
-  // 备份目录
+function loadBackupDirConfig() {
   fetch('/api/admin/backup-config' + getAuthParam())
     .then(r => r.json()).then(res => {
       const display = document.getElementById('backup-dir-display');
+      const pickBtn = document.getElementById('pick-backup-dir-btn');
+      const resetBtn = document.getElementById('reset-backup-dir-btn');
       if (!display) return;
+
       if (res.customizable === false) {
         display.textContent = '🔒 ' + (res.backup_dir || res.data_dir);
+        if (pickBtn) pickBtn.style.display = 'none';
+        if (resetBtn) resetBtn.style.display = 'none';
       } else {
-        display.textContent = '📁 ' + (res.backup_dir || (res.data_dir ? res.data_dir + '/backup' : '未配置'));
+        const dir = res.backup_dir || '默认: ' + res.data_dir + '/backup';
+        display.textContent = dir;
+        if (pickBtn) pickBtn.style.display = '';
+        if (resetBtn) resetBtn.style.display = '';
       }
-      // 缓存原始值（去掉图标前缀）
-      const raw = display.textContent.replace(/^🔒 |^📁 /, '');
-      document.getElementById('backup-dir-raw').value = res.customizable ? (res.backup_dir || '') : '';
-    }).catch(() => {});
-
-  // 图片目录 + 自动备份 + 保留天数
-  fetch('/api/admin/backup-status' + getAuthParam())
-    .then(r => r.json()).then(res => {
-      // 图片目录
-      const imgDisplay = document.getElementById('image-dir-display');
-      const imgStats = document.getElementById('image-dir-stats');
-      if (imgDisplay) {
-        if (res.customizable === false) {
-          imgDisplay.textContent = '🔒 ' + res.image_dir;
-        } else {
-          imgDisplay.textContent = '📁 ' + res.image_dir;
-        }
-      }
-      if (imgStats) {
-        imgStats.textContent = '📊 图片数量: ' + (res.image_count || 0) + ' 张, 总大小: ' + formatBytes(res.total_size || 0);
-      }
-      // 缓存图片目录原始值
-      const imgRaw = imgDisplay ? (imgDisplay.textContent.replace(/^🔒 |^📁 /, '') || '') : '';
-      document.getElementById('image-dir-raw').value = res.customizable ? res.image_dir : '';
-
-      // 自动备份开关
-      const cb = document.getElementById('admin-auto-backup-toggle');
-      if (cb) {
-        cb.checked = res.auto_backup !== false;
-      }
-
-      // 保留天数
-      const retInput = document.getElementById('admin-backup-retention');
-      if (retInput) {
-        retInput.value = res.retention_count || 5;
-      }
-
-      // 渲染备份列表
-      renderBackupList(res.backups || []);
-
-      // 缓存完整状态（用于取消时恢复）
-      _dataMgmtState = {
-        backupDir: document.getElementById('backup-dir-raw').value,
-        imageDir: imgRaw,
-        autoBackup: cb ? cb.checked : true,
-        retention: retInput ? parseInt(retInput.value, 10) || 5 : 5,
-        customizable: res.customizable !== false,
-      };
     }).catch(() => {});
 }
 
-// 保存所有设置（一次性提交）
-async function saveDataMgmtSettings() {
-  const btn = document.getElementById('data-mgmt-save-btn');
-  const originalText = btn.textContent;
-  btn.textContent = '⏳ 保存中…';
-  btn.disabled = true;
-
-  try {
-    // 收集所有修改值
-    const backupDir = document.getElementById('backup-dir-raw').value;
-    const imageDir = document.getElementById('image-dir-raw').value;
-    const autoBackup = document.getElementById('admin-auto-backup-toggle').checked;
-    const retention = parseInt(document.getElementById('admin-backup-retention').value, 10) || 5;
-
-    let errors = [];
-    let successCount = 0;
-
-    // 1. 保存备份目录（如果用户修改了）
-    if (backupDir) {
-      const res = await api('PUT', '/api/admin/backup-config', { backup_dir: backupDir });
-      if (res.ok) { successCount++; } else { errors.push('备份目录: ' + (res.error || '未知错误')); }
-    }
-
-    // 2. 保存图片目录（如果用户修改了）
-    if (imageDir) {
-      try {
-        const res = await fetch('/api/admin/images' + getAuthParam(), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image_dir: imageDir }),
-        });
-        const json = await res.json();
-        if (json.ok) { successCount++; } else { errors.push('图片目录: ' + (json.error || '未知错误')); }
-      } catch (e) { errors.push('图片目录: ' + e.message); }
-    }
-
-    // 3. 保存自动备份开关
-    const autoRes = await fetch('/api/admin/auto-backup' + getAuthParam(), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ enabled: autoBackup }),
-    }).then(r => r.json());
-    if (autoRes.ok) { successCount++; } else { errors.push('自动备份: ' + (autoRes.error || '未知错误')); }
-
-    // 4. 保存保留天数
-    const retRes = await fetch('/api/admin/backup-retention' + getAuthParam(), {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ retention_count: retention }),
-    }).then(r => r.json());
-    if (retRes.ok) { successCount++; } else { errors.push('保留天数: ' + (retRes.error || '未知错误')); }
-
-    if (errors.length > 0) {
-      showAlert('部分保存失败:\n' + errors.join('\n'), 'error');
-    } else {
-      showAlert('✅ 所有设置已保存', 'success');
-    }
-
-    // 刷新备份列表（保留天数可能影响）
-    loadBackupList();
-
-  } catch (e) {
-    showAlert('保存失败: ' + e.message, 'error');
-  } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
-  }
-}
-
-// 取消：恢复到页面加载时的状态
-function cancelDataMgmtChanges() {
-  if (!_dataMgmtState) return;
-
-  // 恢复备份目录显示
-  const display = document.getElementById('backup-dir-display');
-  if (display) {
-    const raw = _dataMgmtState.customizable ? (_dataMgmtState.backupDir || (_dataMgmtState.data_dir ? _dataMgmtState.data_dir + '/backup' : '未配置')) : (_dataMgmtState.backupDir || _dataMgmtState.data_dir);
-    display.textContent = '📁 ' + raw;
-  }
-
-  // 恢复图片目录显示
-  const imgDisplay = document.getElementById('image-dir-display');
-  if (imgDisplay) {
-    imgDisplay.textContent = '📁 ' + (_dataMgmtState.imageDir || '');
-  }
-
-  // 恢复自动备份开关
-  const cb = document.getElementById('admin-auto-backup-toggle');
-  if (cb) {
-    cb.checked = _dataMgmtState.autoBackup;
-  }
-
-  // 恢复保留天数
-  const retInput = document.getElementById('admin-backup-retention');
-  if (retInput) {
-    retInput.value = _dataMgmtState.retention;
-  }
-
-  showAlert('已取消，恢复到之前的设置', 'info');
-}
-
-// 选择备份目录（改为弹出文件选择器，路径写入 hidden input）
-function pickBackupDirInput() {
-  // macOS 原生 App: 调用 Swift 文件选择器
-  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir) {
-    window.__backupDirChosen = function(dir) {
-      if (dir) {
-        document.getElementById('backup-dir-raw').value = dir;
-      }
-    };
-    window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
-  } else {
-    // 浏览器环境: 用文件夹选择器（如果支持）
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.webkitdirectory = true;
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.addEventListener('change', () => {
-      if (input.files.length > 0) {
-        // 取文件夹根路径
-        const firstPath = input.files[0].webkitRelativePath;
-        const folderName = firstPath.split('/')[0];
-        document.getElementById('backup-dir-raw').value = folderName;
-      }
-      input.parentNode?.removeChild(input);
-    });
-    input.click();
-  }
-}
-
-// 选择图片目录（改为弹出文件选择器，路径写入 hidden input）
-function pickImageDirInput() {
-  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.pickBackupDir) {
-    window.__backupDirChosen = function(dir) {
-      if (dir) {
-        document.getElementById('image-dir-raw').value = dir;
-      }
-    };
-    window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
-  } else {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.webkitdirectory = true;
-    input.style.display = 'none';
-    document.body.appendChild(input);
-    input.addEventListener('change', () => {
-      if (input.files.length > 0) {
-        const firstPath = input.files[0].webkitRelativePath;
-        const folderName = firstPath.split('/')[0];
-        document.getElementById('image-dir-raw').value = folderName;
-      }
-      input.parentNode?.removeChild(input);
-    });
-    input.click();
-  }
-}
-
-// 从 ZIP 文件恢复数据（放在备份列表上方的面板里）
-let _selectedZipFile = null;
-
-function onRestoreZipSelect(input) {
-  const btn = document.getElementById('restore-zip-btn');
-  const resultEl = document.getElementById('restore-zip-result');
-  if (!input || !input.files || input.files.length === 0) {
-    _selectedZipFile = null;
-    btn.disabled = true;
-    if (resultEl) resultEl.textContent = '';
+// 选择备份目录
+async function setBackupDir() {
+  const dir = await adminPickBackupDir();
+  if (!dir) {
+    showToast('未选择目录', 'info');
     return;
   }
-  _selectedZipFile = input.files[0];
-  btn.disabled = false;
-  if (resultEl) resultEl.textContent = '已选择: ' + _selectedZipFile.name;
-}
-
-async function restoreFromSelectedZip() {
-  const btn = document.getElementById('restore-zip-btn');
-  const resultEl = document.getElementById('restore-zip-result');
-  if (!_selectedZipFile) return;
-
-  const originalText = btn.textContent;
-  btn.textContent = '⏳ 恢复中…';
-  btn.disabled = true;
-
   try {
-    // 确认弹窗
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认恢复数据？',
-      body: `将从 <b>${_selectedZipFile.name}</b> 恢复数据。<br><br>⚠️ 当前数据会被覆盖,但恢复前系统会自动备份当前数据到 backup/ 目录,可随时回滚。`,
-      confirmText: '确认恢复',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-
-    if (!ok) {
-      btn.textContent = originalText;
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: dir });
+    if (!res.ok) {
+      showToast('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
     }
-
-    // 读取 ZIP 文件为 ArrayBuffer，转为 base64
-    const arrayBuffer = await _selectedZipFile.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuffer);
-    let bin = '';
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    const base64 = btoa(bin);
-
-    // 通过 /api/admin/restore-upload 接口恢复
-    const res = await api('POST', '/api/admin/restore-upload', {
-      files: { [_selectedZipFile.name]: { __zip_b64: base64 } }
-    });
-
-    if (!res.ok) {
-      const err = res.error || '恢复失败';
-      if (resultEl) resultEl.textContent = '❌ ' + err;
-      showAlert('恢复失败: ' + err, 'error');
-    } else {
-      if (resultEl) resultEl.textContent = '✅ 已恢复 ' + (res.restored || []).length + ' 个数据文件';
-      showAlert('✅ 已恢复 ' + (res.restored || []).length + ' 个数据文件', 'success');
-      // 刷新页面
-      await renderAll();
-      loadBackupList();
-      // 清空文件选择
-      _selectedZipFile = null;
-      const fileInput = document.getElementById('restore-zip-file');
-      if (fileInput) { fileInput.value = ''; btn.disabled = true; }
-      if (resultEl) resultEl.textContent = '';
-    }
+    showToast('✅ 备份目录已更新', 'success');
+    loadBackupDirConfig();
   } catch (e) {
-    if (resultEl) resultEl.textContent = '❌ ' + e.message;
-    showAlert('恢复失败: ' + e.message, 'error');
-  } finally {
-    btn.textContent = originalText;
-    btn.disabled = false;
+    showToast('保存失败: ' + e.message, 'error');
+  }
+}
+
+// 恢复默认备份目录
+async function resetBackupDir() {
+  try {
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
+    if (!res.ok) {
+      showToast('保存失败: ' + (res.error || '未知错误'), 'error');
+      return;
+    }
+    showToast('✅ 已恢复默认备份目录', 'success');
+    loadBackupDirConfig();
+  } catch (e) {
+    showToast('保存失败: ' + e.message, 'error');
   }
 }
 
 function loadBackupStatus() {
   fetch('/api/admin/backup-status' + getAuthParam())
     .then(r => r.json()).then(res => {
-      // 自动备份开关 — 不直接保存，等待统一保存按钮
       const cb = document.getElementById('admin-auto-backup-toggle');
       if (cb) {
         cb.checked = res.auto_backup !== false;
+        // 避免重复绑定事件
+        if (!cb._backupToggleBound) {
+          cb._backupToggleBound = true;
+          cb.addEventListener('change', e => {
+            fetch('/api/admin/auto-backup' + getAuthParam(), {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: e.target.checked }),
+            }).then(() => showToast(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
+          });
+        }
       }
       const countEl = document.getElementById('backup-count');
       if (countEl) countEl.textContent = '当前备份数: ' + (res.backup_count || 0) + ' 个';
@@ -598,10 +336,8 @@ function loadBackupStatus() {
       if (adminRet) adminRet.value = retention;
       const dmRet = document.getElementById('datamgmt-backup-retention');
       if (dmRet) dmRet.value = retention;
-      // 加载备份目录配置（统一用 loadDataMgmtPage）
-      loadDataMgmtPage();
-      // 加载图片目录配置
-      if (typeof loadImageDirConfig === 'function') loadImageDirConfig();
+      // 加载备份目录配置
+      loadBackupDirConfig();
       // 渲染备份列表
       renderBackupList(res.backups || []);
     }).catch(() => {});
@@ -611,7 +347,7 @@ function loadBackupList() {
   loadBackupStatus();
 }
 
-// 保存备份保留数量（已废弃：由统一 saveDataMgmtSettings 处理）
+// 保存备份保留数量
 function saveBackupRetention() {
   const val = parseInt(document.getElementById('admin-backup-retention').value || document.getElementById('datamgmt-backup-retention').value, 10);
   if (!val || val < 1) {
@@ -657,18 +393,17 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
-        const safeName = window.escapeHtml(b.zip_name || '');
         html += `<div class="backup-item">
           <div>
-            <span class="b-name">${window.escapeHtml(b.name || '')}</span>
+            <span class="b-name">${b.name}</span>
             ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
-            <span class="b-meta">${window.escapeHtml(b.created_at || '')}</span>
+            <span class="b-meta">${b.created_at}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${safeName}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${safeName}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${safeName}')">🗑️ 删除</button>` : ''}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -686,17 +421,16 @@ function renderBackupList(backups) {
         const sizeStr = formatBytes(b.total_size || 0);
         const isZip = b.format === 'zip' || b.zip_name;
         const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
-        const safeName = window.escapeHtml(b.zip_name || '');
         html += `<div class="backup-item">
           <div>
-            <span class="b-name">${window.escapeHtml(b.name || '')}</span>
+            <span class="b-name">${b.name}</span>
             ${backupTypeTag(b)}
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${safeName}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${safeName}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${safeName}')">🗑️ 删除</button>` : ''}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -973,7 +707,7 @@ async function adminRestore() {
     icon: '⚠️',
     iconKind: 'warn',
     title: '确认恢复数据？',
-    body: `将从 <b>${window.escapeHtml(zipFile.name)}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
+    body: `将从 <b>${zipFile.name}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
     confirmText: '确认恢复',
     cancelText: '取消',
     confirmKind: 'danger',
@@ -1094,7 +828,6 @@ async function doImport() {
   const resultEl = document.getElementById('import-result');
   const fileInput = document.getElementById('import-file');
   const model = document.getElementById('import-model').value;
-  const token = localStorage.getItem('meter_token');
 
   if (!fileInput.files || fileInput.files.length === 0) {
     resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 请选择 CSV 文件</span>';
@@ -1150,37 +883,4 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
-}
-
-// ===== 下载导入模板 =====
-async function downloadImportTemplate() {
-  const model = document.getElementById('import-model').value;
-  const btn = document.getElementById('import-template-btn');
-  const resultEl = document.getElementById('import-result');
-
-  try {
-    btn.disabled = true;
-    const resp = await fetch(`/api/import/template?model=${encodeURIComponent(model)}`, {
-      headers: { 'X-Auth-Token': localStorage.getItem('meter_token') || '' },
-    });
-    if (!resp.ok) {
-      const data = await resp.json().catch(() => ({}));
-      resultEl.innerHTML = `<span style="color:#ef4444;">❌ 下载模板失败: ${escapeHtml(data.error || resp.statusText)}</span>`;
-      return;
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `import-template-${model}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    resultEl.innerHTML = `<span style="color:#22c55e;">✅ 已下载模板 (${model})</span>`;
-  } catch (err) {
-    resultEl.innerHTML = `<span style="color:#ef4444;">❌ 网络错误: ${escapeHtml(err.message)}</span>`;
-  } finally {
-    btn.disabled = false;
-  }
 }
