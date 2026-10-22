@@ -92,9 +92,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.2.0
+## 📦 工程部管理系统 v0.1.1
 
-提交 `8a49496`
+提交 `c2c3f02`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,7 +103,11 @@ docker compose up -d
 ```
 
 
-- 同步版本号到所有组件
+- v0.2.0 - App 闪退修复、复制功能修复、NAS 同步、自动加载月度报告 — - MeterStatsApp: [AnyHashable: Any] → [String: Any], 移除窗口销毁逻辑 / - render_yearly.
+
+### 📖 文档
+
+- 统一文档,移除Web端描述,更新为双端部署(macOS+Docker)
 
 ### ⬆️ 升级
 
@@ -113,5 +117,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...8a49496)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...c2c3f02)
 
