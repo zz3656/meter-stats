@@ -63,7 +63,7 @@ function doLogin() {
     }
     ADMIN_TOKEN = res.token;
     setLoggedIn(res.user);
-    loadData();
+    renderAll();
   }).catch(e => {
     errEl.textContent = '网络错误: ' + e.message;
     errEl.style.display = 'block';
