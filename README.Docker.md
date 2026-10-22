@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 v0.2.0
 
-提交 `8cbb8de`
+提交 `4ab246b`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,16 +103,14 @@ docker compose up -d
 ```
 
 
-- 根目录 VERSION 同步到 0.2.0 (GitHub Actions 读取此文件)
 
 ### ⬆️ 升级
 
-⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.1.1...8cbb8de)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...4ab246b)
 
