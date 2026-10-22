@@ -60,10 +60,10 @@ from modules.system.admin_tools_handler import (
 )
 
 # 注：admin 模块已拆分,本表保留为兼容层。新代码推荐直接从子模块导入:
-#   - handlers.auth         — 登录/会话
-#   - handlers.users        — 用户 CRUD + 电表设置
-#   - handlers.backup_admin — 备份 HTTP API
-#   - handlers.admin_tools  — 辅助工具(目录/审计/迁移)
+#   - modules.system.auth_handler         — 登录/会话
+#   - modules.system.users_handler        — 用户 CRUD + 电表设置
+#   - modules.backup.admin_handler — 备份 HTTP API
+#   - modules.system.admin_tools_handler  — 辅助工具(目录/审计/迁移)
 
 _GET_ROUTES = {
     "/api/health": handle_get_health,
