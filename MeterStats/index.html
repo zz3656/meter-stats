@@ -4,7 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>工程部管理系统 · Meter Stats</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>s+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css" />
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
@@ -1186,5 +1187,20 @@
 
   <script src="app.js"></script>
   <script src="admin.js"></script>
+    <script>
+      // 页面加载后初始化：先检查认证，再渲染数据
+      document.addEventListener('DOMContentLoaded', function() {
+        // 先检查是否有 token（登录状态）
+        if (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) {
+          // 已登录，渲染数据
+          if (typeof renderAll === 'function') {
+            renderAll();
+          }
+        } else {
+          // 未登录，显示登录页面（由 admin.js 的 initAuth 处理）
+          // initAuth() 已在 admin.js 中自动调用
+        }
+      });
+    </script>
 </body>
 </html>
