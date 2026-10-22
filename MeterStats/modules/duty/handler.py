@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock, get_data_dir
-from handlers._base import JsonModelHandler
+from modules._base import JsonModelHandler
 
 _now = datetime.now
 
@@ -423,3 +423,6 @@ def handle_post_duty_handle(handler, path_clean: str):
         import traceback
         log(traceback.format_exc())
         send_json(handler, 500, {"error": f"服务器内部错误: {e}"})
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('duty')

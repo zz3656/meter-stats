@@ -5,7 +5,7 @@ from __future__ import annotations
 from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
-from handlers.settings import (
+from modules.system.settings_handler import (
     get_settings, save_settings, add_user, update_user, delete_user, ROLES,
 )
 

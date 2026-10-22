@@ -13,8 +13,8 @@
 """
 from __future__ import annotations
 
-from handlers.admin import get_session, _touch_session
-from handlers.settings import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE
+from modules.system.admin_handler import get_session, _touch_session
+from modules.system.settings_handler import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE
 
 # 角色等级
 ROLE_LEVEL = {ROLE_ADMIN: 3, ROLE_SUPERVISOR: 2, ROLE_EMPLOYEE: 1}

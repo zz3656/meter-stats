@@ -13,13 +13,13 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body, CORS
 from storage import log, DATA_FILES, backup_data
-from handlers.settings import get_settings, save_settings
-from handlers.backup import (
+# 延迟导入: from modules.system.settings_handler import get_settings, save_settings
+from modules.backup.handler import (
     _get_backup_retention_count,
     _merge_settings_after_restore,
     _resolve_backup_parent,
 )
-from handlers._base import get_data_paths as _get_data_paths
+from modules._base import get_data_paths as _get_data_paths
 from utils.api import _validate_zip_safely
 
 

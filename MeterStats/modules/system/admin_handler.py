@@ -12,7 +12,7 @@
 from __future__ import annotations
 
 # Auth
-from handlers.auth import (
+from modules.system.auth_handler import (
     handle_post_login,
     handle_get_logout,
     handle_get_me,
@@ -20,7 +20,7 @@ from handlers.auth import (
 )
 
 # Users / meter settings / roles
-from handlers.users import (
+from modules.system.users_handler import (
     handle_get_users,
     handle_post_users,
     handle_put_users,
@@ -32,7 +32,7 @@ from handlers.users import (
 )
 
 # Backup HTTP API
-from handlers.backup_admin import (
+from modules.backup.admin_handler import (
     handle_get_backup_status,
     handle_put_auto_backup,
     handle_put_backup_retention,
@@ -44,11 +44,10 @@ from handlers.backup_admin import (
     handle_post_backup_delete,
     handle_post_restore_upload,
     handle_post_sync_from_nas,
-    handle_get_proxy_nas_data,
 )
 
 # Admin tools
-from handlers.admin_tools import (
+from modules.system.admin_tools_handler import (
     handle_get_dir_listing,
     handle_get_audit_log,
     handle_get_migrate_status,
@@ -56,7 +55,7 @@ from handlers.admin_tools import (
 )
 
 # Auth 会话 API(供其他模块使用,例如 permissions.py)
-from handlers.auth import (
+from modules.system.auth_handler import (
     get_session,
     create_session,
     destroy_session,

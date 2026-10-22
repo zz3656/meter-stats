@@ -9,7 +9,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
-from handlers.settings import (
+from modules.system.settings_handler import (
     get_settings, save_settings, verify_password, _needs_migration, _hash_pass,
 )
 from storage import log

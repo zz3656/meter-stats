@@ -7,7 +7,7 @@ from utils import send_json, opt_float, read_body
 
 _now = datetime.now
 from storage import log, load_json, save_json
-from handlers._base import get_data_paths, get_lock
+from modules._base import get_data_paths, get_lock
 from report import invalidate_report_cache as _invalidate_report_cache
 
 
@@ -105,3 +105,6 @@ def _save_charges(data):
     lock = get_lock("charges")
     with lock:
         save_json(get_data_paths()["charges"], data)
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('charges')

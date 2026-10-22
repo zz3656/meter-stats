@@ -4,55 +4,57 @@ import traceback
 from urllib.parse import parse_qs, urlparse
 from utils import send_json
 
-from handlers.readings import (
+from modules.readings import (
     handle_get_readings, handle_post_readings, handle_put_readings, handle_delete_readings,
 )
-from handlers.readings_water import (
+from modules.utilities.handler import (
     handle_get_readings_water, handle_get_readings_water_monthly,
     handle_post_readings_water, handle_put_readings_water, handle_delete_readings_water,
 )
-from handlers.charges import (
+from modules.charges import (
     handle_get_charges, handle_post_charges, handle_put_charges, handle_delete_charges,
 )
-from handlers.items import (
+from modules.items import (
     handle_get_items, handle_post_items, handle_put_items, handle_delete_items,
     handle_put_items_lend, handle_put_items_return,
 )
-from handlers.purchases import (
+from modules.purchases import (
     handle_get_purchases, handle_post_purchases, handle_put_purchases, handle_put_purchases_stock, handle_delete_purchases,
 )
-from handlers.duty import (
+from modules.duty import (
     handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty,
     handle_post_duty_handle, handle_post_duty_image, handle_get_duty_image,
     handle_get_images_config, handle_put_images_config,
 )
-from handlers.reports import (
+from modules.reports import (
     handle_get_health, handle_get_export, handle_get_monthly_report,
     handle_get_yearly_report, handle_get_monthly_utilities,
     handle_get_snapshot, handle_get_report_cache,
     handle_get_version,
 )
-from handlers.dataimport import handle_post_import, handle_get_import_template
-from handlers.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
-from handlers.admin import (
-    # Auth (兼容旧代码)
+from modules.dataimport import handle_post_import, handle_get_import_template
+from modules.backup import handle_get_data_files, handle_post_backup, handle_post_restore, handle_post_upload
+from modules.system.auth_handler import (
     handle_post_login, handle_get_logout, handle_get_me, handle_get_sessions,
-    # Admin CRUD (兼容旧代码)
+)
+from modules.system.users_handler import (
     handle_get_users, handle_post_users, handle_put_users, handle_delete_users,
+)
+from modules.system.admin_handler import (
     handle_get_meter_settings, handle_put_meter_settings, handle_get_meters_public,
     handle_get_roles,
-    # Backup HTTP (兼容旧代码)
+)
+from modules.backup.admin_handler import (
     handle_get_backup_status, handle_put_auto_backup,
     handle_put_backup_retention,
     handle_get_backup_config, handle_put_backup_config,
     handle_get_backup_download, handle_get_backup_delete,
     handle_post_backup_download, handle_post_backup_delete,
     handle_post_restore_upload,
-    # NAS 同步 (兼容旧代码)
     handle_post_sync_from_nas,
-    # NAS 代理 (解决跨域)
     handle_get_proxy_nas_data,
-    # Admin tools (兼容旧代码)
+)
+from modules.system.admin_tools_handler import (
     handle_get_dir_listing, handle_get_audit_log,
     handle_get_migrate_status, handle_post_migrate_water,
 )

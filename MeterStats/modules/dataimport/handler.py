@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from utils import send_json, send_csv, opt_float, read_body
 from storage import log, get_lock, load_json, save_json
-from handlers._base import get_data_paths
+from modules._base import get_data_paths
 
 
 # 支持的模型及其字段校验规则

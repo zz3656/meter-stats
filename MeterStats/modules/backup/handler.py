@@ -12,7 +12,7 @@ from pathlib import Path
 
 from utils import send_json, read_body
 from storage import backup_data, DATA_FILES, log, _cache_clear
-from handlers._base import get_data_paths
+from modules._base import get_data_paths
 from utils.api import _validate_zip_safely
 
 
@@ -98,7 +98,7 @@ def handle_get_data_files(handler):
 def _get_backup_retention_count():
     """从 settings.json 读取备份保留数量，默认 5。"""
     try:
-        from handlers.settings import get_settings
+        from modules.system.settings_handler import get_settings
         settings = get_settings()
         count = settings.get("backup_retention_count", 5)
         if isinstance(count, int) and count >= 1:
@@ -131,7 +131,7 @@ def _resolve_backup_parent(data_dir):
     settings.json 的 backup_dir > METER_BACKUP_DIR 环境变量 > data_dir/backup
     """
     try:
-        from handlers.settings import get_settings
+        from modules.system.settings_handler import get_settings
         settings = get_settings()
         custom_backup = settings.get("backup_dir")
         if custom_backup:

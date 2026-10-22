@@ -6,7 +6,7 @@ from utils import send_json, read_body
 
 _now = datetime.now
 from storage import log, load_json, save_json
-from handlers._base import get_data_paths, get_lock
+from modules._base import get_data_paths, get_lock
 from report import invalidate_report_cache as _invalidate_report_cache
 
 
@@ -101,7 +101,7 @@ def handle_put_purchases(handler, path_clean: str):
 
 def handle_put_purchases_stock(handler, path_clean: str):
     """PUT /api/purchases/{id}/stock"""
-    from handlers.items import _load_items, _save_items
+    from modules.items.handler import _load_items, _save_items
     pid = path_clean[len("/api/purchases/"):-len("/stock")]
     purchases = _load_purchases()
     idx = next((i for i, p in enumerate(purchases) if p.get("id") == pid), None)
@@ -150,3 +150,6 @@ def handle_delete_purchases(handler, path_clean: str):
     _save_purchases(new)
     log(f"  -- 删除申购 {pid}")
     send_json(handler, 200, {"ok": True})
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('purchases')

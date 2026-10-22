@@ -1,0 +1,1 @@
+from .handler import handle_get_duty, handle_post_duty, handle_put_duty, handle_delete_duty, handle_get_images_config, handle_put_images_config, handle_post_duty_image, handle_get_duty_image, handle_post_duty_handle

@@ -7,7 +7,7 @@ from report import calculate_monthly_report, calculate_yearly_report
 from constants import ELECTRICITY_PRICE as ELECTRICITY_PRICE_CONST, WATER_PRICE, MAIN_METER_MULT, SUB_METER_MULT
 from utils import send_json
 from storage import log, load_json, DATA_FILES, get_all_model_names, get_lock
-from handlers._base import get_data_paths
+from modules._base import get_data_paths
 
 
 def _load(model: str) -> list:

@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, opt_float, read_body
 from storage import log, load_json, save_json, get_lock
-from handlers._base import get_data_paths
+from modules._base import get_data_paths
 
 
 def _load_water():
@@ -133,3 +133,6 @@ def handle_delete_readings_water(handler, path_clean: str):
     _save_water(new)
     log(f"  -- 删除水电表底 {date}")
     send_json(handler, 200, {"ok": True})
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('readings_water')

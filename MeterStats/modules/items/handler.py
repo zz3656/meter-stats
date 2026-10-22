@@ -6,7 +6,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock
-from handlers._base import JsonModelHandler
+from modules._base import JsonModelHandler
 
 _now = datetime.now
 
@@ -196,9 +196,9 @@ def _check_delete(handler):
     实现复用 handlers.permissions._get_token 与 handlers.auth.get_session,
     不重复造轮子。
     """
-    from handlers.permissions import _get_token
-    from handlers.auth import get_session, _touch_session
-    from handlers.settings import ROLE_ADMIN, ROLE_SUPERVISOR
+    from modules.system.permissions_handler import _get_token
+    from modules.system.auth_handler import get_session, _touch_session
+    from modules.system.settings_handler import ROLE_ADMIN, ROLE_SUPERVISOR
     from utils import send_json
 
     token = _get_token(handler)
@@ -212,3 +212,6 @@ def _check_delete(handler):
     if sess.get("role") not in (ROLE_ADMIN, ROLE_SUPERVISOR):
         send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
         return
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('items')

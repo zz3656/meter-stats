@@ -10,7 +10,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
 from storage import log, load_json, DATA_FILES
-from handlers._base import get_data_paths as _get_data_paths
+from modules._base import get_data_paths as _get_data_paths
 from constants import ROLE_ADMIN, ROLE_SUPERVISOR
 
 
@@ -25,7 +25,7 @@ def handle_get_dir_listing(handler):
     - 仅允许浏览 data_dir 和 backup_dir 下的内容(白名单)
     - 防止目录穿越(resolve 后校验)
     """
-    from handlers.auth import get_session
+    from modules.system.auth_handler import get_session
 
     # 1. 鉴权
     qs = parse_qs(urlparse(handler.path).query)
@@ -52,7 +52,7 @@ def handle_get_dir_listing(handler):
     # 4. 白名单校验:仅允许 data_dir 和 backup_dir
     try:
         from storage import get_data_dir
-        from handlers.backup import _resolve_backup_parent
+        from modules.backup.handler import _resolve_backup_parent
         data_dir = get_data_dir()
         backup_dir = _resolve_backup_parent(data_dir)
 
