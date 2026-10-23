@@ -24,7 +24,7 @@ final class ServerManager {
 
     private func getBundleResources() -> URL? {
         // 从 ~/MeterStats/MeterStats.app 读取（不受 SIP 保护）
-        let appPath = URL(fileURLWithPath: "\(NSHomeDirectory())/MeterStats/MeterStats.app")
+        let appPath = URL(fileURLWithPath: "/Applications/MeterStats.app")
         if FileManager.default.fileExists(atPath: appPath.appendingPathComponent("Contents/Resources").path) {
             return appPath.appendingPathComponent("Contents/Resources")
         }

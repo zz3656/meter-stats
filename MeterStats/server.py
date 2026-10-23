@@ -83,7 +83,7 @@ def compute_version_token():
         # 尝试从 MeterStats/js/ 目录读取（源码运行或 .app 启动时）
         candidates = [
             Path("/Users/ceasar/Documents/GitHub/meter-stats/MeterStats/js"),  # 源码目录
-            Path.home() / "MeterStats" / "js",  # ~/MeterStats/js
+            Path("/Applications/MeterStats.app/Contents/Resources/js"),  # ~/MeterStats/js
         ]
         for candidate in candidates:
             if candidate.exists():
@@ -184,7 +184,7 @@ def main():
     if not (root / "js").exists():
         candidates = [
             Path("/Users/ceasar/Documents/GitHub/meter-stats/MeterStats"),  # 源码目录
-            Path.home() / "MeterStats",  # ~/MeterStats
+            Path("/Applications/MeterStats.app/Contents/Resources"),  # ~/MeterStats
         ]
         for candidate in candidates:
             if (candidate / "js").exists():
