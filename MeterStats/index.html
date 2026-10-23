@@ -1524,10 +1524,11 @@
   <script src="js/forms_close.js"></script>
   <script src="js/forms_selectors.js"></script>
     <script src="js/nas_sync.js"></script>
-  <script src="js/init.js"></script>
+  <!-- init.js moved to after app.js and admin.js -->
   <!-- 兼容入口 -->
   <script src="app.js"></script>
   <script src="admin.js"></script>
+  <script src="js/init.js"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function() {
         if (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) {
