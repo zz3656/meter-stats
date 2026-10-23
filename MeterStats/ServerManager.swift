@@ -71,7 +71,7 @@ final class ServerManager {
         // (如 0.1.0 内部多次构建修复 UI),否则 runtime 会一直用旧文件。
         // 改为始终按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
 
-        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "app.js", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
+        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
         for filename in files {
             let src = bundleResources.appendingPathComponent(filename)
             let dst = runtime.appendingPathComponent(filename)
@@ -153,8 +153,12 @@ final class ServerManager {
         // 工作目录设为运行时目录（包含 server.py 和所有依赖文件）
         proc.currentDirectoryURL = getRuntimeDir()
         
-        // 设置 METER_DATA_DIR 指向项目下的 .data/ 目录（与本地运行一致）
-        let dataDir = projectRoot.appendingPathComponent(".data")
+        // 设置 METER_DATA_DIR 指向沙盒 Application Support 目录（与本地运行不同）
+        let supportDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library")
+            .appendingPathComponent("Application Support")
+            .appendingPathComponent("com.meter.stats")
+        let dataDir = supportDir.appendingPathComponent(".data")
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         proc.environment = ["METER_DATA_DIR": dataDir.path]
 

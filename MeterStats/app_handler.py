@@ -41,7 +41,7 @@ def _sync_data_paths():
     """同步 DATA_PATHS（供 server.py 调用，作为未来扩展的入口）。"""
     try:
         # 初始化 settings.json（用户/权限/电表参数）
-        from handlers.settings import init_settings
+        from modules.system.settings_handler import init_settings
         for model, path in DATA_PATHS.items():
             if path:
                 data_dir = Path(path).parent

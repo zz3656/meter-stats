@@ -336,6 +336,10 @@ function switchSection(sectionId) {
     const chargeSel = document.getElementById('charge-month');
     if (chargeSel) renderChargeLog(CURRENT_CHARGES);
   }
+  // Overview: re-render the monthly stat grid when switching to it
+  if (sectionId === 'overview') {
+    renderStats(CURRENT_READINGS, CURRENT_CHARGES);
+  }
 }
 
 // 侧栏分组折叠
