@@ -853,7 +853,9 @@ async function renderAll() {
   refreshMonthSelectors();
   refreshDayCopySelect(CURRENT_READINGS, CURRENT_CHARGES);
   updateStatusBar(CURRENT_READINGS, CURRENT_CHARGES);
-  // 水电数据迁移检测（只在首次加载时检查一次）
+
+    // 报表分析: 按需加载（用户点击时才渲染）
+    // renderAll 只负责初始数据加载，报表页面由各自的切换事件触发  // 水电数据迁移检测（只在首次加载时检查一次）
   if (!MIGRATION_CHECKED) {
     setTimeout(checkAndPromptMigration, 1500);
   }
