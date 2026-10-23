@@ -81,7 +81,7 @@ final class ServerManager {
             }
 
             // server.py 每次都必须覆盖（内容可能包含新的 fallback 逻辑）
-            if filename == "server.py" {
+            if filename == "server.py" && FileManager.default.fileExists(atPath: dst.path) {
                 try FileManager.default.removeItem(at: dst)
                 try FileManager.default.copyItem(at: src, to: dst)
             } else {
