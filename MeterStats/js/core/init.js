@@ -32,6 +32,19 @@ if (dutyTimeEl) {
 (async () => {
   // 无论是否有 token，都先加载数据（快照接口不需要认证）
   await renderAll();
+  // 报表分析: 加载月份和年份选项，供用户切换时渲染
+  const reportMonth = document.getElementById('report-month');
+  if (reportMonth) {
+    const months = [...new Set((CURRENT_READINGS || []).map(r => r.date.slice(0, 7)))].sort().reverse();
+    reportMonth.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
+    if (months.length > 0) { reportMonth.value = months[0]; }
+  }
+  const yearlyYear = document.getElementById('yearly-year');
+  if (yearlyYear) {
+    const years = [...new Set((CURRENT_READINGS || []).map(r => r.date.slice(0, 4)))].sort().reverse();
+    yearlyYear.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+    if (years.length > 0) { yearlyYear.value = years[0]; }
+  }
   // 抄表提醒:距上次抄表 ≥ 3 天显示横幅
   if (CURRENT_READINGS && CURRENT_READINGS.length > 0) {
     const lastDate = CURRENT_READINGS[CURRENT_READINGS.length - 1].date;
