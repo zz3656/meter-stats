@@ -899,7 +899,16 @@
       <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
         <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;min-width:140px;" id="admin-backup-btn">💾 手动备份</button>
         <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;min-width:140px;">↩️ 恢复数据</button>
-      </div>
+      
+      <!-- NAS 同步 -->
+      <div class="settings-panel" style="margin-bottom:0;">
+        <div class="panel-title"><span>🔄 从 NAS 同步数据</span></div>
+        <div style="display:flex;gap:6px;margin-bottom:6px;">
+          <input type="text" id="nas-sync-url-input" placeholder="NAS 地址，如 lin.icafe.top" class="field-control" style="flex:1;font-size:12px;">
+          <button class="btn btn-primary btn-sm" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);">从 NAS 上的 Docker 实例拉取最新抄表和充值数据覆盖本地。需要 Mac 能访问 NAS 网络。</div>
+      </div></div>
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">💡 手动备份每次点击都会新建(meter-backup- 前缀)，最多保留 10 个，超出自动删除最旧</div>
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
