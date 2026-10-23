@@ -81,8 +81,8 @@ final class ServerManager {
             }
 
             // server.py 每次都必须覆盖（内容可能包含新的 fallback 逻辑）
-            if filename == "server.py" && FileManager.default.fileExists(atPath: dst.path) {
-                try FileManager.default.removeItem(at: dst)
+            if filename == "server.py" {
+                if FileManager.default.fileExists(atPath: dst.path) { try FileManager.default.removeItem(at: dst) }
                 try FileManager.default.copyItem(at: src, to: dst)
             } else {
                 // 其他文件：按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
