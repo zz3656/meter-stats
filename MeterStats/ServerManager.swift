@@ -111,7 +111,7 @@ final class ServerManager {
         }
 
         // SwiftPM .process("Resources") 不拷贝子目录，需要手动复制
-        for subdir in ["handlers", "js", "utils"] {
+        for subdir in ["handlers", "js", "modules", "utils"] {
             let srcDir = bundleResources.appendingPathComponent(subdir)
             let dstDir = runtime.appendingPathComponent(subdir)
             guard FileManager.default.fileExists(atPath: srcDir.path) else { continue }
