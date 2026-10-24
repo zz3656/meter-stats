@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body, CORS
 from storage import log, DATA_FILES, backup_data
-# 延迟导入: from modules.system.settings_handler import get_settings, save_settings
+from modules.system.settings_handler import get_settings, save_settings
 from modules.backup.handler import (
     _get_backup_retention_count,
     _merge_settings_after_restore,

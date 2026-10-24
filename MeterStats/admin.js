@@ -11,15 +11,16 @@ const ADMIN_MANAGE_ROLES = new Set(['admin']);
 // ===== 初始化: 有token则验证, 否则显示登录页 =====
 function initAuth() {
   if (ADMIN_TOKEN) {
+    // Store in localStorage so Api.* can use it
+    localStorage.setItem('token', ADMIN_TOKEN);
     // 验证会话
-    fetch('/api/auth/me?token=' + encodeURIComponent(ADMIN_TOKEN))
-      .then(r => r.json()).then(res => {
+    Api.system.me().then(function(res) {
         if (res.user) {
           setLoggedIn(res.user);
         } else {
           clearAuth();
         }
-      }).catch(() => clearAuth());
+      }).catch(function() { clearAuth(); });
   } else {
     // 无 token → 显示登录页
     const loginPage = document.getElementById('login-page');
@@ -45,29 +46,43 @@ function clearAuth() {
 }
 
 // ===== 登录 =====
-function doLogin() {
+async function doLogin() {
   const username = document.getElementById('login-username').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
 
-  fetch('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  }).then(r => r.json()).then(res => {
-    if (!res.ok) {
-      errEl.textContent = res.error || '登录失败';
+  // 先检查后端是否就绪（最多重试 15 次，每次间隔 1 秒，总超时 15 秒）
+  const healthUrl = 'http://127.0.0.1:8765/api/health';
+  let retries = 15;
+  while (retries > 0) {
+    try {
+      const resp = await fetch(healthUrl);
+      if (resp.ok) break; // 后端已就绪
+    } catch {}
+    retries--;
+    if (retries > 0) {
+      errEl.textContent = '后端服务启动中，请稍候... (' + (15 - (15 - retries)) + '/15)';
       errEl.style.display = 'block';
-      return;
+      await new Promise(resolve => setTimeout(resolve, 1000));
     }
+  }
+
+  try {
+    const res = await Api.system.login(username, password);
     ADMIN_TOKEN = res.token;
+    localStorage.setItem('token', ADMIN_TOKEN);
     setLoggedIn(res.user);
     renderAll();
-  }).catch(e => {
-    errEl.textContent = '网络错误: ' + e.message;
+  } catch (e) {
+    // 如果健康检查失败，显示更友好的错误提示
+    if (retries === 0) {
+      errEl.textContent = '后端服务未启动，请重启 App';
+    } else {
+      errEl.textContent = '网络错误: ' + e.message;
+    }
     errEl.style.display = 'block';
-  });
+  }
 }
 
 // Enter 键登录
@@ -80,7 +95,7 @@ document.addEventListener('keydown', e => {
 // ===== 登出 =====
 function doLogout() {
   if (ADMIN_TOKEN) {
-    fetch('/api/auth/logout?token=' + encodeURIComponent(ADMIN_TOKEN)).catch(() => {});
+    Api.system.logout().catch(function(){});
   }
   clearAuth();
 }
@@ -106,12 +121,11 @@ function switchAdminPage(page) {
 
 // ===== 用户管理 =====
 function loadAdminUsers() {
-  fetch('/api/admin/users' + getAuthParam())
-    .then(r => r.json()).then(res => {
-      const tbody = document.getElementById('users-table-body');
-      if (!tbody) return;
-      const users = res || [];
-      tbody.innerHTML = users.map(u => `
+  Api.admin.users().then(function(users) {
+    const tbody = document.getElementById('users-table-body');
+    if (!tbody) return;
+    const usersList = users || [];
+      tbody.innerHTML = usersList.map(u => `
         <tr>
           <td>${u.username}</td>
           <td>${u.name}</td>
@@ -135,11 +149,7 @@ function addAdminUser() {
   if (!username || !password) { showAlert('用户名和密码不能为空', 'error'); return; }
   if (!ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role)) { showAlert('只有管理员可以添加用户', 'error'); return; }
 
-  fetch('/api/admin/users' + getAuthParam(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password, name, role }),
-  }).then(r => r.json()).then(res => {
+  Api.admin.createUser({ username: username, password: password, name: name, role: role }).then(function(res) {
     if (!res.ok) { showAlert('添加失败: ' + (res.error || '未知错误'), 'error'); return; }
     showAlert('用户已添加: ' + username, 'success');
     document.getElementById('new-username').value = '';
@@ -150,45 +160,39 @@ function addAdminUser() {
 }
 
 function editAdminUser(uid, oldUsername) {
-  fetch('/api/admin/users' + getAuthParam() + '&id=' + uid)
-    .then(r => r.json()).then(res => {
-      if (!res.user) { showAlert('用户不存在', 'error'); return; }
-      const u = res.user;
-      const newName = prompt('显示名', u.name);
-      if (newName === null) return;
-      const newRole = prompt('角色 (admin/supervisor/employee)', u.role);
-      if (newRole === null) return;
-      const newPassword = prompt('新密码 (留空不修改)', '');
+  Api.admin.users().then(function(users) {
+    const found = users.find(u => u.id == uid);
+    if (!found) { showAlert('用户不存在', 'error'); return; }
+    const u = found;
+    const newName = prompt('显示名', u.name);
+    if (newName === null) return;
+    const newRole = prompt('角色 (admin/supervisor/employee)', u.role);
+    if (newRole === null) return;
+    const newPassword = prompt('新密码 (留空不修改)', '');
 
-      const body = { name: newName, role: newRole };
-      if (newPassword && newPassword.trim()) body.password = newPassword.trim();
+    const body = { name: newName, role: newRole };
+    if (newPassword && newPassword.trim()) body.password = newPassword.trim();
 
-      fetch('/api/admin/users' + getAuthParam() + '&id=' + uid, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }).then(r => r.json()).then(res2 => {
-        if (!res2.ok) { showAlert('编辑失败: ' + (res2.error || '未知错误'), 'error'); return; }
-        showAlert('用户已更新', 'success');
-        loadAdminUsers();
-      }).catch(e => showAlert('网络错误: ' + e.message, 'error'));
-    }).catch(e => showAlert('加载用户失败: ' + e.message, 'error'));
+    Api.admin.updateUser(uid, body).then(function(res2) {
+      if (!res2.ok) { showAlert('编辑失败: ' + (res2.error || '未知错误'), 'error'); return; }
+      showAlert('用户已更新', 'success');
+      loadAdminUsers();
+    }).catch(function(e) { showAlert('网络错误: ' + e.message, 'error'); });
+  }).catch(function(e) { showAlert('加载用户失败: ' + e.message, 'error'); });
 }
 
 function deleteAdminUser(uid) {
   if (!confirm('确认删除此用户? 此操作不可恢复。')) return;
-  fetch('/api/admin/users' + getAuthParam() + '&id=' + uid, { method: 'DELETE' })
-    .then(r => r.json()).then(res => {
+  Api.admin.deleteUser(uid).then(function(res) {
       if (!res.ok) { showAlert('删除失败: ' + (res.error || '未知错误'), 'error'); return; }
       showAlert('用户已删除', 'success');
       loadAdminUsers();
-    }).catch(e => showAlert('网络错误: ' + e.message, 'error'));
+    }).catch(function(e) { showAlert('网络错误: ' + e.message, 'error'); });
 }
 
 // ===== 电表设置 =====
 function loadMeterSettings() {
-  fetch('/api/admin/meter' + getAuthParam())
-    .then(r => r.json()).then(res => {
+  Api.admin.meterSettings().then(function(res) {
       const form = document.getElementById('meter-settings-form');
       if (!form) return;
       const meter = res.meter || {};
@@ -219,7 +223,7 @@ function loadMeterSettings() {
           </div>
         `;
       }).join('');
-    }).catch(e => showAlert('加载电表设置失败', 'error'));
+    }).catch(function(e) { showAlert('加载电表设置失败', 'error'); });
 }
 
 function saveMeterSettings() {
@@ -238,11 +242,7 @@ function saveMeterSettings() {
     water_price: parseFloat(document.getElementById('config-water-price').value) || 4.5,
   };
 
-  fetch('/api/admin/meter' + getAuthParam(), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ meter, config }),
-  }).then(r => r.json()).then(res => {
+  Api.admin.saveMeterSettings({ meter, config }).then(function(res) {
     if (!res.ok) { showAlert('保存失败', 'error'); return; }
     showAlert('电表参数已保存', 'success');
     Object.keys(meter).forEach(k => {
@@ -255,8 +255,7 @@ function saveMeterSettings() {
 
 // 加载备份目录配置
 function loadBackupDirConfig() {
-  fetch('/api/admin/backup-config' + getAuthParam())
-    .then(r => r.json()).then(res => {
+  Api.admin.backupConfig().then(function(res) {
       const display = document.getElementById('backup-dir-display');
       const pickBtn = document.getElementById('pick-backup-dir-btn');
       const resetBtn = document.getElementById('reset-backup-dir-btn');
@@ -272,7 +271,7 @@ function loadBackupDirConfig() {
         if (pickBtn) pickBtn.style.display = '';
         if (resetBtn) resetBtn.style.display = '';
       }
-    }).catch(() => {});
+    }).catch(function() {});
 }
 
 // 选择备份目录
@@ -311,8 +310,7 @@ async function resetBackupDir() {
 }
 
 function loadBackupStatus() {
-  fetch('/api/admin/backup-status' + getAuthParam())
-    .then(r => r.json()).then(res => {
+  Api.admin.backupStatus().then(function(res) {
       const cb = document.getElementById('admin-auto-backup-toggle');
       if (cb) {
         cb.checked = res.auto_backup !== false;
@@ -320,11 +318,7 @@ function loadBackupStatus() {
         if (!cb._backupToggleBound) {
           cb._backupToggleBound = true;
           cb.addEventListener('change', e => {
-            fetch('/api/admin/auto-backup' + getAuthParam(), {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ enabled: e.target.checked }),
-            }).then(() => showToast(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
+            Api.admin.setAutoBackup(e.target.checked).then(() => showToast(e.target.checked ? '自动备份已开启' : '自动备份已关闭', 'info'));
           });
         }
       }
@@ -354,11 +348,7 @@ function saveBackupRetention() {
     showAlert('保留数量必须 ≥ 1', 'error');
     return;
   }
-  fetch('/api/admin/backup-retention' + getAuthParam(), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ retention_count: val }),
-  }).then(r => r.json()).then(res => {
+  Api.admin.setBackupRetention(val).then(function(res) {
     if (!res.ok) {
       showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
@@ -515,25 +505,19 @@ async function restoreBackup(zipName) {
     });
     if (!ok) return;
 
-    const formData = new FormData();
-    formData.append('zip_file', file);
+      const res = await Api.adminRestore.upload(file);
+      const data = await res;
 
-    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
+      if (!data.ok) {
+        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+        return;
+      }
 
-    if (!data.ok) {
-      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-      return;
-    }
-
-    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-    closeAdminPanel();
-    if (window.renderAll) window.renderAll();
-  } catch (e) {
-    showAlert('恢复失败: ' + e.message, 'error');
+      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+      closeAdminPanel();
+      if (window.renderAll) window.renderAll();
+    } catch (e) {
+      showAlert('恢复失败: ' + e.message, 'error');
   }
 }
 
@@ -570,25 +554,19 @@ async function adminRestoreFromZip(zipName) {
     if (!ok) return;
 
     // 上传并恢复
-    const formData = new FormData();
-    formData.append('zip_file', file);
+      const res = await Api.adminRestore.upload(file);
+      const data = await res;
 
-    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
+      if (!data.ok) {
+        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+        return;
+      }
 
-    if (!data.ok) {
-      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-      return;
-    }
-
-    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-    closeAdminPanel();
-    if (window.renderAll) window.renderAll();
-  } catch (e) {
-    showAlert('恢复失败: ' + e.message, 'error');
+      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+      closeAdminPanel();
+      if (window.renderAll) window.renderAll();
+    } catch (e) {
+      showAlert('恢复失败: ' + e.message, 'error');
   } finally {
     if (btn) { btn.textContent = original; btn.disabled = false; }
   }
@@ -624,25 +602,21 @@ async function datamgmtRestoreFromZip(zipName) {
     });
     if (!ok) return;
 
-    const formData = new FormData();
-    formData.append('zip_file', file);
+    try {
+      const res = await Api.adminRestore.upload(file);
+      const data = await res;
 
-    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
+      if (!data.ok) {
+        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+        return;
+      }
 
-    if (!data.ok) {
-      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-      return;
+      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+      closeAdminPanel();
+      if (window.renderAll) window.renderAll();
+    } catch (e) {
+      showAlert('恢复失败: ' + e.message, 'error');
     }
-
-    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-    closeAdminPanel();
-    if (window.renderAll) window.renderAll();
-  } catch (e) {
-    showAlert('恢复失败: ' + e.message, 'error');
   } finally {
     if (btn) { btn.textContent = original; btn.disabled = false; }
   }
@@ -726,25 +700,21 @@ async function adminRestore() {
     const blob = new Blob([bytes], { type: 'application/zip' });
     const file = new File([blob], zipFile.name, { type: 'application/zip' });
 
-    const formData = new FormData();
-    formData.append('zip_file', file);
+    try {
+      const res = await Api.adminRestore.upload(file);
+      const data = await res;
 
-    const res = await fetch('/api/admin/restore-upload' + getAuthParam(), {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
+      if (!data.ok) {
+        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
+        return;
+      }
 
-    if (!data.ok) {
-      showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-      return;
+      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
+      closeAdminPanel();
+      if (window.renderAll) window.renderAll();
+    } catch (e) {
+      showAlert('恢复失败: ' + e.message, 'error');
     }
-
-    showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-    closeAdminPanel();
-    if (window.renderAll) window.renderAll();
-  } catch (e) {
-    showAlert('恢复失败: ' + e.message, 'error');
   } finally {
     if (btn) { btn.textContent = original; btn.disabled = false; }
   }
@@ -847,12 +817,7 @@ async function doImport() {
   formData.append('file', fileInput.files[0]);
 
   try {
-    const resp = await fetch('/api/import', {
-      method: 'POST',
-      headers: { 'X-Auth-Token': token },
-      body: formData,
-    });
-    const data = await resp.json();
+    const data = await Api.adminImport.doImport(model, fileInput.files[0]);
     btn.disabled = false;
     btn.textContent = '📤 导入 CSV';
 
@@ -883,4 +848,234 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+// ==================== 表单提交 (从旧 forms_submit.js 迁移) ====================
+
+// 抄表录入侧栏/弹窗共用提交函数
+function submitReadingAdd(source) {
+  if (_submitting) return;
+  var ids = source === 'sidebar'
+    ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
+    : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
+  var num = function(id) { var v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  var hallV = num(ids.hall), fireV = num(ids.fire), prV = num(ids.private_room), acV = num(ids.ac);
+  var allVals = [hallV, fireV, prV, acV];
+  if (allVals.every(function(v) { return v === null; })) { showAlert('请至少填写一块表的读数', 'error'); return; }
+  if (allVals.some(function(v) { return v !== null && isNaN(v); })) { showAlert('读数必须是数字', 'error'); return; }
+  var row = {
+    date: document.getElementById(ids.date).value,
+    hall: hallV, fire: fireV, private_room: prV, ac: acV,
+    note: document.getElementById(ids.note).value.trim(),
+    rehearsal: ids.rehearsal ? document.getElementById(ids.rehearsal).checked : false,
+    programming: ids.programming ? document.getElementById(ids.programming).checked : false,
+  };
+  if (!row.date) { showAlert('请选择日期', 'error'); return; }
+
+  // 检查是否已有该日期的抄表记录
+  fetchReadings().then(function(all) {
+    var existing = all.find(function(r) { return r.date === row.date; });
+    if (existing) {
+      showModal({ title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
+        body: '<strong>' + row.date + '</strong> 已存在数据,是否覆盖?<br><br>' +
+          '<span style="opacity:0.7">现有:</span> 大厅 ' + existing.hall + ' · 消防 ' + existing.fire + ' · 包厢 ' + existing.private_room + ' · 空调 ' + existing.ac + '<br>' +
+          '<span style="opacity:0.7">新数据:</span> 大厅 ' + row.hall + ' · 消防 ' + row.fire + ' · 包厢 ' + row.private_room + ' · 空调 ' + row.ac,
+        confirmText: '覆盖', confirmKind: 'primary' }).then(function(overOK) {
+          if (!overOK) return; doSaveReading();
+        });
+    } else { doSaveReading(); }
+
+    function doSaveReading() {
+      setSubmitting(true);
+      saveReadingRemote(row).then(function() {
+        showAlert('✓ ' + row.date + ' 已保存', 'success');
+        var paths = source === 'sidebar'
+          ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
+          : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
+        ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(function(k) { document.getElementById(paths[k]).value = ''; });
+        if (paths.rehearsal) document.getElementById(paths.rehearsal).checked = false;
+        if (paths.programming) document.getElementById(paths.programming).checked = false;
+        if (source === 'modal') closeReadingAddModal();
+        refreshAndRender();
+      }).catch(function(err) { showAlert('保存失败: ' + err.message, 'error'); }).finally(function() { setSubmitting(false); });
+    }
+  });
+}
+
+// 抄表/水电弹窗管理
+function openReadingAddModal() {
+  switchReadingTab('reading');
+  var d = document.getElementById('reading-add-date');
+  if (d && !d.value) d.value = todayStr();
+  document.getElementById('reading-add-modal-backdrop').classList.add('show');
+  document.getElementById('reading-add-hall')?.focus();
+}
+function closeReadingAddModal() {
+  document.getElementById('reading-add-modal-backdrop').classList.remove('show');
+}
+
+// 值班图片管理
+function addDutyImage(source) {
+  document.getElementById(source === 'sidebar' ? 'duty-image-input' : 'duty-add-image-input').click();
+}
+
+function handleDutyImageSelect(input, source) {
+  var previewId = source === 'sidebar' ? 'duty-image-preview' : 'duty-add-image-preview';
+  var preview = document.getElementById(previewId);
+  if (!preview) return;
+  var files = input.files;
+  for (var i = 0; i < files.length && preview.children.length < 3; i++) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var img = document.createElement('img');
+      img.src = e.target.result;
+      img.style.cssText = 'width:60px;height:60px;object-fit:cover;border-radius:4px;cursor:pointer;';
+      img.onclick = function() { openLightbox(e.target.src); };
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(files[i]);
+  }
+  input.value = '';
+}
+
+// 值班处理弹窗
+function openDutyHandleModal(id, duty) {
+  document.getElementById('duty-handle-id').value = id;
+  document.getElementById('duty-handle-original-type').textContent = duty.duty_type || '—';
+  document.getElementById('duty-handle-original-area').textContent = duty.fault_area || '—';
+  document.getElementById('duty-handle-time').value = '';
+  document.getElementById('duty-handle-shift').value = '';
+  document.getElementById('duty-handle-method').value = '';
+  document.getElementById('duty-handle-note').value = '';
+  document.querySelectorAll('input[name="duty-add-status"]').forEach(function(r) { r.checked = false; });
+  document.getElementById('duty-handle-image-preview').innerHTML = '';
+  document.getElementById('duty-handle-modal-backdrop').classList.add('show');
+}
+
+// 充值计算弹窗 (从旧 features_topup.js 迁移)
+function openTopupModal() {
+  var backdrop = document.getElementById('topup-modal-backdrop');
+  if (!backdrop) return;
+  backdrop.classList.add('show');
+  recalcTopup();
+  document.getElementById('topup-days-modal')?.focus();
+}
+
+function closeTopupModal() {
+  var backdrop = document.getElementById('topup-modal-backdrop');
+  if (backdrop) backdrop.classList.remove('show');
+}
+
+function recalcTopup() {
+  var daysEl = document.getElementById('topup-days-modal');
+  var resultEl = document.getElementById('topup-result-modal');
+  var totalEl = document.getElementById('topup-total-modal');
+  if (!daysEl || !resultEl || !totalEl) return;
+  var days = parseFloat(daysEl.value);
+  var rs = (CURRENT_READINGS || []).filter(function(r) { return r.hall != null; });
+  if (!days || days <= 0 || rs.length === 0) {
+    resultEl.innerHTML = '<div style="font-size:12px;color:var(--text-muted);">请输入预充天数(≥1)</div>';
+    totalEl.value = '';
+    return;
+  }
+  var totalMeter = 0, totalActual = 0, totalYuan = 0;
+  var rows = '';
+  for (var i = 0; i < CHARGE_METERS.length; i++) {
+    var m = CHARGE_METERS[i];
+    var usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
+    var daily = usage ? usage.daily : 0;
+    var actualKwh = daily * days;
+    var meterVal = actualKwh / MULTIPLIER(m.key);
+    var yuan = actualKwh * ELECTRICITY_PRICE;
+    totalMeter += meterVal; totalActual += actualKwh; totalYuan += yuan;
+    var basis = usage ? '<span style="opacity:.7">' + (usage.basisLabel || '本月日均') + '</span>' : '暂无日均数据';
+    var mult = MULTIPLIER(m.key);
+    var daysLeft = daily > 0 ? (actualKwh / daily) : 0;
+    rows += '<div class="topup-meter-card" data-daily="' + daily.toFixed(4) + '">' +
+      '<div class="topup-meter-row">' +
+        '<span class="topup-meter-name">' + m.meterNo + m.label + '</span>' +
+        '<input type="number" class="field-control topup-meter" value="' + Math.round(meterVal) + '" step="1" data-mult="' + mult + '" title="表读数(充值录入值,可输入取整,自动反算其他值)">' +
+        '<span class="topup-mult">×' + mult + '</span>' +
+        '<input type="number" class="field-control topup-actual" value="' + Math.round(actualKwh) + '" step="1" data-mult="' + mult + '" title="实际度数(可输入取整充值,自动反算其他值)">' +
+        '<span class="topup-yuan">≈ ¥' + Math.round(yuan) + '</span>' +
+      '</div>' +
+      '<div class="topup-meter-meta">日均 ' + Math.round(daily) + ' 度/天 ' + basis + ' <span class="topup-daysleft">≈ 可用 ' + Math.round(daysLeft) + ' 天</span></div>' +
+    '</div>';
+  }
+  resultEl.innerHTML = rows;
+  updateTopupTotal();
+}
+
+function updateTopupTotal() {
+  var totalEl = document.getElementById('topup-total-modal');
+  if (!totalEl) return;
+  var totalActual = 0, totalMeter = 0, totalYuan = 0;
+  document.querySelectorAll('.topup-actual').forEach(function(inp) {
+    var mult = parseFloat(inp.getAttribute('data-mult'));
+    var actual = parseFloat(inp.value) || 0;
+    totalActual += actual; totalMeter += actual / mult; totalYuan += actual * ELECTRICITY_PRICE;
+  });
+  totalEl.value = '合计 ' + Math.round(totalActual) + ' 度(实际) ≈ ¥ ' + Math.round(totalYuan) + '  (表读数 ' + Math.round(totalMeter) + ')';
+}
+
+// Tab 切换 (从旧 forms_tab.js 迁移)
+function switchReadingTab(tab) {
+  var tabs = document.querySelectorAll('#reading-add-tabs .tab-btn');
+  tabs.forEach(function(btn) { btn.classList.toggle('active', btn.dataset.tab === tab); });
+  var panels = document.querySelectorAll('#reading-add-modal-backdrop .tab-panel');
+  panels.forEach(function(p) { p.style.display = (p.dataset.panel === tab ? '' : 'none'); });
+}
+
+// 水电录入侧栏/弹窗共用提交函数 (从旧 forms_submit.js 迁移)
+function submitUtilityAdd(source) {
+  if (_submitting) return;
+  var ids = source === 'sidebar'
+    ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
+    : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
+  var date = document.getElementById(ids.date).value;
+  if (!date) { showAlert('请选择抄表日期', 'error'); return; }
+  var numU = function(id) { var v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
+  var mainV = numU(ids.main), subV = numU(ids.sub), waterV = numU(ids.water);
+  var vals = [mainV, subV, waterV];
+  if (vals.every(function(v) { return v === null; })) { showAlert('请至少填写总表/分表/水表一项', 'error'); return; }
+  if (vals.some(function(v) { return v !== null && isNaN(v); })) { showAlert('读数必须是数字', 'error'); return; }
+  var row = { date: date, main_meter: mainV, sub_meter: subV, water: waterV, note: document.getElementById(ids.note).value.trim() };
+
+  fetchWaterReadings().then(function(all) {
+    var existing = all.find(function(r) { return r.date === row.date; });
+    if (existing) {
+      showModal({ title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
+        body: '<strong>' + row.date + '</strong> 已有水电表底,是否覆盖?<br><br>' +
+          '<span style="opacity:0.7">现有:</span> 总表 ' + (existing.main_meter != null ? existing.main_meter : '—') + ' · 分表 ' + (existing.sub_meter != null ? existing.sub_meter : '—') + ' · 水表 ' + (existing.water != null ? existing.water : '—') + '<br>' +
+          '<span style="opacity:0.7">新数据:</span> 总表 ' + (row.main_meter != null ? row.main_meter : '—') + ' · 分表 ' + (row.sub_meter != null ? row.sub_meter : '—') + ' · 水表 ' + (row.water != null ? row.water : '—'),
+        confirmText: '覆盖', confirmKind: 'primary' }).then(function(overOK) {
+          if (!overOK) return; doSaveWater();
+        });
+    } else { doSaveWater(); }
+
+    function doSaveWater() {
+      setSubmitting(true);
+      saveWaterReadingRemote(row).then(function() {
+        showAlert('✓ ' + date + ' 水电已保存', 'success');
+        var paths = source === 'sidebar'
+          ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
+          : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
+        ['main', 'sub', 'water', 'note'].forEach(function(k) { document.getElementById(paths[k]).value = ''; });
+        if (source === 'modal') closeReadingAddModal();
+        refreshAndRender();
+      }).catch(function(err) { showAlert('保存失败: ' + err.message, 'error'); }).finally(function() { setSubmitting(false); });
+    }
+  });
+}
+
+// NAS 同步模板下载
+function downloadImportTemplate() {
+  var model = document.getElementById('import-model').value;
+  var templates = { readings: 'date,hall,fire,private_room,ac,note\n2024-01-01,65.30,1305.20,79.80,52.10,\n', charges: 'date,hall,fire,private_room,ac,note\n2024-01-01,65.30,1305.20,79.80,52.10,\n', items: 'name,qty,unit,note\n螺丝刀,5,把,\n', purchases: 'date,name,qty,unit,est_price,supplier,note\n2024-01-01,电线,100,米,2.5,五金店,\n' };
+  var content = templates[model] || '';
+  var blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = model + '-template.csv'; a.click();
+  URL.revokeObjectURL(url);
 }

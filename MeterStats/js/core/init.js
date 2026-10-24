@@ -77,8 +77,15 @@ function checkDutyReminder() {
 }
 
 // 把关键函数暴露到 window,让 admin.js(strict mode 单独作用域)能调用恢复后刷新整个页面
-window.renderAll = renderAll;
-window.refreshAll = refreshAll;  // 兼容旧的调用
+// renderAll 和 refreshAndRender 已在 readings.js 中定义，直接从 window 获取即可
+if (typeof window.renderAll !== 'function') {
+    // readings.js 未定义 renderAll 时的兼容处理（理论上不会发生）
+    window.renderAll = function() {
+        console.warn('renderAll 未定义，尝试调用 refreshAndRenderTables');
+        if (typeof refreshAndRenderTables === 'function') refreshAndRenderTables();
+    };
+}
+window.refreshAll = window.renderAll;  // 兼容旧的调用
 window.switchSection = switchSection;  // Tab 切换（HTML onclick 需要全局函数）
 window.switchSettingsPage = switchSettingsPage;  // 设置页面切换（HTML onclick 需要全局函数）
 window.toggleGroup = toggleGroup;  // 侧栏分组折叠（HTML onclick 需要全局函数）

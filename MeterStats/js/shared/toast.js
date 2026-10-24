@@ -70,17 +70,16 @@ function closeDataMgmtModal() {
 
 // 数据管理弹窗: 加载备份目录配置
 function loadDataMgmtBackupDir() {
-  fetch('/api/admin/backup-config?token=' + encodeURIComponent(localStorage.getItem('meter_token') || ''))
-    .then(r => r.json()).then(res => {
-      const display = document.getElementById('datamgmt-backup-dir-display');
+  Api.admin.backupConfig().then(function(res) {
+      var display = document.getElementById('datamgmt-backup-dir-display');
       if (!display) return;
       if (res.customizable === false) {
         display.textContent = '🔒 ' + (res.backup_dir || res.data_dir);
       } else {
-        const dir = res.backup_dir || '默认: ' + res.data_dir + '/backup';
+        var dir = res.backup_dir || '默认: ' + res.data_dir + '/backup';
         display.textContent = dir;
       }
-    }).catch(() => {});
+    }).catch(function() {});
 }
 
 // 数据管理弹窗: 选择备份目录

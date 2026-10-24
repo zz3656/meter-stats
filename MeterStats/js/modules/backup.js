@@ -3,17 +3,11 @@
  */
 
 function doBackup() {
-    return Api.system.backup ? null : fetch('/api/backup', { method: 'POST' }).then(function(res) {
-        return res.json();
-    });
+    return Api.backup.doBackup();
 }
 
 function doRestore(file) {
-    var formData = new FormData();
-    formData.append('file', file);
-    return fetch('/api/restore', { method: 'POST', body: formData }).then(function(res) {
-        return res.json();
-    });
+    return Api.backup.doRestore(file);
 }
 
 if (typeof module !== 'undefined' && module.exports) {

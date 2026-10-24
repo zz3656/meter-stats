@@ -147,9 +147,13 @@ class Handler(BaseHTTPRequestHandler):
                     src = match.group(3)
                     if src.startswith(("https://", "http://", "//")):
                         return match.group(0)
-                    if "?" in src:
+                    if "?" in src and "<TIMESTAMP>" not in src:
                         return match.group(0)
-                    return f'{attr}={quote}{src}?v={STATIC_VERSION_TOKEN}{quote}'
+                    # 处理 <TIMESTAMP> 占位符：替换为当前时间戳
+                    if "<TIMESTAMP>" in src:
+                        import time
+                        src = src.replace("<TIMESTAMP>", str(int(time.time())))
+                    return f'{attr}={quote}{src}{quote}'
                 html = re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
             body = html.encode("utf-8")
         else:

@@ -171,6 +171,32 @@ final class WebViewUIDelegate: NSObject, WKUIDelegate {
     }
 }
 
+// MARK: - WKWebView 网络错误处理
+
+final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
+    let failMessageSetter: (String) async -> Void
+    
+    init(failMessageSetter: @escaping (String) async -> Void) {
+        self.failMessageSetter = failMessageSetter
+    }
+    
+    func webView(_ webView: WKWebView, didFailProvisionalLoad navigation: WKNavigation?, withError error: Error) {
+        let msg = error.localizedDescription
+        NSLog("[WebViewNavigationDelegate] 页面加载失败: \(msg)")
+        Task {
+            await failMessageSetter(msg)
+        }
+    }
+    
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation?, withError error: Error) {
+        let msg = error.localizedDescription
+        NSLog("[WebViewNavigationDelegate] 请求失败: \(msg)")
+        Task {
+            await failMessageSetter(msg)
+        }
+    }
+}
+
 @main
 struct MeterStatsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
@@ -331,18 +357,26 @@ struct ContentView: View {
             try? await Task.sleep(nanoseconds: 200_000_000)
             await setStep(.killing)
             ServerManager.shared.killPortOccupants()
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // 异步等待端口释放（最多等 2 秒）
+            let pollDeadline = Date().addingTimeInterval(2.0)
+            while ServerManager.shared.isPortBusy && Date() < pollDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         } else if ServerManager.shared.isPortBusy {
             // PID 文件不存在, 回退到端口扫描
             await setStep(.killing)
             ServerManager.shared.killPortOccupants()
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // 异步等待端口释放（最多等 2 秒）
+            let pollDeadline = Date().addingTimeInterval(2.0)
+            while ServerManager.shared.isPortBusy && Date() < pollDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         }
 
         // 2. 启动 Python
         await setStep(.startingPython)
         do {
-            try ServerManager.shared.start()
+            try await ServerManager.shared.start()
             NSLog("[App] ✓ Python 后端启动成功")
         } catch {
             await MainActor.run {
@@ -368,10 +402,10 @@ struct ContentView: View {
 
         // 4. 创建 WKWebView 并加载
         await setStep(.loadingPage)
-        // 先同步清除缓存，再创建 WKWebView
+        // 仅清除 cache（不清 cookies/session），避免过度清理
         let dataStore = WKWebsiteDataStore.default()
         await dataStore.removeData(
-            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            ofTypes: ["cache"],
             modifiedSince: Date.distantPast
         )
 
@@ -388,9 +422,16 @@ struct ContentView: View {
             userContentController.add(BackupDirHandler(webView: nil), name: "pickBackupDir")
             userContentController.add(PickFileHandler(webView: nil), name: "macOSPickFile")
             let wv = WKWebView(frame: .zero, configuration: cfg)
+            // WKNavigationDelegate: 捕获网络错误，显示友好的错误提示
+            wv.navigationDelegate = WebViewNavigationDelegate(failMessageSetter: { msg in
+                await MainActor.run {
+                    self.failMessage = "网络连接失败: \(msg)\n请确认后端服务正在运行。"
+                    self.bootStep = .none
+                }
+            })
             // WKUIDelegate: 让所有 <input type="file"> 也能弹原生选择器(兜底)
             wv.uiDelegate = WebViewUIDelegate()
-            let req = URLRequest(url: URL(string: "http://localhost:8765")!)
+            let req = URLRequest(url: URL(string: "http://127.0.0.1:8765")!)
             wv.load(req)
             self.webView = wv
             self.bootStep = .ready
