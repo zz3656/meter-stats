@@ -262,7 +262,16 @@ def handle_put_backup_retention(handler):
     settings = get_settings()
     settings["backup_retention_count"] = count
     save_settings(settings)
-    send_json(handler, 200, {"ok": True, "retention_count": count})
+
+    # 立刻按新的个数清理一次（不用等下次备份才生效）
+    removed = 0
+    try:
+        from storage import cleanup_auto_backups
+        removed = cleanup_auto_backups(_resolve_backup_parent(_get_data_dir()), count)
+    except Exception as e:
+        log(f"[WARN] 按新保留数量清理失败: {e}")
+
+    send_json(handler, 200, {"ok": True, "retention_count": count, "removed": removed})
 
 
 # ============ 备份目录配置 ============
@@ -358,6 +367,62 @@ def handle_put_backup_config(handler):
 
 # ============ 代理 NAS 数据（解决跨域）============
 
+def _is_lan_host(host: str) -> bool:
+    """判断是否内网主机（内网默认 http，外网默认 https）"""
+    h = (host or "").lower()
+    if h in ("localhost", "127.0.0.1", "::1") or h.endswith(".local"):
+        return True
+    if h.startswith("192.168.") or h.startswith("10."):
+        return True
+    if h.startswith("172."):
+        parts = h.split(".")
+        if len(parts) >= 2:
+            try:
+                return 16 <= int(parts[1]) <= 31
+            except ValueError:
+                return False
+    return False
+
+
+def _normalize_nas_url(raw: str) -> str:
+    """补全协议 + 去掉尾部斜杠。
+
+    - 内网地址（192.168./10./172.16-31/localhost/*.local）→ http://
+      NAS 上通常没有有效证书。
+    - 其余（域名、公网 IP）→ https://
+      外网部署基本都会挂 Cloudflare / 反向代理并强制 HTTPS，默认给 http
+      会先吃一次 301 跳转，慢的时候直接超时。
+    """
+    u = (raw or "").strip().rstrip("/")
+    if not u:
+        return u
+    if u.startswith("http://") or u.startswith("https://"):
+        return u
+    host = u.split("/")[0].split(":")[0]
+    return ("http://" if _is_lan_host(host) else "https://") + u
+
+
+def _friendly_net_error(exc: Exception, url: str) -> str:
+    """把底层网络异常翻译成能指导操作的中文提示。"""
+    name = type(exc).__name__
+    msg = str(exc)
+    if "403" in msg:
+        return f"对方拒绝访问（403）：{url} —— 检查 NAS 侧 WAF / IP 白名单"
+    if "401" in msg:
+        return f"需要登录认证（401）：{url}"
+    if "404" in msg:
+        return f"接口不存在（404）：{url} —— 对端可能不是同版本 MeterStats"
+    if "timed out" in msg.lower() or "timeout" in name.lower():
+        return f"连接超时（35 秒）：{url} —— 外网较慢或对端未启动，可稍后重试"
+    if "CERTIFICATE" in msg.upper():
+        return f"HTTPS 证书校验失败：{url} —— 可改用 http:// 或检查证书有效期"
+    if "Connection refused" in msg:
+        return f"连接被拒绝：{url} —— 对端端口未监听"
+    if name in ("gaierror", "URLError", "socket.gaierror"):
+        return f"域名解析失败：{url} —— 检查地址拼写与本机网络"
+    return f"无法连接 {url}：{msg}"
+
+
 def handle_get_proxy_nas_data(handler):
     """GET/POST /api/proxy/nas-data — 代理从 NAS 拉取数据文件
 
@@ -390,9 +455,7 @@ def handle_get_proxy_nas_data(handler):
         send_json(handler, 200, {"ok": False, "error": "NAS 地址不能为空"})
         return
 
-    # 补全协议
-    if not nas_url.startswith("http://") and not nas_url.startswith("https://"):
-        nas_url = "http://" + nas_url
+    nas_url = _normalize_nas_url(nas_url)
 
     api_url = f"{nas_url}/api/admin/data-files"
 
@@ -400,7 +463,14 @@ def handle_get_proxy_nas_data(handler):
     try:
         import urllib.request
         req = urllib.request.Request(api_url)
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        # ⚠️ 必须伪装成浏览器：NAS 前面通常挂了 Cloudflare/反向代理，
+        # 默认的 "Python-urllib/3.x" UA 会被 WAF 直接拦成 403 Forbidden，
+        # 前端看到的就是"同步失败: 无法连接 NAS: HTTP Error 403"。
+        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+        req.add_header("Accept", "application/json, text/plain, */*")
+        # 外网（走 Cloudflare 等）比内网慢，20s 容易在冷启动时超时
+        with urllib.request.urlopen(req, timeout=35) as resp:
             import json
             body = json.loads(resp.read().decode("utf-8"))
 
@@ -412,7 +482,7 @@ def handle_get_proxy_nas_data(handler):
 
     except Exception as e:
         log(f"[PROXY] 从 NAS 获取数据失败: {e}")
-        send_json(handler, 200, {"ok": False, "error": f"无法连接 NAS: {e}"})
+        send_json(handler, 200, {"ok": False, "error": _friendly_net_error(e, api_url)})
 
 
 # ============ 写入 NAS 数据到本地（解决跨域第二步）============

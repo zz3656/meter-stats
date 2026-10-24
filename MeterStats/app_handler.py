@@ -85,7 +85,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 from routing import route
-                route(method, self, self.path)
+                handled = route(method, self, self.path)
+                if handled is False:
+                    # ⚠️ 绝不能什么都不做就返回：不发响应会让客户端收到空连接，
+                    # 在 WKWebView/浏览器里表现为 "TypeError: Load failed"（-1005 Connection reset）。
+                    # 路由未命中必须显式返回 404 JSON。
+                    from storage import log
+                    log(f"[404] {method} {self.path}")
+                    from utils import send_json
+                    send_json(self, 404, {"error": f"未知接口: {self.path.split('?')[0]}"})
             except Exception as e:
                 from storage import log
                 elapsed = time.time() - start
@@ -172,9 +180,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
-        from utils import CORS
+        from utils import CORS, _add_cors
         for k, v in CORS.items():
             self.send_header(k, v)
+        _add_cors(self)
         self.end_headers()
         self.wfile.write(body)
 

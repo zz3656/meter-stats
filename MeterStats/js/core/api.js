@@ -25,7 +25,10 @@ var Api = (() => {
             path = path + separator + 'token=' + encodeURIComponent(token);
         }
 
-        return fetch('/api' + path, opts).then(function(res) {
+        // path 已包含 '/api' 前缀（如 '/api/readings'），不能再拼一次，
+        // 否则会请求 /api/api/xxx —— 后端无此路由，直接断开连接，
+        // WKWebView/浏览器里表现为 "TypeError: Load failed"。
+        return fetch(path, opts).then(function(res) {
             return res.json().then(function(data) {
                 if (!res.ok) throw new Error(data.error || '请求失败');
                 return data;
@@ -145,7 +148,8 @@ var Api = (() => {
         backupStatus: function() { return _request('GET', '/api/admin/backup-status'); },
         backupConfig: function() { return _request('GET', '/api/admin/backup-config'); },
         setAutoBackup: function(enabled) { return _request('PUT', '/api/admin/auto-backup', { enabled: enabled }); },
-        setBackupRetention: function(days) { return _request('PUT', '/api/admin/backup-retention', { retention_days: days }); },
+        // ⚠️ 参数名必须是 retention_count：后端读的是它，写成 retention_days 会被静默忽略（永远存 5）
+        setBackupRetention: function(count) { return _request('PUT', '/api/admin/backup-retention', { retention_count: count }); },
         backupDelete: function(name) { return _request('GET', '/api/admin/backup-delete?name=' + encodeURIComponent(name)); },
         backupDownload: function(name) { return _request('GET', '/api/admin/backup-download?name=' + encodeURIComponent(name)); },
         dataFiles: function() { return _request('GET', '/api/admin/data-files'); },

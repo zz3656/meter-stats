@@ -86,7 +86,7 @@ function renderReadingTable(readings) {
     var readEmpty = document.getElementById('history-empty');
     if (!readTbody) return;
 
-    var monthSel = document.getElementById('history-month');
+    var monthSel = document.getElementById('record-month') || document.getElementById('history-month');
     var month = monthSel ? monthSel.value : '';
     var filtered = month ? readings.filter(function(r) { return r.date.startsWith(month); }) : readings;
 
@@ -151,7 +151,7 @@ function renderWaterTable() {
     var waterEmpty = document.getElementById('water-history-empty');
     if (!waterTbody) return;
 
-    var waterMonthSel = document.getElementById('water-history-month');
+    var waterMonthSel = document.getElementById('record-month') || document.getElementById('water-history-month');
     var waterMonth = waterMonthSel ? waterMonthSel.value : '';
     var waterFiltered = waterMonth
         ? (State.get("water") || []).filter(function(w) { return w.date.startsWith(waterMonth); })
@@ -402,7 +402,7 @@ function renderChargeTable(charges) {
     var empty = document.getElementById('charge-list-empty');
     var summary = document.getElementById('charge-summary');
 
-    var monthSel = document.getElementById('charge-month');
+    var monthSel = document.getElementById('record-month') || document.getElementById('charge-month');
     var month = monthSel ? monthSel.value : '';
     var filtered = month ? (charges || []).filter(function(c) { return c.date.startsWith(month); }) : charges;
 
@@ -469,10 +469,11 @@ function renderChargeTable(charges) {
         });
     });
 
-    // 汇总(本月 = 当前自然月)
-    var now = new Date();
-    var monthKey = formatDate(now).slice(0, 7);
-    var monthCharges = charges.filter(function(c) { return c.date.startsWith(monthKey); });
+    // 汇总（跟随下拉选中的月份；未选中时才退回当前自然月）
+    // ⚠️ 这里原来硬用当前自然月，导致选中 9 月时表格显示 9 月数据、
+    // 汇总却算 10 月（0 条），看起来"有记录但次数/度数/金额全是 0"。
+    var monthKey = month || formatDate(new Date()).slice(0, 7);
+    var monthCharges = (charges || []).filter(function(c) { return c.date.startsWith(monthKey); });
     var monthCount = monthCharges.length;
     var monthKwh = 0;
     for (var i = 0; i < monthCharges.length; i++) {
@@ -615,12 +616,21 @@ async function renderAll() {
     renderDutyTable(State.get("duty"), '');
 
     // 3. 渲染报表（图表）
-    var reports = window.Api ? window.Api.reports : null;
-    if (reports) {
-        try {
-            var snap = await Api.reports.snapshot({});
-            renderTrendChart(State.get("readings"), State.get("charges"));
-        } catch(e) { /* 图表非关键，失败不影响主功能 */ }
+    // 注意：这里不要再拉一次 snapshot，上面的 State 里已有全部数据。
+    try {
+        renderTrendChart(State.get("readings"), State.get("charges"));
+    } catch (e) { /* 图表非关键，失败不影响主功能 */ }
+
+    // 3b. 余量预警卡片 / 每月用电统计（重构后漏掉调用，卡片一直是空的）
+    if (typeof renderChargeAlert === 'function') {
+        renderChargeAlert(State.get("readings"), State.get("charges"));
+    }
+    if (typeof renderStats === 'function') {
+        renderStats(State.get("readings"), State.get("charges"));
+    }
+    // 3c. 每周汇报的周选择器
+    if (typeof populateWeeklyWeekSelector === 'function') {
+        populateWeeklyWeekSelector();
     }
 
     // 4. 触发饼图（如果可见）
@@ -645,13 +655,52 @@ async function renderAll() {
     }
 }
 
+// 保存单行抄表到后端（重构时丢失，admin.js 侧栏录入依赖）
+async function saveReadingRemote(row) {
+    return api('POST', '/api/readings', row);
+}
+
 // refreshAndRender 别名 — 兼容旧代码调用（被各 modules 广泛使用）
 var refreshAndRender = refreshAndRenderTables;
+
+/**
+ * 用电记录页的三 Tab 切换（抄表 / 充值 / 水电）。
+ *
+ * 合并前是侧栏两个独立页面（抄表记录 + 充值记录），现在共用：
+ *   - 一个月份筛选 #record-month
+ *   - 一个卡片，Tab 切换面板
+ *   - 新增按钮随 Tab 变化（#btn-add-reading / #btn-add-charge / #btn-add-water）
+ */
+function switchRecordTab(tab) {
+    var TABS = ['reading', 'charge', 'water'];
+    if (TABS.indexOf(tab) < 0) tab = 'reading';
+
+    document.querySelectorAll('.record-tab').forEach(function(btn) {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    document.querySelectorAll('.record-panel').forEach(function(panel) {
+        panel.style.display = (panel.id === 'record-panel-' + tab) ? '' : 'none';
+    });
+
+    var BTN_MAP = { reading: 'btn-add-reading', charge: 'btn-add-charge', water: 'btn-add-water' };
+    Object.keys(BTN_MAP).forEach(function(k) {
+        var el = document.getElementById(BTN_MAP[k]);
+        if (el) el.style.display = (k === tab) ? '' : 'none';
+    });
+
+    // 首次切到某个 Tab 时确保表格已渲染（数据可能刚加载完还没画）
+    try {
+        if (tab === 'reading' && typeof renderReadingTable === 'function') renderReadingTable(State.get('readings'));
+        if (tab === 'charge' && typeof renderChargeTable === 'function') renderChargeTable(State.get('charges'));
+        if (tab === 'water' && typeof renderWaterTable === 'function') renderWaterTable();
+    } catch (e) { /* 渲染失败不影响 Tab 切换 */ }
+}
 
 // 全局暴露（供 init.js、admin.js 跨 script 标签调用）
 if (typeof window !== 'undefined') {
     window.renderAll = renderAll;
     window.refreshAndRender = refreshAndRender;
+    window.switchRecordTab = switchRecordTab;
 }
 
 // 导出供其他模块使用

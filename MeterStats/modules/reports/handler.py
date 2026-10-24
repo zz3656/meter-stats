@@ -15,6 +15,17 @@ def _load(model: str) -> list:
     return load_json(get_data_paths().get(model), [])
 
 
+def _util_mults() -> tuple[int, int]:
+    """读取水电表倍率（总表/分表），可在「电表设置」里改；缺失时回退常量默认值。"""
+    try:
+        from modules.system.settings_handler import get_settings
+
+        cfg = (get_settings() or {}).get("config", {}) or {}
+        return int(cfg.get("main_mult", MAIN_METER_MULT)), int(cfg.get("sub_mult", SUB_METER_MULT))
+    except Exception:
+        return MAIN_METER_MULT, SUB_METER_MULT
+
+
 def handle_get_health(handler):
     """GET /api/health"""
     data_dir = get_data_paths().get("readings")
@@ -111,8 +122,72 @@ def handle_get_monthly_report(handler):
     send_json(handler, 200, report)
 
 
+def calc_month_utilities(month: str, water_data: list) -> dict:
+    """计算某个月的水电用量（总表/分表/厨房/水表）。
+
+    从 monthly-utilities 的处理逻辑中抽出，供月度报告和年度汇总共用。
+    水电表是普通递增表：本月读数 − 上月读数 = 本月用量。
+    """
+    cur_rs = sorted([r for r in water_data if str(r.get("date", "")).startswith(month)],
+                    key=lambda r: r["date"])
+    if not cur_rs:
+        return {"month": month, "has_data": False, "msg": "该月未录入水电表底"}
+
+    y, m = int(month[:4]), int(month[5:7])
+    py, pm = (y - 1, 12) if m == 1 else (y, m - 1)
+    prev_key = f"{py:04d}-{pm:02d}"
+    prev_rs = sorted([r for r in water_data if str(r.get("date", "")).startswith(prev_key)],
+                     key=lambda r: r["date"])
+    cur = cur_rs[-1]
+    prev = prev_rs[-1] if prev_rs else None
+
+    def _diff(cur_v, prev_v):
+        if cur_v is None or prev_v is None:
+            return None
+        return round(max(cur_v - prev_v, 0), 1)  # 防负(换表/反装)
+
+    main_raw = _diff(cur.get("main_meter"), prev.get("main_meter") if prev else None)
+    sub_raw = _diff(cur.get("sub_meter"), prev.get("sub_meter") if prev else None)
+    # 倍率可在「电表设置 → 水电表参数」里配置
+    main_mult, sub_mult = _util_mults()
+    main_kwh = round(main_raw * main_mult, 1) if main_raw is not None else None
+    sub_kwh = round(sub_raw * sub_mult, 1) if sub_raw is not None else None
+    kitchen_kwh = round(main_kwh - sub_kwh, 1) if main_kwh is not None and sub_kwh is not None else None
+    kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE_CONST, 2) if kitchen_kwh is not None else None
+    water_usage = _diff(cur.get("water"), prev.get("water") if prev else None)
+    water_cost = round(water_usage * WATER_PRICE, 2) if water_usage is not None else None
+
+    return {
+        "month": month,
+        "has_data": True,
+        "has_prev": bool(prev_rs),
+        "cur": {"date": cur["date"],
+                "main_meter": cur.get("main_meter"),
+                "sub_meter": cur.get("sub_meter"),
+                "water": cur.get("water")},
+        "prev_date": prev["date"] if prev else None,
+        # 上月表底读数：前端复制表格要展示「x月表显 / 本月表显」两列
+        "prev": {"main_meter": prev.get("main_meter"),
+                 "sub_meter": prev.get("sub_meter"),
+                 "water": prev.get("water")} if prev else None,
+        "main_kwh": main_kwh,
+        "sub_kwh": sub_kwh,
+        "kitchen_kwh": kitchen_kwh,
+        "kitchen_cost": kitchen_cost,
+        "water_usage": water_usage,
+        "water_cost": water_cost,
+        "price_electricity": ELECTRICITY_PRICE_CONST,
+        "price_water": WATER_PRICE,
+        "mult_main": main_mult,
+        "mult_sub": sub_mult,
+    }
+
+
 def handle_get_yearly_report(handler):
-    """GET /api/yearly-report?year=2026"""
+    """GET /api/yearly-report?year=2026
+
+    返回每月的用电（含分表）+ 水电用量，供年度汇总表格使用。
+    """
     import re as _re
     qs = parse_qs(urlparse(handler.path).query)
     year = qs.get("year", [str(datetime.now().year)])[0]
@@ -123,6 +198,28 @@ def handle_get_yearly_report(handler):
     readings = _load("readings")
     charges = _load("charges")
     report = calculate_yearly_report(readings, charges, year)
+
+    # 附加每个月的月度水电（前端年度表格要展示总表/分表/厨房/水表）
+    water_data = _load("readings_water")
+    year_months = [m["month"] for m in report.get("months", [])]
+    for mo in report.get("months", []):
+        mo["utilities"] = calc_month_utilities(mo["month"], water_data)
+    # 年度水电合计
+    totals = {"main_kwh": 0.0, "sub_kwh": 0.0, "kitchen_kwh": 0.0,
+              "kitchen_cost": 0.0, "water_usage": 0.0, "water_cost": 0.0}
+    any_util = False
+    for mo in report.get("months", []):
+        u = mo.get("utilities") or {}
+        if not u.get("has_data"):
+            continue
+        any_util = True
+        for k in totals:
+            v = u.get(k)
+            if isinstance(v, (int, float)):
+                totals[k] += v
+    report["utilities_total"] = {k: round(v, 2) for k, v in totals.items()} if any_util else None
+    report["utilities_months"] = year_months
+
     send_json(handler, 200, report)
 
 
@@ -172,8 +269,10 @@ def handle_get_monthly_utilities(handler):
     # 读数差 × 倍率 = 实际用电(总表 ×50,分表 ×40)
     main_raw = _diff(cur.get("main_meter"), prev.get("main_meter") if prev else None)
     sub_raw = _diff(cur.get("sub_meter"), prev.get("sub_meter") if prev else None)
-    main_kwh = round(main_raw * MAIN_METER_MULT, 1) if main_raw is not None else None
-    sub_kwh = round(sub_raw * SUB_METER_MULT, 1) if sub_raw is not None else None
+    # 倍率可在「电表设置 → 水电表参数」里配置
+    main_mult, sub_mult = _util_mults()
+    main_kwh = round(main_raw * main_mult, 1) if main_raw is not None else None
+    sub_kwh = round(sub_raw * sub_mult, 1) if sub_raw is not None else None
     kitchen_kwh = round(main_kwh - sub_kwh, 1) if main_kwh is not None and sub_kwh is not None else None
     kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE_CONST, 2) if kitchen_kwh is not None else None
     water_usage = _diff(cur.get("water"), prev.get("water") if prev else None)
@@ -188,6 +287,10 @@ def handle_get_monthly_utilities(handler):
                 "sub_meter": cur.get("sub_meter"),
                 "water": cur.get("water")},
         "prev_date": prev["date"] if prev else None,
+        # 上月表底读数：前端复制表格要展示「x月表显 / 本月表显」两列
+        "prev": {"main_meter": prev.get("main_meter"),
+                 "sub_meter": prev.get("sub_meter"),
+                 "water": prev.get("water")} if prev else None,
         "main_kwh": main_kwh,
         "sub_kwh": sub_kwh,
         "kitchen_kwh": kitchen_kwh,
@@ -196,6 +299,6 @@ def handle_get_monthly_utilities(handler):
         "water_cost": water_cost,
         "price_electricity": ELECTRICITY_PRICE_CONST,
         "price_water": WATER_PRICE,
-        "mult_main": MAIN_METER_MULT,
-        "mult_sub": SUB_METER_MULT,
+        "mult_main": main_mult,
+        "mult_sub": sub_mult,
     })

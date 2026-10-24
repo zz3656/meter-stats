@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
-from handlers.settings import init_settings  # noqa: E402
+from modules.system.settings_handler import init_settings  # noqa: E402
 
 
 class TestSettingsInitThreadSafety(unittest.TestCase):

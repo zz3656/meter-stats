@@ -21,13 +21,20 @@ async function adminSyncFromNAS() {
     return;
   }
 
-  // 补全协议
-  if (!remoteUrl.startsWith('http://') && !remoteUrl.startsWith('https://')) {
-    remoteUrl = 'http://' + remoteUrl;
+  // 补全协议：内网默认 http（NAS 通常没证书），域名/公网默认 https
+  // —— 外网部署基本都强制 HTTPS，给 http 会先吃一次 301，慢时直接超时
+  if (!/^https?:\/\//i.test(remoteUrl)) {
+    const host = remoteUrl.split('/')[0].split(':')[0].toLowerCase();
+    const isLan =
+      host === 'localhost' || host === '127.0.0.1' ||
+      host.startsWith('192.168.') || host.startsWith('10.') ||
+      host.endsWith('.local') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host);
+    remoteUrl = (isLan ? 'http://' : 'https://') + remoteUrl;
   }
 
   const original = btn.textContent;
-  btn.textContent = '⏳ 同步中…';
+  // 先只禁用、不改文案：此时还在等用户确认，显示"同步中"会让取消后看起来卡住
   btn.disabled = true;
 
   try {
@@ -68,7 +75,6 @@ async function adminSyncFromNAS() {
     }
 
     btn.textContent = '⏳ 同步中…';
-
     // 第二步：通过本地后端写入文件
     const syncRes = await api('POST', '/api/admin/sync-from-nas', { files: files });
 

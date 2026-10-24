@@ -71,6 +71,22 @@ def _save_items(data):
         save_json(_h._path(), data)
 
 
+def _clean_filenames(raw) -> list:
+    """清洗前端传来的图片文件名列表（只留纯文件名，防目录穿越）。"""
+    if not raw:
+        return []
+    if isinstance(raw, str):
+        raw = [raw]
+    out = []
+    for name in raw:
+        if not isinstance(name, str):
+            continue
+        base = name.replace("\\", "/").split("/")[-1].strip()
+        if base and base not in out:
+            out.append(base)
+    return out
+
+
 def handle_put_items_lend(handler, path_clean: str):
     """PUT /api/items/{id}/lend — 借出物品"""
     iid = path_clean[len("/api/items/"):].replace("/lend", "")
@@ -80,8 +96,10 @@ def handle_put_items_lend(handler, path_clean: str):
     qty = float(body.get("qty", 0))
     note = body.get("note", "").strip()
 
-    if not borrower:
-        send_json(handler, 400, {"error": "借出人不能为空"})
+    borrow_imgs = _clean_filenames(body.get("borrower_image_filenames"))
+    # 借出人：填名字 或 传一张图，满足其一即可
+    if not borrower and not borrow_imgs:
+        send_json(handler, 400, {"error": "请填写借出人，或传一张照片"})
         return
     if qty <= 0:
         send_json(handler, 400, {"error": "借出数量必须大于0"})
@@ -114,6 +132,8 @@ def handle_put_items_lend(handler, path_clean: str):
         "return_date": None,
         "status": "lent",
         "note": note,
+        # 借出人这一栏的图片（用照片代替签名；读取走 /api/duty/image/{filename}）
+        "borrower_image_filenames": borrow_imgs,
     }
     item["lend_records"].append(lend_record)
     item["lent_qty"] = lent_qty + qty
@@ -130,6 +150,8 @@ def handle_put_items_return(handler, path_clean: str):
 
     qty = body.get("qty")
     note = body.get("note", "").strip()
+    return_by = body.get("return_by", "").strip()
+    return_imgs = _clean_filenames(body.get("return_by_image_filenames"))
 
     items = _load_items()
     item, _ = _h._find_by_id(items, iid)
@@ -173,6 +195,12 @@ def handle_put_items_return(handler, path_clean: str):
         # 导致部分归还时用户输入的说明丢失,最需要 note 的场景反而丢了)
         if note:
             record["return_note"] = note
+        if return_by:
+            record["return_by"] = return_by
+        if return_imgs:
+            record["return_by_image_filenames"] = (
+                (record.get("return_by_image_filenames") or []) + return_imgs
+            )
         if record_qty <= ret_from_this:
             record["status"] = "returned"
             record["return_date"] = _now().strftime("%Y-%m-%d %H:%M:%S")

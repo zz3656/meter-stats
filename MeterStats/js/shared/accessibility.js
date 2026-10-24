@@ -115,9 +115,35 @@ async function fetchCharges() {
   catch (e) { console.warn('后端不可用,使用本地缓存:', e); return loadChargesCache(); }
 }
 
+// 水电表底（重构时丢失，admin.js 的水电页依赖）
+async function fetchWaterReadings() {
+  try {
+    const data = await Api.utilities.list();
+    CURRENT_WATER_READINGS = Array.isArray(data) ? data : (data.data || []);
+    return CURRENT_WATER_READINGS;
+  } catch (e) {
+    console.warn('fetchWaterReadings 失败:', e);
+    CURRENT_WATER_READINGS = [];
+    return [];
+  }
+}
+
+// ===== 最近一次拉取的全量数据（模块间共享）=====
+// ⚠️ CURRENT_ITEMS/PURCHASES/DUTY 原本就有，READINGS/CHARGES/WATER_READINGS 在
+// 模块化重构时丢失 → init.js / reports.js / admin.js 读取时报 ReferenceError。
+window.CURRENT_READINGS = [];
+window.CURRENT_CHARGES = [];
+window.CURRENT_WATER_READINGS = [];
 window.CURRENT_ITEMS = [];
 window.CURRENT_PURCHASES = [];
 window.CURRENT_DUTY = [];
+
+// 离线缓存 key（与历史版本保持一致，避免已缓存数据读不到）
+const STORAGE_KEY_READINGS = 'meter_readings_v1';
+const STORAGE_KEY_CHARGES = 'meter_charges_v1';
+
+// 年度汇总图表实例（renderCharts 里 resize 用，由报表模块赋值）
+var _yearlyChart = null;
 
 async function fetchItems() {
   try { const data = await Api.items.list(); CURRENT_ITEMS = Array.isArray(data) ? data : (data.data || []); return CURRENT_ITEMS; }

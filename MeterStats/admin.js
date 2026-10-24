@@ -53,11 +53,11 @@ async function doLogin() {
   errEl.style.display = 'none';
 
   // 先检查后端是否就绪（最多重试 15 次，每次间隔 1 秒，总超时 15 秒）
-  const healthUrl = 'http://127.0.0.1:8765/api/health';
+  // 使用相对路径 /api/health，避免 WKWebView 中绝对路径被拒绝
   let retries = 15;
   while (retries > 0) {
     try {
-      const resp = await fetch(healthUrl);
+      const resp = await fetch('/api/health');
       if (resp.ok) break; // 后端已就绪
     } catch {}
     retries--;
@@ -125,12 +125,31 @@ function loadAdminUsers() {
     const tbody = document.getElementById('users-table-body');
     if (!tbody) return;
     const usersList = users || [];
-      tbody.innerHTML = usersList.map(u => `
+
+    // ---- 概览卡 ----
+    const statEl = document.getElementById('users-stat-grid');
+    if (statEl) {
+      const byRole = { admin: 0, supervisor: 0, employee: 0 };
+      usersList.forEach(u => { if (byRole[u.role] != null) byRole[u.role]++; });
+      const card = (label, value, unit, sub) =>
+        '<div class="trend-stat"><div class="trend-stat-label">' + label + '</div>' +
+        '<div class="trend-stat-value">' + value + (unit ? '<small>' + unit + '</small>' : '') + '</div>' +
+        '<div class="trend-stat-sub">' + sub + '</div></div>';
+      statEl.innerHTML =
+        card('总用户', usersList.length, '', usersList.length + ' 个账号') +
+        card('管理员', byRole.admin, '', '全部权限') +
+        card('主管', byRole.supervisor, '', '可编辑') +
+        card('员工', byRole.employee, '', '仅录入');
+    }
+
+    tbody.innerHTML = usersList.map(u => `
         <tr>
           <td>${u.username}</td>
           <td>${u.name}</td>
-          <td>${ROLE_NAMES[u.role] || u.role}</td>
-          <td>${u.enabled ? '✅ 启用' : '❌ 禁用'}</td>
+          <td><span class="role-badge role-${u.role}">${ROLE_NAMES[u.role] || u.role}</span></td>
+          <td>${u.enabled
+              ? '<span class="status-dot on"></span>启用'
+              : '<span class="status-dot off"></span>禁用'}</td>
           <td class="ta-right">
             <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
             ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
@@ -201,8 +220,12 @@ function loadMeterSettings() {
       // 填充配置
       const elecPrice = document.getElementById('config-elec-price');
       const waterPrice = document.getElementById('config-water-price');
+      const mainMult = document.getElementById('config-main-mult');
+      const subMult = document.getElementById('config-sub-mult');
       if (elecPrice) elecPrice.value = config.electricity_price || 0.9;
       if (waterPrice) waterPrice.value = config.water_price || 4.5;
+      if (mainMult) mainMult.value = config.main_mult != null ? config.main_mult : 50;
+      if (subMult) subMult.value = config.sub_mult != null ? config.sub_mult : 40;
 
       // 填充电表参数
       const meterKeys = ['hall', 'fire', 'private_room', 'ac'];
@@ -237,9 +260,17 @@ function saveMeterSettings() {
     meter[k][f] = v;
   });
 
+  // 后端是整体替换 config，必须把全部字段都带上
+  const numOr = function(id, fallback) {
+    const el = document.getElementById(id);
+    const v = el ? parseFloat(el.value) : NaN;
+    return isNaN(v) ? fallback : v;
+  };
   const config = {
-    electricity_price: parseFloat(document.getElementById('config-elec-price').value) || 0.9,
-    water_price: parseFloat(document.getElementById('config-water-price').value) || 4.5,
+    electricity_price: numOr('config-elec-price', 0.9),
+    water_price: numOr('config-water-price', 4.5),
+    main_mult: Math.round(numOr('config-main-mult', 50)),
+    sub_mult: Math.round(numOr('config-sub-mult', 40)),
   };
 
   Api.admin.saveMeterSettings({ meter, config }).then(function(res) {
@@ -266,8 +297,11 @@ function loadBackupDirConfig() {
         if (pickBtn) pickBtn.style.display = 'none';
         if (resetBtn) resetBtn.style.display = 'none';
       } else {
-        const dir = res.backup_dir || '默认: ' + res.data_dir + '/backup';
-        display.textContent = dir;
+        const dir = res.backup_dir || '';
+        display.textContent = dir ? ('📁 ' + dir) : ('📁 默认: ' + res.data_dir + '/backup');
+        // 把当前目录填进输入框，用户可直接改
+        const inp = document.getElementById('backup-dir-input');
+        if (inp) inp.value = dir;
         if (pickBtn) pickBtn.style.display = '';
         if (resetBtn) resetBtn.style.display = '';
       }
@@ -345,7 +379,7 @@ function loadBackupList() {
 function saveBackupRetention() {
   const val = parseInt(document.getElementById('admin-backup-retention').value || document.getElementById('datamgmt-backup-retention').value, 10);
   if (!val || val < 1) {
-    showAlert('保留数量必须 ≥ 1', 'error');
+    showAlert('保留个数必须 ≥ 1', 'error');
     return;
   }
   Api.admin.setBackupRetention(val).then(function(res) {
@@ -353,7 +387,7 @@ function saveBackupRetention() {
       showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
       return;
     }
-    showAlert('已保存: 保留 ' + val + ' 天', 'success');
+    showAlert('已保存: 保留最新 ' + val + ' 个', 'success');
     // 同步更新两个输入框
     const adminRet = document.getElementById('admin-backup-retention');
     if (adminRet) adminRet.value = val;
@@ -391,7 +425,7 @@ function renderBackupList(backups) {
             <span class="b-meta">${b.created_at}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : ''}
             <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
             ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
@@ -418,7 +452,7 @@ function renderBackupList(backups) {
             <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : '<span style="font-size:11px;color:var(--text-muted);">旧格式</span>'}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : ''}
             <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
             ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
           </div>
@@ -790,60 +824,66 @@ function getAuthParam() {
   return ADMIN_TOKEN ? '?token=' + encodeURIComponent(ADMIN_TOKEN) : '';
 }
 
-// 页面加载时初始化
-initAuth();
-// ===== CSV 数据导入 =====
-async function doImport() {
-  const btn = document.getElementById('import-btn');
-  const resultEl = document.getElementById('import-result');
-  const fileInput = document.getElementById('import-file');
-  const model = document.getElementById('import-model').value;
+// ===== 备份目录：选择 / 保存 =====
 
-  if (!fileInput.files || fileInput.files.length === 0) {
-    resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 请选择 CSV 文件</span>';
+/** 点「选择目录」：App 内弹原生目录选择器；浏览器回退到手动输入 */
+async function pickBackupDirInput() {
+  const input = document.getElementById('backup-dir-input');
+  const inputWrap = document.getElementById('backup-dir-input-wrap');
+  const hasBridge = window.webkit && window.webkit.messageHandlers &&
+    window.webkit.messageHandlers.pickBackupDir;
+
+  if (!hasBridge) {
+    // 浏览器里没有原生目录选择器，退化为手动填写
+    if (inputWrap) inputWrap.style.display = 'block';
+    if (input) input.focus();
+    showToast('浏览器里请直接填写完整路径', 'info');
     return;
   }
-  if (!token) {
-    resultEl.innerHTML = '<span style="color:#ef4444;">⚠️ 未登录</span>';
+
+  const dir = await adminPickBackupDir();
+  if (!dir) return;                       // 用户取消
+  if (input) input.value = dir;
+  if (inputWrap) inputWrap.style.display = 'block';
+  showToast('已选择目录，点「保存」生效', 'info');
+}
+
+/** 一个按钮保存整张卡片：备份目录 + 自动备份保留个数 */
+async function saveBackupSettings() {
+  const input = document.getElementById('backup-dir-input');
+  const retentionEl = document.getElementById('admin-backup-retention');
+  const dir = input ? input.value.trim() : '';
+  const retention = parseInt(retentionEl ? retentionEl.value : '5', 10);
+
+  if (retentionEl && (!retention || retention < 1)) {
+    showAlert('保留个数必须 ≥ 1', 'error');
     return;
   }
-
-  btn.disabled = true;
-  btn.textContent = '⏳ 导入中...';
-  resultEl.innerHTML = '⏳ 正在解析...';
-
-  const formData = new FormData();
-  formData.append('model', model);
-  formData.append('file', fileInput.files[0]);
 
   try {
-    const data = await Api.adminImport.doImport(model, fileInput.files[0]);
-    btn.disabled = false;
-    btn.textContent = '📤 导入 CSV';
-
-    if (data.ok) {
-      let html = `<span style="color:#22c55e;">✅ 成功导入 ${data.count} 条记录</span>`;
-      if (data.failed > 0) {
-        html += `<br><span style="color:#f59e0b;">⚠️ ${data.failed} 条错误:</span>`;
-        if (data.errors) {
-          data.errors.forEach((e, i) => {
-            html += `<br><span style="color:#f59e0b;">  ${i+1}. ${escapeHtml(e)}</span>`;
-          });
-        }
-      }
-      resultEl.innerHTML = html;
-      // 刷新相关数据
-      loadBackupList();
-    } else {
-      resultEl.innerHTML = `<span style="color:#ef4444;">❌ ${escapeHtml(data.error || '导入失败')}</span>`;
+    // 目录：留空 = 回到默认（数据目录下的 backup/）
+    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: dir });
+    if (!res.ok) {
+      showAlert('目录保存失败: ' + (res.error || '未知错误'), 'error');
+      return;
     }
-  } catch (err) {
-    btn.disabled = false;
-    btn.textContent = '📤 导入 CSV';
-    resultEl.innerHTML = `<span style="color:#ef4444;">❌ 网络错误: ${escapeHtml(err.message)}</span>`;
+    if (retentionEl) {
+      const r2 = await Api.admin.setBackupRetention(retention);
+      if (r2 && r2.ok === false) {
+        showAlert('保留个数保存失败: ' + (r2.error || '未知错误'), 'error');
+        return;
+      }
+    }
+    showAlert('✅ 已保存' + (retentionEl ? '：保留最新 ' + retention + ' 个备份' : ''), 'success');
+    loadBackupDirConfig();
+    loadBackupStatus();
+  } catch (e) {
+    showAlert('保存失败: ' + e.message, 'error');
   }
 }
 
+// 页面加载时初始化
+initAuth();
 function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
@@ -903,15 +943,66 @@ function submitReadingAdd(source) {
 }
 
 // 抄表/水电弹窗管理
-function openReadingAddModal() {
-  switchReadingTab('reading');
-  var d = document.getElementById('reading-add-date');
-  if (d && !d.value) d.value = todayStr();
+/**
+ * 打开抄表 / 水电录入弹窗。
+ * @param {string} mode - 'reading' 抄表（默认）| 'utility' 水电表底
+ *
+ * 记录页已经把「抄表 / 充值 / 水电」拆成三个 Tab，所以弹窗内**不再**提供
+ * 抄表/水电二选一 —— 由入口决定显示哪个表单，避免出现两层重复导航，
+ * 也避免"弹窗里的 Tab 点了没反应"（那批绑定在模块化重构时丢了）。
+ */
+function openReadingAddModal(mode) {
+  const m = mode === 'utility' ? 'utility' : 'reading';
+  const title = document.getElementById('reading-add-title');
+  if (title) title.textContent = m === 'utility' ? '💧 新增水电表底' : '📝 新增抄表';
+
+  document.querySelectorAll('#reading-add-modal-backdrop .tab-panel').forEach(function(p) {
+    p.style.display = (p.dataset.panel === m) ? '' : 'none';
+  });
+
+  const dateEl = document.getElementById(m === 'utility' ? 'utility-add-date' : 'reading-add-date');
+  if (dateEl && !dateEl.value) dateEl.value = todayStr();
+
   document.getElementById('reading-add-modal-backdrop').classList.add('show');
-  document.getElementById('reading-add-hall')?.focus();
+  const focusEl = document.getElementById(m === 'utility' ? 'utility-add-main_meter' : 'reading-add-hall');
+  if (focusEl) focusEl.focus();
 }
 function closeReadingAddModal() {
   document.getElementById('reading-add-modal-backdrop').classList.remove('show');
+}
+
+// ===== 物品 / 申购 / 工作记录 新增弹窗（模块化重构时连同 open/close 一起丢失）=====
+function openItemAddModal() {
+  document.getElementById('item-add-modal-backdrop').classList.add('show');
+  const el = document.getElementById('item-add-name');
+  if (el) el.focus();
+}
+function closeItemAddModal() {
+  document.getElementById('item-add-modal-backdrop').classList.remove('show');
+}
+
+function openPurchaseAddModal() {
+  const d = document.getElementById('purchase-add-date');
+  if (d && !d.value) d.value = todayStr();
+  if (typeof resetFieldImages === 'function') resetFieldImages(['purchase-add-name', 'purchase-add-note']);
+  document.getElementById('purchase-add-modal-backdrop').classList.add('show');
+  const el = document.getElementById('purchase-add-name');
+  if (el) el.focus();
+}
+function closePurchaseAddModal() {
+  document.getElementById('purchase-add-modal-backdrop').classList.remove('show');
+}
+
+function openDutyAddModal() {
+  const t = document.getElementById('duty-add-time');
+  if (t && !t.value) t.value = nowDateTimeLocalStr();
+  if (typeof resetFieldImages === 'function') resetFieldImages(['duty-add-note']);
+  document.getElementById('duty-add-modal-backdrop').classList.add('show');
+  const el = document.getElementById('duty-add-type');
+  if (el) el.focus();
+}
+function closeDutyAddModal() {
+  document.getElementById('duty-add-modal-backdrop').classList.remove('show');
 }
 
 // 值班图片管理
@@ -948,8 +1039,13 @@ function openDutyHandleModal(id, duty) {
   document.getElementById('duty-handle-method').value = '';
   document.getElementById('duty-handle-note').value = '';
   document.querySelectorAll('input[name="duty-add-status"]').forEach(function(r) { r.checked = false; });
-  document.getElementById('duty-handle-image-preview').innerHTML = '';
+  if (typeof resetFieldImages === 'function') resetFieldImages(['duty-handle-method']);
   document.getElementById('duty-handle-modal-backdrop').classList.add('show');
+}
+
+function closeDutyHandleModal() {
+  var b = document.getElementById('duty-handle-modal-backdrop');
+  if (b) b.classList.remove('show');
 }
 
 // 充值计算弹窗 (从旧 features_topup.js 迁移)
@@ -1068,14 +1164,3 @@ function submitUtilityAdd(source) {
   });
 }
 
-// NAS 同步模板下载
-function downloadImportTemplate() {
-  var model = document.getElementById('import-model').value;
-  var templates = { readings: 'date,hall,fire,private_room,ac,note\n2024-01-01,65.30,1305.20,79.80,52.10,\n', charges: 'date,hall,fire,private_room,ac,note\n2024-01-01,65.30,1305.20,79.80,52.10,\n', items: 'name,qty,unit,note\n螺丝刀,5,把,\n', purchases: 'date,name,qty,unit,est_price,supplier,note\n2024-01-01,电线,100,米,2.5,五金店,\n' };
-  var content = templates[model] || '';
-  var blob = new Blob(['\uFEFF' + content], { type: 'text/csv;charset=utf-8' });
-  var url = URL.createObjectURL(blob);
-  var a = document.createElement('a');
-  a.href = url; a.download = model + '-template.csv'; a.click();
-  URL.revokeObjectURL(url);
-}

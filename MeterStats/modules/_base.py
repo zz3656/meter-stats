@@ -39,7 +39,10 @@ def _parse_pagination(path: str) -> tuple[int, int]:
     except (ValueError, IndexError):
         page = 1
     try:
-        limit = max(1, int(qs.get("limit", ["0"])[0]))
+        # ⚠️ 必须是 max(0, ...)：0 表示「无限制」。原来写成 max(1, ...)，
+        # 导致不带 limit 参数的请求被强制成 limit=1 —— 只返回第一条数据。
+        # 症状：新增物品/工作记录后列表永远只显示 1 条，看起来像"没保存上"。
+        limit = max(0, int(qs.get("limit", ["0"])[0]))
     except (ValueError, IndexError):
         limit = 0  # 0 = 无限制
     return page, limit

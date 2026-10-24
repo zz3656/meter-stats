@@ -118,6 +118,8 @@ def init_settings(data_dir: Path) -> dict | None:
             "config": {
                 "electricity_price": 0.9,
                 "water_price": 4.5,
+                "main_mult": 50,   # 总表倍率
+                "sub_mult": 40,    # 分表倍率
             },
         }
 

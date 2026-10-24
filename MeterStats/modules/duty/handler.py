@@ -44,7 +44,8 @@ class _DutyHandler(JsonModelHandler):
             "fault_area": fault_area,
             "note": note,
         }
-        img_fns = body.get("image_filenames")
+        # 图片挂在「备注」栏（兼容旧的 image_filenames）
+        img_fns = body.get("note_image_filenames") or body.get("image_filenames")
         if img_fns:
             row["images"] = img_fns
         return row, None
@@ -147,12 +148,29 @@ def handle_delete_duty(handler, path_clean: str):
 
 
 def _get_images_dir():
-    """获取工作记录图片目录。"""
+    """获取图片目录。
+
+    优先用设置里的 image_dir（数据管理页可配置），但这个值可能是从 Docker
+    部署带过来的绝对路径（例如 /data/images）—— 在 macOS 上既不存在也创建
+    不了（Read-only file system），直接 mkdir 会让整个上传接口 500。
+    所以创建失败时回退到 data_dir/images，保证上传永远有地方落盘。
+    """
     data_dir = get_data_dir()
     settings = _get_settings()
-    images_dir = Path(settings.get("image_dir", str(Path(data_dir) / "images")))
-    images_dir.mkdir(parents=True, exist_ok=True)
-    return images_dir
+    fallback = Path(data_dir) / "images"
+
+    configured = (settings.get("image_dir") or "").strip()
+    if configured:
+        try:
+            d = Path(configured)
+            d.mkdir(parents=True, exist_ok=True)
+            if d.is_dir():
+                return d
+        except OSError as e:
+            log(f"  [WARN] 配置的图片目录不可用（{configured}）: {e}，回退 {fallback}")
+
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
 
 
 def _get_settings() -> dict:
@@ -216,8 +234,16 @@ def handle_get_images_config(handler):
 
     # macOS 环境: 从 settings.json 读取
     settings = _get_settings()
-    image_dir = Path(settings.get("image_dir", str(Path(data_dir) / "images")))
-    image_dir.mkdir(parents=True, exist_ok=True)
+    raw_image_dir = str(settings.get("image_dir", "") or "")
+    # ⚠️ settings.json 可能残留 Docker 路径（/data/images）或其它不可写路径，
+    # 在 macOS 上 mkdir 会抛 OSError: Read-only file system → 接口 500，
+    # 前端「图片目录」永远停在"加载中"。检测到不可用路径就回退到数据目录下。
+    image_dir = Path(raw_image_dir) if raw_image_dir else (Path(data_dir) / "images")
+    try:
+        image_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        image_dir = Path(data_dir) / "images"
+        image_dir.mkdir(parents=True, exist_ok=True)
     # 统计图片数量和总大小
     image_files = list(image_dir.glob("*"))
     total_files = len(image_files)
@@ -317,15 +343,27 @@ def handle_post_duty_image(handler, path_clean=""):
     if not _allowed_ext(filename):
         send_json(handler, 400, {"error": "仅支持 jpg/png/webp/gif"})
         return
-    # 生成唯一文件名
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    # 文件名 = 来源前缀 + 毫秒时间戳，方便在图片目录里分辨是哪张页面传的
+    # 例如 lend-20261025070504123.png / purchase-note-.../ duty-handle-...
+    import re as _re
+    scope = str(body.get("scope") or "misc").strip().lower()
+    scope = _re.sub(r"[^a-z0-9-]", "", scope)[:20] or "misc"
+    ts = datetime.now().strftime("%Y%m%d%H%M%S%f")[:-3]   # 到毫秒，避免同秒重名
     ext = Path(filename).suffix.lower()
-    stored_name = f"{ts}{ext}"
+    if ext == ".jpeg":
+        ext = ".jpg"
+    stored_name = f"{scope}-{ts}{ext}"
     images_dir = _get_images_dir()
     dest = images_dir / stored_name
+    # 极端情况下仍重名，加序号
+    n = 1
+    while dest.exists():
+        stored_name = f"{scope}-{ts}-{n}{ext}"
+        dest = images_dir / stored_name
+        n += 1
     dest.write_bytes(image["data"])
-    log(f"  ++ 上传工作记录图片 {stored_name} ({len(image['data'])} bytes)")
-    send_json(handler, 200, {"ok": True, "filename": stored_name})
+    log(f"  ++ 上传图片 [{scope}] {stored_name} ({len(image['data'])} bytes)")
+    send_json(handler, 200, {"ok": True, "filename": stored_name, "scope": scope})
 
 
 def handle_get_duty_image(handler, path_clean: str):
@@ -376,9 +414,12 @@ def handle_post_duty_handle(handler, path_clean: str):
         handle_shift = body.get("handle_shift", "").strip()
         handle_method = body.get("handle_method", "").strip()
         note = body.get("note", "").strip()
+        # 处理方案可以用图片代替文字
+        method_imgs = body.get("method_image_filenames") or []
 
-        if not handle_shift or not handle_method:
-            send_json(handler, 400, {"error": "处理班次和处理方案不能为空"})
+        # 处理方案可以只传一张照片（比如配件坏了直接拍）
+        if not handle_shift or (not handle_method and not method_imgs):
+            send_json(handler, 400, {"error": "处理班次必填，处理方案填文字或传图都可以"})
             return
 
         if not handle_time:
@@ -409,8 +450,8 @@ def handle_post_duty_handle(handler, path_clean: str):
         }
         if note:
             handle_row["note"] = f"{handle_method}\n备注: {note}"
-        # 图片
-        handle_imgs = body.get("image_filenames")
+        # 图片挂在处理方案栏
+        handle_imgs = method_imgs or body.get("image_filenames") or []
         if handle_imgs:
             handle_row["images"] = handle_imgs
         data.append(handle_row)

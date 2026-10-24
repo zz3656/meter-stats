@@ -7,8 +7,10 @@
 // ==================== 数据刷新 ====================
 
 function refreshDuty() {
-    fetchDuty().then(function(data) {
-        State.set("duty", data);
+    fetchDuty().then(function(res) {
+        // 后端 GET /api/duty 返回 {data:[...], total, page, limit}
+        var list = Array.isArray(res) ? res : ((res && res.data) || []);
+        State.set("duty", list);
         renderDutyTable(State.get("duty"), '');
         populateDutyMonthSelector();
         checkDutyReminder();
@@ -19,10 +21,29 @@ function refreshDuty() {
 
 // ==================== CRUD 操作 ====================
 
-function addDuty(type, time, shift, fault_area, note, images) {
-    Api.duty.create({ type: type, time: time, shift: shift, fault_area: fault_area, note: note, images: images })
-        .then(function() { refreshDuty(); })
-        .catch(function(err) { showAlert("添加失败: " + err); });
+/**
+ * 新增工作记录。
+ *
+ * ⚠️ 字段名必须和后端 _DutyHandler._create_row 对齐：
+ *   duty_type / record_time / shift / status / fault_area / note
+ * 其中 duty_type、shift、status 三个必填；照片字段是 image_filenames。
+ * 旧实现传的是 {type, time, shift, fault_area, note, images} —— 字段名全错
+ * 且漏了必填的 status，所以从来没成功写入过。
+ */
+function addDuty(duty_type, record_time, shift, status, fault_area, note, images) {
+    var payload = {
+        duty_type: duty_type || '',
+        record_time: record_time || '',
+        shift: shift || '',
+        status: status || '',
+        fault_area: fault_area || '',
+        note: note || ''
+    };
+    // 图片挂在「备注」栏
+    if (images && images.length) payload.note_image_filenames = images;
+    Api.duty.create(payload)
+        .then(function() { refreshDuty(); showAlert('✓ 工作记录已添加', 'success'); })
+        .catch(function(err) { showAlert("添加失败: " + err, 'error'); });
 }
 
 function updateDuty(id, fields) {
@@ -35,10 +56,25 @@ function deleteDuty(id) {
         .catch(function(err) { showAlert("删除失败: " + err); });
 }
 
-function handleDuty(id, time, shift, method, note, images) {
-    Api.duty.handle(id, { time: time, shift: shift, method: method, note: note, images: images })
-        .then(function() { refreshDuty(); })
-        .catch(function(err) { showAlert("处理失败: " + err); });
+/**
+ * 处理一条工作记录（填写班次 + 处理方案后提交）。
+ *
+ * ⚠️ 后端 handle_post_duty_handle 读的字段是：
+ *   handle_time / handle_shift / handle_method / note
+ * 旧实现传的是 {time, shift, method, note} —— 字段名不匹配，提交必然失败。
+ */
+function handleDuty(id, handle_time, handle_shift, handle_method, note, images) {
+    var payload = {
+        handle_time: handle_time || '',
+        handle_shift: handle_shift || '',
+        handle_method: handle_method || '',
+        note: note || ''
+    };
+    // 图片挂在「处理方案」栏
+    if (images && images.length) payload.method_image_filenames = images;
+    Api.duty.handle(id, payload)
+        .then(function() { refreshDuty(); showAlert('✓ 已标记为已处理', 'success'); })
+        .catch(function(err) { showAlert("处理失败: " + err, 'error'); });
 }
 
 // ==================== 表格渲染 (替代 renderDutyTable) ====================

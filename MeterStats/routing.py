@@ -180,9 +180,10 @@ def _route(method: str, handler, path: str) -> bool:
 
     if method == "OPTIONS":
         handler.send_response(204)
-        from utils import CORS
+        from utils import CORS, _add_cors
         for k, v in CORS.items():
             handler.send_header(k, v)
+        _add_cors(handler)
         handler.end_headers()
         return True
 

@@ -7,9 +7,16 @@
 // ==================== 数据刷新 ====================
 
 function refreshItems() {
-    Api.items.list().then(function(data) {
-        State.set("items", data);
-        refreshAndRender();
+    Api.items.list().then(function(res) {
+        // ⚠️ 后端 GET /api/items 返回分页对象 {data:[...], total, page, limit}，
+        // 不是裸数组。直接塞进 State 会让 renderItemTable 里 items.map 抛错，
+        // 表现为"提交成功但列表永远显示空"。
+        var list = Array.isArray(res) ? res : ((res && res.data) || []);
+        State.set("items", list);
+        renderItemTable(list);
+        // 借出/归还历史也在这份数据里（每行的 lend_records），必须一起重画，
+        // 否则借出后历史表还是空的 —— 看起来像"记录没保存"。
+        renderLendHistory(list);
     }).catch(function(err) {
         showAlert("加载物品数据失败: " + err);
     });
@@ -33,14 +40,25 @@ function deleteItem(id) {
         .catch(function(err) { showAlert("删除失败: " + err); });
 }
 
-function lendItem(id, borrower, qty, note) {
-    Api.items.lend(id, { borrower: borrower, qty: parseFloat(qty), note: note })
+function lendItem(id, borrower, qty, note, borrowerImages) {
+    Api.items.lend(id, {
+        borrower: borrower,
+        qty: parseFloat(qty),
+        note: note,
+        // 借出人这一栏既可以写名字也可以直接传图，图片随该字段一起提交
+        borrower_image_filenames: borrowerImages || []
+    })
         .then(function() { refreshItems(); })
         .catch(function(err) { showAlert("借出失败: " + err); });
 }
 
-function returnItem(id, qty, note) {
-    Api.items.return(id, { qty: parseFloat(qty), note: note })
+function returnItem(id, qty, note, returnBy, returnByImages) {
+    Api.items.return(id, {
+        qty: parseFloat(qty),
+        note: note,
+        return_by: returnBy || '',
+        return_by_image_filenames: returnByImages || []
+    })
         .then(function() { refreshItems(); })
         .catch(function(err) { showAlert("归还失败: " + err); });
 }
@@ -91,7 +109,7 @@ function renderItemTable(items) {
                     if (!ok) return;
                     Api.items.delete(id).then(function() {
                         showAlert('✓ 已删除', 'success');
-                        refreshAndRender();
+                        refreshItems();
                     }).catch(function(e) { showAlert('删除失败:' + e.message, 'error'); });
                 });
         });
@@ -110,6 +128,34 @@ function renderItemTable(items) {
             openReturnModal(btn.dataset.id, btn.dataset.name, parseInt(btn.dataset.lent), btn.dataset.unit);
         });
     });
+}
+
+/** 人名字段单元格：有名字显示名字，只有图片就显示缩略图 */
+function _personCell(name, images) {
+    var out = '';
+    if (name) out += escapeHtml(name);
+    (images || []).forEach(function(fn) {
+        out += '<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+            'onclick="openLightbox(this.dataset.full)" ' +
+            'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;vertical-align:middle;margin-left:4px;" />';
+    });
+    return out || '—';
+}
+
+/** 借出/归还照片缩略图（绿框 = 归还时拍的） */
+function _lendThumbs(r) {
+    var out = [];
+    (r.image_filenames || []).forEach(function(fn) {
+        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+            'title="借出照片" onclick="openLightbox(this.dataset.full)" ' +
+            'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;margin-right:2px;" />');
+    });
+    (r.return_image_filenames || []).forEach(function(fn) {
+        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+            'title="归还照片" onclick="openLightbox(this.dataset.full)" ' +
+            'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;margin-right:2px;border:2px solid var(--success);" />');
+    });
+    return out.length ? out.join('') : '—';
 }
 
 /** 渲染借出/归还历史 (替代 renderLendHistory) */
@@ -144,10 +190,12 @@ function renderLendHistory(items) {
         return '<tr>' +
             '<td>' + escapeHtml(r.lend_date || '—') + '</td>' +
             '<td>' + escapeHtml(r.item_name || '—') + '</td>' +
-            '<td>' + escapeHtml(r.borrower || '—') + '</td>' +
+            '<td>' + _personCell(r.borrower, r.borrower_image_filenames) + '</td>' +
             '<td>' + (r.qty != null ? r.qty : 0) + ' ' + escapeHtml(r.item_unit || '') + '</td>' +
             '<td>' + returnQty + ' ' + escapeHtml(r.item_unit || '') + '</td>' +
             '<td>' + escapeHtml(returnDate || '—') + '</td>' +
+            '<td>' + _personCell(r.return_by, r.return_by_image_filenames) + '</td>' +
+            '<td>' + _lendThumbs(r) + '</td>' +
             '<td><span style="color:' + (statusColor[r.status] || 'var(--text-muted)') + ';font-weight:510;">' + (statusText[r.status] || r.status || '—') + '</span></td>' +
             '<td>' + escapeHtml(r.note || r.return_note || '—') + '</td>' +
         '</tr>';
@@ -164,6 +212,7 @@ function openLendModal(id, name, available, unit) {
     document.getElementById('lend-qty').max = available;
     document.getElementById('lend-borrower').value = '';
     document.getElementById('lend-note').value = '';
+    if (typeof resetFieldImages === 'function') resetFieldImages(['lend-borrower']);
     document.getElementById('lend-modal-backdrop').classList.add('show');
 }
 
@@ -178,6 +227,9 @@ function openReturnModal(id, name, lent, unit) {
     document.getElementById('return-qty').value = lent;
     document.getElementById('return-qty').max = lent;
     document.getElementById('return-note').value = '';
+    var byEl = document.getElementById('return-by');
+    if (byEl) byEl.value = '';
+    if (typeof resetFieldImages === 'function') resetFieldImages(['return-by']);
     document.getElementById('return-modal-backdrop').classList.add('show');
 }
 

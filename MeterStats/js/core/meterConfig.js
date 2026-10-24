@@ -6,6 +6,13 @@ window.METER_CONFIG = {
   ac:     { label: '空调',   icon: '❄️', multiplier: 160, color: '#d97706' },
 };
 
+// ===== 电费单价（元/度）=====
+// ⚠️ 必须挂在 window 上：readings.js / reports.js / admin.js 都直接引用裸标识符
+// ELECTRICITY_PRICE。模块化重构时该常量丢失，导致 "ELECTRICITY_PRICE is not defined"。
+// 后端 constants.py / settings.json 同名字段为权威值，loadMeterConfig() 会用
+// /api/meters 返回的 config.electricity_price 覆盖这里（此处仅为不依赖后端时的兜底）。
+window.ELECTRICITY_PRICE = 0.9;
+
 // 快捷访问数组（保持顺序不变）
 window.METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
 window.METER_META = (key) => window.METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
@@ -16,15 +23,21 @@ window.COLORS = (key) => window.METER_META(key).color;
 // 加载元数据（异步，不阻塞页面加载）
 async function loadMeterConfig() {
   try {
-    const resp = await Api.system.metersPublic();
-    if (resp.ok) {
-      const data = await resp.json();
-      if (data.meters) {
-        for (const [key, val] of Object.entries(data.meters)) {
-          METER_CONFIG[key] = { ...METER_CONFIG[key], ...val };
-        }
-        // 更新快捷访问
+    // ⚠️ 注意两点（重构后曾错配）：
+    // 1. metersPublic 在 Api.admin 下，不是 Api.system
+    // 2. _request 已经返回解析好的 JSON 对象，不能再 .json()
+    const data = await Api.admin.metersPublic();
+    if (data && data.meters) {
+      for (const [key, val] of Object.entries(data.meters)) {
+        METER_CONFIG[key] = { ...METER_CONFIG[key], ...val };
       }
+    }
+    // 电价/水价以后端设置为权威值
+    if (data && data.config && typeof data.config.electricity_price === 'number') {
+      window.ELECTRICITY_PRICE = data.config.electricity_price;
+    }
+    if (data && data.config && typeof data.config.water_price === 'number') {
+      window.WATER_PRICE = data.config.water_price;
     }
   } catch (e) {
     // 静默失败，使用默认值

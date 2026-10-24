@@ -147,12 +147,23 @@ def init_data_files(data_dir: Path) -> dict:
         files[model] = filepath
 
     # 启动时自动备份：使用后台线程，不阻塞 HTTP 服务。
+    # 自动备份开关（settings.auto_backup），两处备份都要尊重它
+    def _auto_backup_enabled():
+        try:
+            st = json.loads((data_dir / "settings.json").read_text(encoding="utf-8"))
+            return st.get("auto_backup", True) is not False
+        except Exception:
+            return True
+
     # 如果备份目录在慢速磁盘（NFS、USB）上，ZIP 打包不应阻塞请求处理。
     try:
         import threading as _threading
-        t = _threading.Thread(target=backup_data, args=(data_dir,), daemon=True)
-        t.start()
-        log("  [AUTO-BACKUP] 后台线程启动自动备份（不阻塞服务）")
+        if _auto_backup_enabled():
+            t = _threading.Thread(target=backup_data, args=(data_dir,), daemon=True)
+            t.start()
+            log("  [AUTO-BACKUP] 后台线程启动自动备份（不阻塞服务）")
+        else:
+            log("  [AUTO-BACKUP] 自动备份已关闭（settings.auto_backup=false），跳过")
     except Exception as e:
         log(f"  [WARN] 启动自动备份后台线程失败: {e}")
 
@@ -181,7 +192,10 @@ def init_data_files(data_dir: Path) -> dict:
 
                 # 到达 0 点，执行备份（force=False = 每日一次）
                 try:
-                    backup_data(data_dir, force=False)
+                    if _auto_backup_enabled():
+                        backup_data(data_dir, force=False)
+                    else:
+                        log("[DAILY BACKUP] 自动备份已关闭，跳过")
                 except Exception as e:
                     log(f"[DAILY BACKUP] 失败: {e}")
 
@@ -253,10 +267,13 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     else:
         today = utc_now.strftime("%Y%m%d")
         backup_dir = parent / today
-        if backup_dir.exists():
-            log(f"[BACKUP] 跳过: {backup_dir} 已存在")
+        # ⚠️ 判断"今天已备份"必须看最终的 ZIP，而不是临时目录 ——
+        #    临时目录打包完就删了，只查目录会导致每次启动都重做一次备份。
+        zip_today = parent / f"auto-bak-{today}.zip"
+        if backup_dir.exists() or zip_today.exists():
+            log(f"[BACKUP] 跳过自动备份: 今天已经备份过 ({zip_today.name})")
             _cleanup_legacy_backups(parent)
-            return None  # 今天已备份过
+            return None
     try:
         backup_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -313,25 +330,46 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     # 清理旧格式的非 ZIP 备份目录（保持统一为 ZIP 格式）
     _cleanup_legacy_backups(parent)
 
-    # 按保留天数清理过期自动备份(只清理 auto-bak- 前缀,不影响手动备份 meter-backup-)
+    # 按保留「个数」清理自动备份
     try:
-        retention_days = int(_settings_cache.get("backup_retention_count", 5)) if _settings_cache else 5
+        retention_count = int(_settings_cache.get("backup_retention_count", 5)) if _settings_cache else 5
     except Exception:
-        retention_days = 5
-    now = _local_now()
-    cutoff_ts = (now - timedelta(days=retention_days)).timestamp()
-    for f in parent.rglob("*.zip"):
-        if f.is_file() and not f.name.startswith("auto-bak-"):
-            continue
-        if f.stat().st_mtime < cutoff_ts:
-            try:
-                f.unlink()
-                log(f"[BACKUP] 清理过期自动备份: {f.name}")
-            except OSError as e:
-                log(f"[WARN] 清理过期备份失败 {f.name}: {e}")
+        retention_count = 5
+    cleanup_auto_backups(parent, retention_count)
 
     log(f"  OK data backed up to {zip_path}")
     return zip_path
+
+
+def cleanup_auto_backups(backup_parent: Path, retention_count: int) -> int:
+    """按「个数」清理自动备份：保留最新 retention_count 个，删更旧的。
+
+    只清 auto-bak- 前缀；手动备份 meter-backup- 由 admin 侧按 10 个上限管。
+    返回删除的文件数。
+
+    抽成函数是为了「改小保留个数」时能立刻清理一次，不用等下一次备份。
+    """
+    try:
+        count = max(1, int(retention_count))
+    except Exception:
+        count = 5
+    parent = Path(backup_parent)
+    if not parent.exists():
+        return 0
+    autos = sorted(
+        (f for f in parent.rglob("auto-bak-*.zip") if f.is_file()),
+        key=lambda f: f.stat().st_mtime,
+        reverse=True,
+    )
+    removed = 0
+    for f in autos[count:]:
+        try:
+            f.unlink()
+            removed += 1
+            log(f"[BACKUP] 超出保留数量({count})，删除: {f.name}")
+        except OSError as e:
+            log(f"[WARN] 清理失败 {f.name}: {e}")
+    return removed
 
 
 def _cleanup_legacy_backups(backup_parent: Path) -> None:
