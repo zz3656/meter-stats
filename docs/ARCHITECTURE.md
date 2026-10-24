@@ -157,27 +157,29 @@
 | `app_handler.py` | 161 | HTTP 请求处理器基类,处理 OPTIONS/CORS,挂载静态资源 |
 | `constants.py` | 65 | 全局常量(电表倍率、价格、角色定义) |
 
-### handlers/(业务模块,每个文件 ≤ 500 行)
+### modules/(业务模块，按业务域拆分)
 
-| 模块 | 行数 | 职责 | 依赖 |
-|------|------|------|------|
-| `auth.py` | 302 | 登录/会话/速率限制 | `handlers.settings`, `storage.log` |
-| `users.py` | 134 | 用户 CRUD + 电表设置 + 角色查询 | `handlers.settings` |
-| `readings.py` | 129 | 电表抄表CRUD(仅 hall/fire/pr/ac) | `storage`, `report.invalidate_report_cache` |
-| `readings_water.py` | 135 | 水电表底 CRUD(main_meter/sub_meter/water) | `storage` |
-| `charges.py` | 107 | 充值记录 CRUD | `storage`, `report.invalidate_report_cache` |
-| `items.py` | 214 | 物品 CRUD + 借出/归还子路径 | `storage`, `permissions._check_delete` |
-| `purchases.py` | 152 | 申购记录 + 确认购买入库 | `storage` |
-| `duty.py` | 425 | 值班工作记录 CRUD + 图片上传 | `storage`, `utils.api` |
-| `reports.py` | 182 | 月报/年报/水电月报/snapshot/health/export | `report` |
-| `backup.py` | 456 | 备份业务逻辑(创建/恢复/上传/settings 合并) | `storage`, `utils.api` |
-| `backup_admin.py` | 476 | 备份 HTTP 入口(列表/下载/删除/配置) | `handlers.backup` |
-| `admin.py` | 102 | **re-export 门面**,向后兼容 `from handlers.admin import ...` |
-| `admin_tools.py` | 262 | 目录浏览/审计日志/水电数据迁移 | `storage`, `handlers.auth` |
-| `permissions.py` | 103 | 权限装饰器工厂(`check_permission`) | `handlers.auth.get_session` |
-| `settings.py` | 324 | settings.json CRUD(用户/密码 PBKDF2/电表设置) | 标准库 hashlib + fcntl(fallback threading.Lock) |
-| `dataimport.py` | 403 | CSV 导入(readings/charges/items/purchases) | `storage` |
-| `_base.py` | 153 | JsonModelHandler 基类 — CRUD 复用,白名单安全 | `storage`, `utils` |
+| 模块目录 | 行数 | 职责 |
+|----------|------|------|
+| `modules/_base.py` | 153 | JsonModelHandler 基类 — CRUD 复用、字段白名单 |
+| `modules/readings/` | 133 | 电表抄表 CRUD(hall/fire/pr/ac) + 水电表底 |
+| `modules/charges/` | 111 | 充值记录 CRUD |
+| `modules/items/` | 246 | 物品 CRUD + 借出/归还子路径(含借还历史) |
+| `modules/purchases/` | 212 | 申购记录 + 确认购买→入库(双记录模型) |
+| `modules/duty/` | 470 | 值班工作记录 CRUD + 图片上传/读取 |
+| `modules/reports/` | 305 | 月报/年报/水电月报/snapshot/health/export |
+| `modules/backup/` | 1120 | 备份创建/恢复/列表/下载/配置 + NAS 同步 |
+| `modules/system/` | 1201 | 设置/用户/权限/登录鉴权/审计 |
+| `modules/utilities/` | 139 | 水电用量与费用计算 |
+| `modules/dataimport/` | 404 | CSV 导入(保留但 UI 入口已移除) |
+
+### 图片上传约定
+
+- 统一走 `POST /api/duty/image`(multipart，字段 `image`，可带 `scope`)，读取走 `GET /api/duty/image/{filename}`
+- 文件名格式 `{scope}-{毫秒时间戳}{ext}`，scope 由前端 `FIELD_SCOPES` 映射：`lend` / `return` / `purchase-name` / `purchase-note` / `duty-note` / `duty-handle`
+- 目录由 `settings.image_dir` 决定，失败回退 `data_dir/images`
+- 图片归到具体字段而非独立「照片区」：`borrower_image_filenames` / `return_by_image_filenames` / `name_image_filenames` / `note_image_filenames` / `method_image_filenames`
+- 必填校验一律放宽为「文字或图片满足其一」
 
 ### utils/(跨 handler 共享工具)
 
@@ -200,76 +202,58 @@
 
 按职责分组,所有 JS 通过 `<script>` 标签按依赖顺序加载到 `window` 全作用域。
 
-### Core(配置/基础设施)
+### core/(基础设施)
 
-| 模块 | 职责 |
-|------|------|
-| `core_meterConfig.js` | 从 `/api/meters` 加载电表元数据(标签/图标/倍率/颜色),fallback 默认值 |
-| `core_theme.js` | 主题切换(浅色/深色/系统) |
-| `core_accessibility.js` | 可访问性增强(键盘快捷键、ARIA 属性) |
-| `utils_helpers.js` | 通用工具:`el()`, `escapeHtml()`, `formatDate()`, `formatDateTime()`, `formatDateTimeLocal()` |
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `core/api.js` | 250 | 统一请求封装(`Api.*` 命名空间) |
+| `core/init.js` | 179 | 应用初始化 + 启动流程 |
+| `core/navigation.js` | 202 | 页面切换 + 各页数据加载钩子 |
+| `core/state.js` | 74 | 全局状态(`CURRENT_*`) |
+| `core/meterConfig.js` | 158 | 电表元数据(标签/图标/倍率/颜色) |
 
-### Data(数据获取与状态)
+### helpers/
 
-| 模块 | 职责 |
-|------|------|
-| `data_global.js` | 全 局 变 量 (`CURRENT_READINGS`/`CURRENT_CHARGES`/...)+ 远 端 写 操 作 wrapper(`saveReadingRemote` 等) |
-| `data_fetch.js` | `renderAll()` / `refreshAndRender()` 主入口,statusBar 计算 |
-| `data_helpers.js` | 通用算法:`calcMonthlyDailyUsage` / `sumChargesBetween` / `addDaysToDate` |
-| `data_water_migration.js` | 一次性提示用户迁移旧水电数据 |
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `helpers/utils.js` | 358 | 图片压缩、字段图片组件、`pickFieldImage`、格式化工具 |
 
-### Render(渲染)
+### modules/(业务模块)
 
-| 模块 | 职责 |
-|------|------|
-| `render_stats.js` | 当月统计卡片(4 表 + 合计) |
-|| `render_charts.js` | 每日用电折线图 + 单天饼图 + 月度饼图 |
-|| `render_pie_charts.js` | 独立饼图组件(复用 render_charts) |
-|| `render_charge_alert.js` | 充值预警卡片(剩余天数 + 建议充值金额) |
-|| `render_records.js` | 抄表/水电历史记录表 |
-|| `render_tables.js` | 物品/申购/工作记录表格 |
-|| `render_edit.js` | 编辑弹窗(充值/水电/物品借出归还)+ `escapeHtml` |
-|| `render_monthly.js` | 月度报告页 + 工作记录图片上传/压缩 |
-|| `render_duty_image_upload.js` | 工作记录图片上传(独立文件避免循环依赖) |
-|| `render_duty_images.js` | 工作记录图片灯箱 |
-|| `render_weekly.js` | 每周汇报(4 表对比、趋势卡片、复制到剪贴板) |
-|| `render_weekly_trend.js` | 每周汇报的"4 块表详细趋势"卡片 |
-|| `render_weekly_utils.js` | 每周汇报工具函数 |
-|| `render_yearly.js` | 年度汇总页 |
-|| `render_reports.js` | 月度报告页 + 单日汇报复制 |
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `modules/readings.js` | 712 | 抄表录入 + 三 Tab(抄表/充值/水电) |
+| `modules/charges.js` | 98 | 充值与余量预警 |
+| `modules/utilities.js` | 108 | 水电录入 |
+| `modules/items.js` | 245 | 物品列表 + 借出/归还 + 借还历史 |
+| `modules/purchases.js` | 157 | 申购 + 购买(含入库复选框) |
+| `modules/duty.js` | 189 | 工作记录 + 处理 |
+| `modules/reports.js` | 856 | 四张报表页(每日/每周/月度/年度) |
+| `modules/backup.js` | 15 | 备份页辅助 |
+| `modules/alerts.js` | 190 | 余量预警计算 |
+| `modules/modal_bindings.js` | 238 | **所有弹窗的提交/取消绑定**(重构后集中管理) |
+| `modules/render_charts.js` | 344 | 通用图表渲染 |
+| `modules/render_pie_charts.js` | 155 | 占比图 |
+| `modules/render_weekly.js` | 245 | 每周汇报图表 |
+| `modules/render_weekly_trend.js` | 194 | 每周趋势 |
+| `modules/render_weekly_utils.js` | 134 | 每周计算工具 |
 
-### Forms(表单处理)
+### shared/(通用 UI)
 
-| 模块 | 职责 |
-|------|------|
-| `forms_submit.js` | 抄表/充值/水电录入提交 |
-| `forms_selectors.js` | 月份/年份/历史下拉刷新 |
-| `forms_open.js` / `forms_close.js` / `forms_tab.js` | 弹窗 open/close/tab 切换 |
-| `forms_confirm.js` / `forms_buttons.js` | 确认/按钮逻辑 |
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `shared/modals.js` | 113 | 弹窗框架(`showModal`，支持 checkbox + 图片) |
+| `shared/toast.js` | 348 | Toast / Alert 提示 |
+| `shared/theme.js` | 38 | 浅色/深色/跟随系统 |
+| `shared/accessibility.js` | 185 | 键盘快捷键、ARIA |
+| `shared/image_settings.js` | 98 | 图片目录配置卡片 |
 
-### Features(独立功能)
+### 其他
 
-| 模块 | 职责 |
-|------|------|
-| `features_topup.js` | 充值计算器(按预充天数反推充值金额) |
-| `features_utilities.js` | 水电月报 + 跨月对比 |
-| `features_image_settings.js` | 工作记录图片存储配置 |
-
-### UI(交互组件)
-
-| 模块 | 职责 |
-|------|------|
-| `ui_toast.js` | 短暂提示(`showAlert(msg, kind)`),全局单 Toast |
-| `ui_modals.js` | 模态确认弹窗(`showModal({title, body, ...})`),返回 Promise<boolean> |
-
-> **约定**: 仅这两个 API。任何代码不应再创建 `showItemAlert` 等别名(2025-09 重构已统一)。
-
-### 入口
-
-| 模块 | 职责 |
-|------|------|
-| `init.js` | 启动 IIFE: `todayStr()` 填默认日期、`renderAll()` 拉数据、绑定事件 |
-| `app.js` | 兼容旧入口 |
+| 文件 | 行数 | 职责 |
+|------|------|------|
+| `nas_sync.js` | 106 | NAS 远端同步 |
+| `admin.js` | ~1070 | 管理页逻辑(用户/设置/权限弹窗) |
 
 ### 外部
 

@@ -26,6 +26,8 @@ services:
       - METER_PORT=8765
       # 数据目录
       - METER_DATA_DIR=/data
+      # 标记 Docker 环境：锁定备份/图片目录的 UI 编辑（由下面的环境变量控制）
+      - METER_DOCKER=1
       # 绑定地址（0.0.0.0 允许外部访问，默认值已在代码中设置）
       - METER_BIND=0.0.0.0
       # 初始管理员密码（⚠️ 请修改！）
