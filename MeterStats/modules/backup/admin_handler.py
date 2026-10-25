@@ -1,6 +1,5 @@
 """备份管理 HTTP API — 列表 / 下载 / 删除 / 自动备份配置 / 备份目录配置 / 上传恢复。
-业务逻辑在 handlers/backup.py,本文件只负责 HTTP 入口。
-从原 handlers.admin.py 拆分而来。
+业务逻辑在 modules/backup/handler.py,本文件只负责 HTTP 入口。
 """
 from __future__ import annotations
 import datetime

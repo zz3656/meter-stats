@@ -2,7 +2,7 @@
 电表统计 — HTTP 处理层（入口 + 静态文件）
 ===============================
 入口类 Handler 负责路由分发和静态文件服务。
-数据操作 handler 已迁移至 handlers/ 子模块。
+数据操作 handler 已迁移至 modules/ 包（按业务域分包）。
 """
 from __future__ import annotations
 

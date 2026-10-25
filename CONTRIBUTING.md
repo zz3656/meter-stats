@@ -16,9 +16,9 @@
 │   ├── report.py                    # 月报/年报计算引擎
 │   ├── index.html                   # 前端页面
 │   ├── style.css                    # 样式
-│   ├── app.js                       # 前端逻辑
-│   ├── admin.js                     # 管理后台逻辑
-│   ├── handlers/                    # 各模块 API handler
+│   ├── admin.js                     # 管理后台逻辑（弹窗/设置）
+│   ├── js/                          # 前端模块（core/helpers/modules/shared）
+│   ├── modules/                     # 各业务域 API（readings/charges/items/...）
 │   └── utils/                       # 工具函数
 ├── docker/                          # Docker 部署（纯后端服务版）
 │   ├── Dockerfile

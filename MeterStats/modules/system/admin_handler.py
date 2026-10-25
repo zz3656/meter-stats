@@ -1,10 +1,12 @@
 """后台管理 API 门面模块 — 已拆分。
 
 ⚠️ 此模块已拆分为:
-- handlers/auth.py         — 登录 / 会话 / 速率限制
-- handlers/users.py        — 用户 CRUD + 电表设置 + 角色查询
-- handlers/backup_admin.py — 备份 HTTP API(列表/下载/删除/配置/上传恢复)
-- handlers/admin_tools.py  — 目录浏览 / 审计日志 / 水电数据迁移
+- modules/system/auth_handler.py         — 登录 / 会话 / 速率限制
+- modules/system/users_handler.py        — 用户 CRUD + 电表设置 / 角色查询
+- modules/system/settings_handler.py     — 系统设置读写
+- modules/system/permissions_handler.py  — 三级权限
+- modules/system/admin_tools_handler.py  — 目录浏览 / 审计日志 / 水电数据迁移
+- modules/backup/admin_handler.py        — 备份 HTTP API(列表/下载/删除/配置/上传恢复)
 
 为保持向后兼容,本文件 re-export 所有原 handler。
 新代码应直接从上述子模块导入。

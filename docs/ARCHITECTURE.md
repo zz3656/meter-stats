@@ -63,23 +63,18 @@
 │  │   入口)     │  └──────────────────────────────────────────┘    │
 │  └────────────┘                       ↓                            │
 │                          ┌─────────────────────┐                  │
-│                          │  handlers/ (按职责拆)│                  │
-│                          │  - auth.py           │                  │
-│                          │  - users.py          │                  │
-│                          │  - readings.py       │                  │
-│                          │  - readings_water.py │                  │
-│                          │  - charges.py        │                  │
-│                          │  - items.py          │                  │
-│                          │  - purchases.py      │                  │
-│                          │  - duty.py           │                  │
-│                          │  - reports.py        │                  │
-│                          │  - backup_admin.py   │                  │
-│                          │  - backup.py (业务)  │                  │
-│                          │  - admin_tools.py    │                  │
-│                          │  - permissions.py    │                  │
-│                          │  - settings.py       │                  │
-│                          │  - dataimport.py     │                  │
-│                          │  - readings_water.py │                  │
+│                          │  modules/ (按业务域)│                  │
+│                          │  - _base.py (基类)  │                  │
+│                          │  - readings/        │                  │
+│                          │  - charges/         │                  │
+│                          │  - items/           │                  │
+│                          │  - purchases/       │                  │
+│                          │  - duty/            │                  │
+│                          │  - reports/         │                  │
+│                          │  - backup/          │                  │
+│                          │  - system/          │                  │
+│                          │  - utilities/       │                  │
+│                          │  - dataimport/      │                  │
 │                          └─────────────────────┘                  │
 │                                  ↓                                │
 │                          ┌─────────────────────┐                  │
@@ -125,14 +120,14 @@
 
 ```
 用户在表单填写 4 块表读数
-  ↓ forms_submit.js: submitReadingAdd()
+  ↓ admin.js: submitReadingAdd()
   ↓ POST /api/readings {date, hall, fire, private_room, ac, ...}
   ↓ app_handler: _do_api() → routing.route() → handle_post_readings()
   ↓ readings.py: 验证 + 覆盖或新增
   ↓ storage.save_json() 原子写入(.tmp + rename) + 失效缓存
   ↓ report.invalidate_report_cache() 清月报缓存
   ↓ 返回 {ok: true, row}
-  ↓ forms_submit.js: refreshAndRender() → 重新拉 snapshot → 重新渲染所有区块
+  ↓ js/modules/readings.js: refreshAndRender() → 重新拉 snapshot → 重新渲染所有区块
 ```
 
 ### 缓存层次
@@ -311,7 +306,7 @@ for X, Y in pairs:  # 所有相邻抄表对
 
 ### 3. 充值余量推算
 
-**位置**: `js/data_helpers.js:calcMonthlyDailyUsage()`
+**位置**: `js/core/meterConfig.js:calcMonthlyDailyUsage()`
 
 ```
 余量度数 = latest_reading[meter] × 倍率
@@ -331,7 +326,7 @@ for X, Y in pairs:  # 所有相邻抄表对
 
 ### 1. 认证
 
-- **密码哈希**: PBKDF2-HMAC-SHA256, 600,000 轮, 16 字节 salt(参数见 `handlers/settings.py:_hash_pass`)
+- **密码哈希**: PBKDF2-HMAC-SHA256, 600,000 轮, 16 字节 salt(参数见 `modules/system/settings_handler.py:_hash_pass`)
 - **会话**: `secrets.token_hex(32)` 生成,内存存储,30 分钟 TTL(自动清理过期)
 - **登录速率限制**: 5 分钟滑动窗口 10 次尝试,失败后 2 分钟冷却(`_check_login_rate_limit`)
 
@@ -357,7 +352,7 @@ for X, Y in pairs:  # 所有相邻抄表对
 
 ### 4. PUT 字段白名单
 
-**位置**: `handlers/_base.py:JsonModelHandler`
+**位置**: `modules/_base.py:JsonModelHandler`
 
 PUT 操作三档行为:
 1. 子类提供 `_update_fields(existing, body)` → 完全自定义(duty 模块)
@@ -380,7 +375,7 @@ PUT 操作三档行为:
 
 ### 6. 跨平台兼容
 
-`fcntl` 是 Unix 专属。`handlers/settings.py:init_settings` 检测:
+`fcntl` 是 Unix 专属。`modules/system/settings_handler.py:init_settings` 检测:
 - 有 fcntl → 文件锁 `flock`(支持多进程)
 - 无 fcntl(Windows)→ 进程内 `threading.Lock`(单进程足够)
 
@@ -452,7 +447,7 @@ PUT 操作三档行为:
 选择拆分(1162 → 102 行门面 + 4 个职责清晰子模块),**理由**:
 - ✅ 单文件 ≤ 450 行的项目硬性约束
 - ✅ 各模块可独立测试
-- ❌ 跨文件 re-export 不可变类型有陷阱(参见 `handlers/auth.py` 测试修复)
+- ❌ 跨文件 re-export 不可变类型有陷阱(参见 `modules/system/auth_handler.py` 测试修复)
 
 **陷阱**: `from auth import _last_cleanup_time; admin._last_cleanup_time = 0` 只改 admin 模块属性(值复制),不改 auth.需要测试直接 import 底层模块。
 
@@ -497,15 +492,14 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 1. 在 `constants.py:METER_LABELS`/`METER_ICONS`/`METER_COLORS` 加配置
 2. 在 `storage.py:DATA_FILES` 加文件映射(自动获得 LRU 缓存、自动备份)
-3. 在 `handlers/` 创建 `<model>.py`,继承 `JsonModelHandler`
-4. 在 `handlers/<model>.py` 声明 `updatable_fields = frozenset({...})` 白名单
+3. 在 `modules/<model>/` 新建包:`__init__.py` + `handler.py`,继承 `modules/_base.py:JsonModelHandler`
+4. 在 `handler.py` 声明 `updatable_fields = frozenset({...})` 白名单
 5. 在 `routing.py` 加 4 个路由(GET / POST / PUT / DELETE)
 6. 前端:
-   - 在 `js/data_global.js` 加 `fetchXxxRemote()` 等 wrapper
-   - 在 `js/data_fetch.js` 的 `renderAll()` 加渲染调用
-   - 创建 `render_<model>.js` 处理 DOM 渲染
-   - 在 `js/render_records.js` 等历史表加显示
-   - 在 `index.html` 加 `<script>` 引入
+   - 在 `js/core/api.js` 的 `Api.*` 命名空间加 `fetchXxxRemote()` 等 wrapper
+   - 在 `js/modules/readings.js:renderAll()` 加渲染调用(它负责整轮重绘)
+   - 新建 `js/modules/<model>.js` 处理 DOM 渲染,或复用 `render_charts.js`
+   - 在 `index.html` 加 `<script>` 引入(注意顺序:core → helpers → modules → shared)
 
 ### 添加新的报表页面
 
@@ -513,17 +507,17 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 1. **后端**(如需新计算):
    - 在 `report.py` 加计算函数(参考 `calculate_monthly_report` 的结构)
-   - 如需新 handler:在 `handlers/reports.py` 加端点,在 `routing.py` 注册路由
+   - 如需新 handler:在 `modules/reports/handler.py` 加端点,在 `routing.py` 注册路由
 2. **后端缓存策略**:
-   - 新函数必须在写入时调用 `invalidate_report_cache()`(在 `handlers/readings.py` / `charges.py` 等)
+   - 新函数必须在写入时调用 `invalidate_report_cache()`(在 `modules/readings/handler.py` / `modules/charges/handler.py` 等)
    - 同一测试类中混合真实 fixture 和自定义数据时,`setUp` 必须 `invalidate_report_cache()` 清缓存防污染
 3. **前端新模块**:
-   - 创建 `render_<feature>.js`(单文件 ≤ 450 行;若超过,按职责拆为 `xxx_main.js` + `xxx_utils.js`)
+   - 创建 `js/modules/<feature>.js`(单文件 ≤ 450 行;若超过,按职责拆为 `<feature>_main.js` + `<feature>_utils.js`)
    - 仅暴露函数到 `window` 即可,无需打包工具
 4. **前端接入**:
-   - 在 `index.html` 加 `<script src="js/render_<feature>.js"></script>`(放在它依赖的文件之后)
-   - 在 `js/data_fetch.js:renderAll()` 中调用新渲染函数
-   - 在 `js/init.js` 或对应表单处绑定事件
+   - 在 `index.html` 加 `<script src="js/modules/<feature>.js"></script>`(放在它依赖的文件之后)
+   - 在 `js/modules/readings.js:renderAll()` 中调用新渲染函数
+   - 在 `js/core/init.js` 或 `js/modules/modal_bindings.js` 里绑定事件
 5. **测试**:
    - 后端逻辑用 `unittest` 加测试,数据用临时目录隔离(`tempfile.TemporaryDirectory`)
    - 前端逻辑若可独立测(纯函数),抽出后用 Node.js 单测
@@ -539,13 +533,13 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 ### 添加新的 HTTP 权限级别
 
 1. 在 `constants.py:ROLES` 加定义
-2. 在 `handlers/settings.py:OP_REQUIRED` 加操作→最低等级映射
-3. 在 `handlers/permissions.py:ROLE_LEVEL` 加角色→等级映射
+2. 在 `modules/system/permissions_handler.py:OP_REQUIRED` 加操作→最低等级映射
+3. 在 `modules/system/permissions_handler.py:ROLE_LEVEL` 加角色→等级映射
 4. 装饰器 `@check_permission("xxx")` 即可使用
 
 ### 添加新的备份恢复策略
 
-1. 在 `handlers/backup.py` 加 `_extract_xxx_to_target()` helper
+1. 在 `modules/backup/handler.py` 加 `_extract_xxx_to_target()` helper
 2. 在 `handle_post_restore_upload` / `handle_post_upload` 调新 helper
 3. 在 `tests/test_handlers.py:TestBackupApi` 加测试用例
 
@@ -555,7 +549,7 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 ### 1. `_last_cleanup_time` re-export 陷阱
 
-参见 `handlers/auth.py` 的 memory_remember。Python `from auth import x; admin.x = 5` 只改 admin,不改 auth。
+参见 `modules/system/auth_handler.py` 的 memory_remember。Python `from auth import x; admin.x = 5` 只改 admin,不改 auth。
 
 ### 2. JSON 缓存 key 冲突
 
@@ -567,7 +561,7 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 ### 4. fcntl 在 Windows 上 ImportError
 
-参见 `handlers/settings.py:init_settings` 的 fcntl fallback。Windows 用户跑起来会自动用 threading.Lock,但**多进程部署下不能跨进程同步**。
+参见 `modules/system/settings_handler.py:init_settings` 的 fcntl fallback。Windows 用户跑起来会自动用 threading.Lock,但**多进程部署下不能跨进程同步**。
 
 ### 5. items 借出数量边界
 
@@ -583,7 +577,7 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 ### 8. _readingsBetween 过滤
 
-`handlers/_base.py` 中 `_readingsBetween` 过滤 `r.hall != null` 跳过只录水电的行 — 这是抄表与水电分离后必须保持的逻辑,**复制此函数时记得同步**。
+`modules/_base.py` 中 `_readingsBetween` 过滤 `r.hall != null` 跳过只录水电的行 — 这是抄表与水电分离后必须保持的逻辑,**复制此函数时记得同步**。
 
 ---
 

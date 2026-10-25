@@ -330,7 +330,7 @@ curl -X POST http://localhost:8765/api/readings \
 
 - `index.html` 已引用新模块（8 个 js/modules/*.js + core/api.js + core/state.js）
 - 新模块通过 `Api.*` 调用后端，旧 JS 已移除引用
-- 注意: `js/modules/readings.js` (566行) 仍使用直接 `fetchReadings()` 等函数（在 `data_fetch.js` 中定义），**未统一使用 `Api.readings.*`**。这是遗留调用方式，功能正常但不符合"统一通过 Api.* 封装"的架构约定。
+- 注意: `js/modules/readings.js` (566行) 仍使用直接 `fetchReadings()` 等函数（定义在 `js/shared/accessibility.js`），**未统一使用 `Api.readings.*`**。这是遗留调用方式，功能正常但不符合"统一通过 Api.* 封装"的架构约定。
 
 ### 架构最终状态（已统一）
 

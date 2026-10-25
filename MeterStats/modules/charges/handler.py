@@ -22,7 +22,7 @@ def handle_get_charges(handler):
     send_json(handler, 200, _load_charges())
 
 
-# 注：handle_get_charges_monthly 已删除 — 详见 handlers/readings.py 同名注释。
+# 注：handle_get_charges_monthly 已删除 — 详见 modules/readings/handler.py 同名注释。
 # ==================== POST ====================
 
 def handle_post_charges(handler):
