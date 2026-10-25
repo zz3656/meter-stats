@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>工程部管理系统 · Meter Stats</title>
+<title>工程部管理系统</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -21,25 +21,25 @@
   <div style="width:360px;padding:32px;background:var(--bg-elevated);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);">
     <div style="text-align:center;margin-bottom:24px;">
       <div style="font-size:36px;margin-bottom:8px;">⚡</div>
-      <h2>工程部管理系统</h2>
-      <p>登录后管理数据与权限</p>
+      <h2 style="margin:0;font-size:20px;font-weight:600;color:var(--text);">工程部管理系统</h2>
+      <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted);">登录后管理数据与权限</p>
       <!-- 登录页全局控制按钮 -->
-      <div class="login-actions">
-        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题">🌙</button>
+      <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
+        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:7px 10px;">🌙</button>
         <button type="button" class="header-backup-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式">🔤 大字</button>
       </div>
     </div>
-      <div id="login-error" class="login-error"></div>
-    <div class="form-row">
-      <label for="login-username">用户名</label>
-      <input type="text" id="login-username" class="field-control" placeholder="输入用户名" autocomplete="username">
+      <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid rgba(220,38,38,0.2);"></div>
+    <div style="margin-bottom:16px;">
+      <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">用户名</label>
+      <input type="text" id="login-username" class="field-control" placeholder="输入用户名" autocomplete="username" style="width:100%;">
     </div>
-    <div class="form-row">
-      <label for="login-password">密码</label>
-      <input type="password" id="login-password" class="field-control" placeholder="输入密码" autocomplete="current-password">
+    <div style="margin-bottom:24px;">
+      <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">密码</label>
+      <input type="password" id="login-password" class="field-control" placeholder="输入密码" autocomplete="current-password" style="width:100%;">
     </div>
-    <button class="btn btn-primary" id="login-submit" onclick="doLogin()">登录</button>
-    <p class="login-hint">默认管理员: admin / admin123</p>
+    <button class="btn btn-primary" id="login-submit" onclick="doLogin()" style="width:100%;height:40px;font-size:14px;">登录</button>
+    <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:16px;">默认管理员: admin / admin123</p>
   </div>
 </div>
 
@@ -47,7 +47,8 @@
 <header>
   <div class="header-left">
     <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="切换侧栏" aria-label="切换侧栏">☰</button>
-    <h1 style="font-size:inherit;">⚡ 工程部管理系统 <span id="version-display" style="font-size:10px;color:var(--muted);margin-left:8px;font-weight:normal;vertical-align:baseline;"></span></h1>
+    <h1>⚡ 工程部管理系统</h1>
+    <p>录入抄表读数 · 实时统计 · 历史趋势</p>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
     <button type="button" class="header-backup-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题" style="padding:7px 10px;">🌙</button>
@@ -80,27 +81,25 @@
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
           <span class="group-icon">📋</span><span class="group-label">数据记录</span><span class="group-arrow">▾</span>
         </div>
-        <button class="sidebar-item active" data-section="reading-record" onclick="switchSection('reading-record')"><span class="item-icon">📜</span><span class="item-label">抄表记录</span></button>
-        <button class="sidebar-item" data-section="charge-record" onclick="switchSection('charge-record')"><span class="item-icon">💳</span><span class="item-label">充值记录</span></button>
+        <button class="sidebar-item active" data-section="reading-record" onclick="switchSection('reading-record')"><span class="item-icon">📋</span><span class="item-label">用电记录</span></button>
         <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')"><span class="item-icon">📦</span><span class="item-label">物品记录</span></button>
         <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')"><span class="item-icon">📋</span><span class="item-label">申购记录</span></button>
         <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')"><span class="item-icon">📝</span><span class="item-label">工作记录</span></button>
       </div>
 
       <!-- 报表分析 -->
-      <div class="sidebar-group">
+      <div class="sidebar-group collapsed">
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
           <span class="group-icon">📊</span><span class="group-label">报表分析</span><span class="group-arrow">▾</span>
         </div>
         <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')"><span class="item-icon">📈</span><span class="item-label">每日趋势</span></button>
         <button class="sidebar-item" data-section="report-weekly" onclick="switchSection('report-weekly')"><span class="item-icon">📋</span><span class="item-label">每周汇报</span></button>
         <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')"><span class="item-icon">📊</span><span class="item-label">月度报告</span></button>
-        <button class="sidebar-item" data-section="report-utilities" onclick="switchSection('report-utilities')"><span class="item-icon">💧</span><span class="item-label">月度水电</span></button>
         <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')"><span class="item-icon">📅</span><span class="item-label">年度汇总</span></button>
       </div>
 
       <!-- 系统设置 -->
-      <div class="sidebar-group">
+      <div class="sidebar-group collapsed">
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
           <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
         </div>
@@ -111,6 +110,7 @@
       </div>
 
     </nav>
+    <div class="sidebar-version" id="sidebar-version"></div>
   </aside>
 
   <!-- ===== 主内容区 ===== -->
@@ -192,7 +192,7 @@
       <div class="card">
         <div class="card-header">
           <h2>💰 充值录入</h2>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()">🧮 充值计算</button>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()">🧮 计算</button>
         </div>
         <form id="charge-form">
           <div class="form-row">
@@ -263,111 +263,111 @@
 
     <!-- ===== 抄表记录 ===== -->
     <section id="section-reading-record" class="content-section" style="display:none;">
-      <!-- 余量预警：移到此处，抄表记录表格上方，始终可见 -->
+      <!-- 余量预警 -->
       <div class="card" id="reading-record-alerts-card" style="margin-bottom:16px;">
         <div class="card-header">
           <h2>🔥 余量预警</h2>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 计算</button>
         </div>
         <div id="reading-record-alerts-container"></div>
       </div>
+
+      <!-- 用电记录：抄表 / 充值 / 水电 三合一 -->
       <div class="card">
         <div class="card-header">
-          <h2>📜 抄表记录</h2>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="history-month" class="field-control"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-reading-add" title="新增抄表(抄表/水电)">➕ 新增抄表</button>
+          <h2>📋 用电记录</h2>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="record-month" class="field-control"></select>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-reading">➕ 抄表</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-charge" style="display:none;">➕ 充值</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-water" style="display:none;">➕ 水电</button>
           </div>
         </div>
-        <div style="overflow-x:auto">
-          <table class="history-table" id="history-table">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>1#大厅</th>
-                <th>2#消防</th>
-                <th>3#包厢</th>
-                <th>4#空调</th>
-                <th>备注</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
+
+        <div class="record-tabs">
+          <button type="button" class="record-tab active" data-tab="reading">📜 抄表</button>
+          <button type="button" class="record-tab" data-tab="charge">💳 充值</button>
+          <button type="button" class="record-tab" data-tab="water">💧 水电</button>
         </div>
-        <div id="history-empty" class="empty">还没有录入抄表数据</div>
+
+        <!-- 抄表 -->
+        <div class="record-panel" id="record-panel-reading">
+          <div style="overflow-x:auto">
+            <table class="history-table" id="history-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>1#大厅</th>
+                  <th>2#消防</th>
+                  <th>3#包厢</th>
+                  <th>4#空调</th>
+                  <th>备注</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="history-empty" class="empty">还没有录入抄表数据</div>
+        </div>
+
+        <!-- 充值 -->
+        <div class="record-panel" id="record-panel-charge" style="display:none;">
+          <div style="overflow-x:auto">
+            <table class="history-table" id="charge-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>1#大厅</th>
+                  <th>2#消防</th>
+                  <th>3#包厢</th>
+                  <th>4#空调</th>
+                  <th>金额</th>
+                  <th>备注</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="charge-list-empty" class="empty">还没有充值记录</div>
+          <div class="charge-summary" id="charge-summary" style="display:none;">
+            <div class="summary-item">
+              <div class="summary-label">本月充值次数</div>
+              <div class="summary-value" id="summary-count">0</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">本月充值度数</div>
+              <div class="summary-value kwh" id="summary-kwh">0</div>
+            </div>
+            <div class="summary-item">
+              <div class="summary-label">本月充值金额</div>
+              <div class="summary-value yuan" id="summary-yuan">¥ 0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 水电 -->
+        <div class="record-panel" id="record-panel-water" style="display:none;">
+          <div style="overflow-x:auto">
+            <table class="history-table" id="water-history-table">
+              <thead>
+                <tr>
+                  <th>日期</th>
+                  <th>总表</th>
+                  <th>分表</th>
+                  <th>水表</th>
+                  <th>备注</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+          <div id="water-history-empty" class="empty">还没有录入水电表底数据</div>
+        </div>
       </div>
 
-      <div class="card">
-        <div class="card-header">
-          <h2>💧 水电表底</h2>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="water-history-month" class="field-control"></select>
-          </div>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="history-table" id="water-history-table">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>总表</th>
-                <th>分表</th>
-                <th>水表</th>
-                <th>备注</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div id="water-history-empty" class="empty">还没有录入水电表底数据</div>
-      </div>
-    </section>
-
-    <!-- ===== 充值记录 ===== -->
-    <section id="section-charge-record" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>💳 充值记录</h2>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <select id="charge-month" class="field-control"></select>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 充值计算</button>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-charge-add" title="新增充值">➕ 新增充值</button>
-          </div>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="history-table" id="charge-table">
-            <thead>
-              <tr>
-                <th>日期</th>
-                <th>1#大厅</th>
-                <th>2#消防</th>
-                <th>3#包厢</th>
-                <th>4#空调</th>
-                <th>金额</th>
-                <th>备注</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-        <div id="charge-list-empty" class="empty">还没有充值记录</div>
-        <div class="charge-summary" id="charge-summary" style="display:none;">
-          <div class="summary-item">
-            <div class="summary-label">本月充值次数</div>
-            <div class="summary-value" id="summary-count">0</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">本月充值度数</div>
-            <div class="summary-value kwh" id="summary-kwh">0</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-label">本月充值金额</div>
-            <div class="summary-value yuan" id="summary-yuan">¥ 0</div>
-          </div>
-        </div>
-      </div>
     </section>
 
     <!-- ===== 物品录入 ===== -->
@@ -409,7 +409,7 @@
           <h2>🛒 申购录入</h2>
         </div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px 0;">
-          录入需要采购的物品。提交后到「申购记录」确认购买 → 自动加入物品记录。
+          录入需要采购的物品。提交后到「申购记录」购买 → 自动加入物品记录。
         </p>
         <div class="form-row">
           <label>申购日期</label>
@@ -451,7 +451,7 @@
         <div class="card-header">
           <h2>📦 物品记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-item-add" title="新增物品">➕ 新增物品</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-item-add" title="新增物品">➕ 物品</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -487,6 +487,8 @@
                 <th>数量</th>
                 <th>归还数量</th>
                 <th>归还时间</th>
+                <th>归还人</th>
+                <th>照片</th>
                 <th>状态</th>
                 <th>备注</th>
               </tr>
@@ -504,7 +506,7 @@
         <div class="card-header">
           <h2>📋 申购记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-add" title="新增申购">➕ 新增申购</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-add" title="新增申购">➕ 申购</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -516,6 +518,7 @@
                 <th>数量</th>
                 <th>预估金额</th>
                 <th>供应商</th>
+                <th>照片</th>
                 <th>状态</th>
                 <th></th>
               </tr>
@@ -578,7 +581,7 @@
           <div class="form-row">
             <label>图片 <span class="hint">选填，最多3张</span></label>
             <div id="duty-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-duty-image" onclick="addDutyImage('sidebar')">📷 添加图片</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-duty-image" onclick="addDutyImage('sidebar')">📷 图片</button>
             <input type="file" id="duty-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'sidebar')" />
           </div>
           <div class="button-row">
@@ -597,7 +600,7 @@
             <select id="duty-record-month" class="field-control">
               <option value="">全部</option>
             </select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录">➕ 新增记录</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录">➕ 记录</button>
           </div>
         </div>
         <!-- 班次遗留未处理记录横幅 -->
@@ -615,7 +618,7 @@
                 <th>故障区域</th>
                 <th>状态</th>
                 <th>处理方案</th>
-                <th>备注</th>
+                <th>故障信息</th>
                 <th></th>
               </tr>
             </thead>
@@ -631,14 +634,18 @@
       <div class="card">
         <div class="card-header">
           <h2>📊 月度报告</h2>
-          <div style="display:flex;gap:6px;">
+          <div style="display:flex;gap:6px;align-items:center;">
+            <select id="report-month" class="field-control report-month-select"></select>
             <button type="button" class="btn btn-primary btn-sm" id="btn-copy-report" style="display:none;">📋 复制</button>
           </div>
         </div>
-        <div class="form-row">
-          <label>选择月份</label>
-          <select id="report-month" class="field-control"></select>
-        </div>
+
+        <div id="report-empty" class="report-empty">选择月份查看月度报告</div>
+
+        <!-- 本月概况 -->
+        <div id="monthly-stat-grid" class="trend-stat-grid" style="display:none;"></div>
+
+        <!-- 每日用电明细 -->
         <div class="table-container" id="monthly-report-table" style="display:none;">
           <table id="report-grid" class="report-grid-table">
             <thead>
@@ -653,15 +660,25 @@
             </thead>
             <tbody id="report-body"></tbody>
           </table>
-          <div id="report-summary" class="report-summary"></div>
         </div>
-        <!-- 月度用电占比 -->
-        <div id="monthly-pie-wrap" style="margin-top:16px;display:none;">
-          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 8px 0;">🥧 当月用电占比</h3>
-          <div id="monthly-pie-summary" class="daily-pie-summary"></div>
-          <div class="chart-wrap short"><canvas id="chart-monthly-pie"></canvas></div>
+
+        <!-- 当月占比：左文字右饼图 -->
+        <div id="monthly-pie-wrap" style="margin-top:22px;display:none;">
+          <h3 class="block-title">🥧 当月用电占比</h3>
+          <div class="day-detail-grid">
+            <div class="day-detail-list" id="monthly-pie-summary"></div>
+            <div class="chart-wrap short"><canvas id="chart-monthly-pie"></canvas></div>
+          </div>
         </div>
-        <div id="report-empty" class="report-empty">选择月份查看月度报告</div>
+
+        <!-- 月度水电 -->
+        <div id="monthly-utilities-block" style="margin-top:24px;">
+          <div class="util-header">
+            <h3 class="util-title">💧 水电用量</h3>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-utilities" style="display:none;">📋 复制</button>
+          </div>
+          <div id="utilities-result"></div>
+        </div>
       </div>
     </section>
 
@@ -671,24 +688,25 @@
         <div class="card-header">
           <h2>📈 每日用电</h2>
           <div class="form-row" style="flex-direction:row;align-items:center;gap:6px;margin:0;">
-            <label style="font-size:12px;color:var(--text-muted);margin:0;white-space:nowrap;">📋 单天汇报</label>
+            <label style="font-size:12px;color:var(--text-muted);margin:0;white-space:nowrap;">单天</label>
             <select id="day-copy-date" class="field-control" style="width:auto;padding:5px 10px;"></select>
             <button type="button" class="btn btn-primary btn-sm" id="btn-copy-day">📋 复制</button>
           </div>
         </div>
-        <div class="legend">
-          <span><span class="dot" style="background:#2563eb"></span>大厅</span>
-          <span><span class="dot" style="background:#dc2626"></span>消防</span>
-          <span><span class="dot" style="background:#059669"></span>包厢</span>
-          <span><span class="dot" style="background:#d97706"></span>空调</span>
-          <span><span class="dot" style="background:#d97706"></span>充值</span>
-        </div>
+
+        <!-- 本月概况 -->
+        <div id="trend-stat-grid" class="trend-stat-grid"></div>
+
+        <!-- 每日用电构成（堆叠柱状：4 块表叠成当天总量） -->
         <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
-        <!-- 单日占比:从单天汇报下拉联动 -->
-        <div id="daily-pie-wrap" style="margin-top:16px;display:none;">
-          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 8px 0;">📊 当日用电占比</h3>
-          <div id="daily-pie-summary" class="daily-pie-summary"></div>
-          <div class="chart-wrap short"><canvas id="chart-daily-pie"></canvas></div>
+
+        <!-- 当日明细：左文字右饼图 -->
+        <div id="daily-pie-wrap" style="margin-top:20px;display:none;">
+          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 12px 0;">📊 当日明细</h3>
+          <div class="day-detail-grid">
+            <div class="day-detail-list" id="daily-pie-summary"></div>
+            <div class="chart-wrap short"><canvas id="chart-daily-pie"></canvas></div>
+          </div>
         </div>
       </div>
     </section>
@@ -699,89 +717,52 @@
         <div class="card-header">
           <h2>📋 每周汇报</h2>
           <div style="display:flex;gap:6px;align-items:center;">
-            <label style="font-size:12px;color:var(--text-muted);">目标周</label>
             <select id="weekly-target-week" class="field-control" style="width:auto;padding:5px 10px;"></select>
             <button type="button" class="btn btn-primary btn-sm" id="btn-copy-weekly" style="display:none;">📋 复制</button>
           </div>
         </div>
-        <!-- 加载提示 -->
+
         <div id="weekly-report-empty" class="report-empty">选择目标周查看每周汇报</div>
-        <!-- 区域电费对比 -->
-        <div id="weekly-electricity" style="display:none;">
-          <h3 style="font-size:14px;margin:0 0 10px 0;">⚡ 上周 vs 上上周 电费对比</h3>
+
+        <!-- 一句话总结 -->
+        <div id="weekly-headline" class="weekly-headline" style="display:none;"></div>
+
+        <!-- 两周对比图 -->
+        <div id="weekly-chart-wrap" style="display:none;margin-top:18px;">
+          <div class="chart-wrap short"><canvas id="chart-weekly-bar"></canvas></div>
+        </div>
+
+        <!-- 明细表 -->
+        <div id="weekly-detail" style="display:none;margin-top:18px;">
           <div style="overflow-x:auto;">
             <table class="history-table" id="weekly-compare-table">
               <thead>
                 <tr>
                   <th>区域</th>
-                  <th>上周用电</th>
-                  <th>上上周用电</th>
-                  <th>涨跌</th>
-                  <th>上周费用</th>
-                  <th>上上周费用</th>
-                  <th>费用变化</th>
+                  <th>上上周</th>
+                  <th>上周</th>
+                  <th>变化</th>
                 </tr>
               </thead>
               <tbody></tbody>
             </table>
           </div>
-          <!-- 合计行 -->
-          <div id="weekly-summary-row" class="report-summary" style="display:none;margin-top:10px;"></div>
-        </div>
-        <!-- 4 块表详细电费趋势(每块表一张卡片,详尽展示上周 vs 上上周) -->
-        <div id="weekly-meter-trend" style="display:none;margin-top:16px;">
-          <h3 style="font-size:14px;margin:0 0 10px 0;">📈 4 块表电费详细趋势(上周 vs 上上周)</h3>
-          <div id="weekly-meter-trend-grid" class="meter-trend-grid"></div>
-          <div id="weekly-meter-trend-summary"></div>
-        </div>
-        <!-- 排练/编程次数 -->
-        <div id="weekly-tags" style="display:none;margin-top:16px;">
-          <h3 style="font-size:14px;margin:0 0 10px 0;">🎭 排练 / 编程统计</h3>
-          <div style="overflow-x:auto;">
-            <table class="history-table" id="weekly-tag-table">
-              <thead>
-                <tr>
-                  <th></th>
-                  <th>排练次数</th>
-                  <th>编程次数</th>
-                </tr>
-              </thead>
-              <tbody></tbody>
-            </table>
-          </div>
+          <div id="weekly-summary-row" class="report-summary" style="margin-top:10px;"></div>
         </div>
       </div>
     </section>
 
-    <!-- ===== 月度水电 ===== -->
-    <section id="section-report-utilities" class="content-section" style="display:none;">
-      <div class="card">
-        <div class="card-header">
-          <h2>💧 月度水电</h2>
-        </div>
-        <div class="form-row">
-          <label>选择月份</label>
-          <select id="utilities-month" class="field-control"></select>
-        </div>
-        <div id="utilities-result">
-          <div class="report-empty">选择月份查看水电数据</div>
-        </div>
-      </div>
-    </section>
 
     <!-- ===== 年度汇总 ===== -->
     <section id="section-report-yearly" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📊 年度汇总</h2>
-          <div style="display:flex;gap:6px;">
+          <h2>📅 年度汇总</h2>
+          <div class="report-toolbar">
+            <select id="yearly-year" class="field-control yearly-year-select"></select>
+            <button type="button" class="btn btn-secondary btn-sm" id="yearly-apply">查询</button>
             <button type="button" class="btn btn-primary btn-sm" id="btn-copy-yearly" style="display:none;">📋 复制</button>
           </div>
-        </div>
-        <div class="form-row">
-          <label>选择年份</label>
-          <select id="yearly-year" class="field-control" style="width:120px;"></select>
-          <button class="btn btn-primary btn-sm" id="yearly-apply">🔍 查询</button>
         </div>
         <div id="yearly-result" style="margin-top:8px;"></div>
       </div>
@@ -808,6 +789,7 @@
       <div class="card-header">
         <h2>👥 用户管理</h2>
       </div>
+      <div id="users-stat-grid" class="trend-stat-grid"></div>
       <div class="settings-toolbar">
         <input type="text" id="new-username" placeholder="用户名" class="field-control">
         <input type="text" id="new-password" placeholder="密码" class="field-control">
@@ -841,12 +823,59 @@
     <div class="card">
       <div class="card-header">
         <h2>⚙️ 电表设置</h2>
-      </div>
-      <div id="meter-settings-form" class="meter-grid"></div>
-      <div class="settings-toolbar" style="margin-top:2px;">
-        <label class="inline-field">电价(元/度): <input type="number" id="config-elec-price" step="0.01" class="field-control"></label>
-        <label class="inline-field">水价(元/吨): <input type="number" id="config-water-price" step="0.01" class="field-control"></label>
         <button class="btn btn-primary btn-sm" onclick="saveMeterSettings()">💾 保存</button>
+      </div>
+
+      <div class="settings-block">
+        <div class="settings-block-title">📝 电表命名</div>
+        <div class="settings-block-desc">4 块表的显示名称，改动会同步到所有报表、图例和复制内容</div>
+        <div id="meter-settings-form" class="meter-grid"></div>
+      </div>
+
+      <div class="settings-block">
+        <div class="settings-block-title">💰 计费单价</div>
+        <div class="settings-block-desc">用于把用电量、用水量换算成金额</div>
+        <div class="settings-inline">
+          <label class="settings-field">电价
+            <input type="number" id="config-elec-price" step="0.01" class="field-control">
+            <span class="settings-unit">元/度</span>
+          </label>
+          <label class="settings-field">水价
+            <input type="number" id="config-water-price" step="0.01" class="field-control">
+            <span class="settings-unit">元/吨</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-block">
+        <div class="settings-block-title">🔢 水电表倍率</div>
+        <div class="settings-block-desc">抄见差 × 倍率 = 实际用量；厨房恒为「总表 − 分表」，无需设置</div>
+        <div class="settings-inline">
+          <label class="settings-field">总表倍率
+            <input type="number" id="config-main-mult" step="1" min="1" class="field-control">
+          </label>
+          <label class="settings-field">分表倍率
+            <input type="number" id="config-sub-mult" step="1" min="1" class="field-control">
+          </label>
+        </div>
+        <div class="util-config-grid">
+          <div class="util-config-item">
+            <div class="util-config-name">总表</div>
+            <div class="util-config-desc">抄见差 × 总表倍率 = 总用电量</div>
+          </div>
+          <div class="util-config-item">
+            <div class="util-config-name">分表</div>
+            <div class="util-config-desc">抄见差 × 分表倍率 = 分表用电量</div>
+          </div>
+          <div class="util-config-item">
+            <div class="util-config-name">厨房</div>
+            <div class="util-config-desc">总用电 − 分表用电，自动计算</div>
+          </div>
+          <div class="util-config-item">
+            <div class="util-config-name">水表</div>
+            <div class="util-config-desc">抄见差 = 用水量(吨)，× 水价 = 水费</div>
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -857,69 +886,71 @@
       <div class="card-header">
         <h2>📂 数据管理</h2>
       </div>
+
+      <div class="settings-grid-2">
+      <!-- 1) 备份与恢复 -->
       <div class="settings-panel">
-        <div class="panel-title">📂 备份目录</div>
-        <div id="backup-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
-        <input type="hidden" id="backup-dir-raw" value="">
-      </div>
-      <div class="settings-panel">
-        <div class="panel-title">📷 图片目录</div>
-        <div id="image-dir-display" class="panel-desc" style="margin-bottom:10px;">加载中...</div>
-        <div id="image-dir-stats" class="panel-desc" style="margin-bottom:10px;font-size:13px;color:var(--text-muted);"></div>
-        <input type="hidden" id="image-dir-raw" value="">
-      </div>
-      <div class="settings-panel">
+        <div class="panel-title"><span>💾 备份与恢复</span></div>
+        <div id="backup-dir-display" class="panel-desc data-line">加载中...</div>
+        <div id="backup-dir-input-wrap" class="data-input-wrap">
+          <input type="text" id="backup-dir-input" placeholder="完整路径；留空 = 数据目录下的 backup/" class="field-control">
+        </div>
+        <div class="data-actions">
+          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn">📂 选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveBackupSettings()" id="save-backup-btn">保存</button>
+          <span class="data-actions-sep"></span>
+          <button class="btn btn-primary btn-xs" onclick="adminBackup()" id="admin-backup-btn">💾 备份</button>
+          <button class="btn btn-secondary btn-xs" onclick="adminRestore()">↩️ 恢复</button>
+        </div>
         <div class="auto-backup-row">
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
-          <div style="flex:1;min-width:160px;">
-            <div class="panel-title" style="margin-bottom:2px;">自动备份</div>
-            <div class="panel-desc">启动时自动备份 · 按保留天数清理(auto-bak- 前缀)</div>
+          <div class="auto-backup-label">
+            <div class="panel-title">自动备份</div>
+            <div class="panel-desc">每次启动时自动备份一次（当天只备份一次），超出保留个数自动清理旧的</div>
           </div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            <label class="panel-desc">保留</label>
+          <div class="auto-backup-retention">
+            <label class="panel-desc">保留最新</label>
             <input type="number" id="admin-backup-retention" min="1" class="field-control" placeholder="5">
-            <label class="panel-desc">天</label>
+            <label class="panel-desc">个</label>
           </div>
         </div>
       </div>
-      <!-- 统一保存/取消按钮 -->
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <button class="btn btn-primary" onclick="saveDataMgmtSettings()" id="data-mgmt-save-btn">💾 保存设置</button>
-        <button class="btn btn-secondary" onclick="cancelDataMgmtChanges()" id="data-mgmt-cancel-btn">取消</button>
-      </div>
-      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-        <button class="btn btn-danger btn-sm" onclick="adminBackup()" style="flex:1;min-width:140px;" id="admin-backup-btn">💾 手动备份</button>
-        <button class="btn btn-danger btn-sm" onclick="adminRestore()" style="flex:1;min-width:140px;">↩️ 恢复数据</button>
-      </div>
-      <!-- NAS 同步 -->
-      <div class="settings-panel" style="margin-bottom:0;">
-        <div class="panel-title"><span>🔄 从 NAS 同步数据</span></div>
-        <div style="display:flex;gap:6px;margin-bottom:6px;">
-          <input type="text" id="nas-sync-url-input" placeholder="NAS 地址，如 lin.icafe.top" class="field-control" style="flex:1;font-size:12px;">
-          <button class="btn btn-primary btn-sm" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
+
+      <!-- 2) 图片目录 -->
+      <div class="settings-panel">
+        <div class="panel-title"><span>📷 图片目录</span></div>
+        <div id="image-dir-display" class="panel-desc data-line">加载中...</div>
+        <div id="image-dir-stats" class="panel-desc data-line data-muted"></div>
+        <div id="image-dir-input-wrap" class="data-input-wrap">
+          <input type="text" id="image-dir-input" placeholder="必须是数据目录内的子目录，例如 .../images" class="field-control">
         </div>
-        <div style="font-size:11px;color:var(--text-muted);">从 NAS 上的 Docker 实例拉取最新抄表和充值数据覆盖本地。需要 Mac 能访问 NAS 网络。</div>
+        <div class="data-actions">
+          <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()" id="pick-image-dir-btn">📂 选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveImageDirInput()" id="save-image-dir-btn">保存</button>
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text-muted);margin-bottom:14px;">💡 手动备份每次点击都会新建(meter-backup- 前缀)，最多保留 10 个，超出自动删除最旧</div>
-      <div class="settings-panel" style="margin-bottom:0;">
-        <div class="panel-title">
-          <span>📥 从备份恢复</span>
+
+      <!-- 3) 从 NAS 同步 -->
+      <div class="settings-panel">
+        <div class="panel-title"><span>🔄 从 NAS 同步</span></div>
+        <div class="data-actions">
+          <input type="text" id="nas-sync-url-input" placeholder="外网 lin.icafe.top　内网 172.16.254.250:8765" class="field-control data-grow">
+          <button class="btn btn-primary btn-xs" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
         </div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:8px;">
-          从系统自动备份或手动备份的 ZIP 压缩包恢复数据。恢复前会自动备份当前数据，可随时回滚。
+        <div class="panel-desc data-hint">
+          从远程实例拉取数据覆盖本地（同步前自动备份当前数据）。外网域名会走 https，内网 IP 走 http；<strong>内网环境建议优先填内网地址</strong>，比走公网快得多。
         </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <input type="file" id="restore-zip-file" accept=".zip" class="field-control" style="flex:1;" onchange="onRestoreZipSelect(this)">
-          <button class="btn btn-danger btn-sm" onclick="restoreFromSelectedZip()" id="restore-zip-btn" disabled>📥 恢复</button>
-        </div>
-        <div id="restore-zip-result" style="font-size:12px;color:var(--text-muted);margin-top:8px;white-space:pre-wrap;min-height:20px;"></div>
       </div>
+
+      </div>
+
+      <!-- 4) 备份列表 -->
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
           <span>📁 备份列表</span>
           <button class="btn btn-secondary btn-xs" onclick="loadBackupList()">🔄 刷新</button>
         </div>
-        <div id="backup-list" style="font-size:12px;color:var(--text-muted);">加载中...</div>
+        <div id="backup-list" class="panel-desc data-hint">加载中...</div>
       </div>
     </div>
   </section>
@@ -929,6 +960,9 @@
     <div class="card">
       <div class="card-header">
         <h2>🔐 权限管理</h2>
+      </div>
+      <div class="settings-block-desc" style="margin-bottom:14px;">
+        三级权限固定配置，不可自定义。员工只能录入，主管可编辑，管理员拥有全部权限（含用户与系统设置）。
       </div>
       <div style="overflow-x:auto;">
         <table class="settings-table">
@@ -1003,17 +1037,22 @@
         <input type="number" id="lend-qty" class="field-control" min="1" placeholder="请输入借出数量" style="width:100%;">
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span></label>
-        <input type="text" id="lend-borrower" class="field-control" placeholder="请输入借出人姓名" style="width:100%;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="lend-borrower" class="field-control" placeholder="姓名 或 传图" style="flex:1;min-width:0;" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('lend-borrower')" title="传图片代替文字">📷</button>
+        </div>
+        <div id="lend-borrower-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
+        <input type="file" id="lend-borrower-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'lend-borrower')" />
       </div>
-      <div style="margin-bottom:0;">
+      <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注</label>
         <input type="text" id="lend-note" class="field-control" placeholder="选填" style="width:100%;">
       </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="lend-close">取消</button>
-      <button type="button" class="btn btn-primary" id="lend-confirm">确认借出</button>
+      <button type="button" class="btn btn-primary" id="lend-confirm">借出</button>
     </div>
   </div>
 </div>
@@ -1036,14 +1075,23 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还数量 <span style="color:var(--danger);">*</span></label>
         <input type="number" id="return-qty" class="field-control" min="0.01" step="0.01" placeholder="请输入本次归还数量" style="width:100%;">
       </div>
-      <div style="margin-bottom:0;">
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="return-by" class="field-control" placeholder="姓名 或 传图" style="flex:1;min-width:0;" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('return-by')" title="传图片代替文字">📷</button>
+        </div>
+        <div id="return-by-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
+        <input type="file" id="return-by-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'return-by')" />
+      </div>
+      <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注</label>
         <input type="text" id="return-note" class="field-control" placeholder="选填" style="width:100%;">
       </div>
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="return-close">取消</button>
-      <button type="button" class="btn btn-primary" id="return-confirm">确认归还</button>
+      <button type="button" class="btn btn-primary" id="return-confirm">归还</button>
     </div>
   </div>
 </div>
@@ -1072,7 +1120,7 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="item-add-close">取消</button>
-      <button type="button" class="btn btn-primary" id="item-add-confirm">确认新增</button>
+      <button type="button" class="btn btn-primary" id="item-add-confirm">新增</button>
     </div>
   </div>
 </div>
@@ -1087,8 +1135,13 @@
         <input type="date" id="purchase-add-date" style="width:100%;" />
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span></label>
-        <input type="text" id="purchase-add-name" placeholder="例如:电线 2.5mm²" style="width:100%;" />
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span> <span class="hint">写名字，或直接拍张照片</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="purchase-add-name" placeholder="例如:电线 2.5mm²" style="flex:1;min-width:0;" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('purchase-add-name')" title="拍一张照片代替名称">📷</button>
+        </div>
+        <div id="purchase-add-name-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+        <input type="file" id="purchase-add-name-file" accept="image/*" multiple style="display:none;" onchange="onFieldImagePicked(this, 'purchase-add-name')" />
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">数量 <span style="color:var(--danger);">*</span></label>
@@ -1106,14 +1159,15 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">供应商 <span class="hint">选填</span></label>
         <input type="text" id="purchase-add-supplier" placeholder="例如:南门五金店" style="width:100%;" />
       </div>
-      <div style="margin-bottom:0;">
+      <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
-        <input type="text" id="purchase-add-note" placeholder="选填" maxlength="100" style="width:100%;" />
+        <input type="text" id="purchase-add-note" placeholder="补充说明" style="width:100%;" />
       </div>
+
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="purchase-add-close">取消</button>
-      <button type="button" class="btn btn-primary" id="purchase-add-confirm">确认申购</button>
+      <button type="button" class="btn btn-primary" id="purchase-add-confirm">申购</button>
     </div>
   </div>
 </div>
@@ -1149,26 +1203,14 @@
           <option value="夜班">夜班</option>
         </select>
       </div>
-      <div style="margin-bottom:0;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
-        <input type="text" id="duty-add-note" placeholder="选填" maxlength="200" style="width:100%;" />
-      </div>
-      <div style="margin:12px 0 0;padding-top:12px;border-top:1px dashed var(--border-subtle);">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理状态 <span style="color:var(--danger);">*</span></label>
-        <div style="display:flex;gap:16px;align-items:center;">
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="radio" name="duty-add-status" value="已处理" /> 已处理
-          </label>
-          <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
-            <input type="radio" name="duty-add-status" value="未处理" /> 未处理
-          </label>
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">故障信息 <span style="color:var(--danger);">*</span> <span class="hint">描述故障，可附照片；文字和图片可以同时填</span></label>
+        <div style="display:flex;gap:8px;align-items:flex-start;">
+          <textarea id="duty-add-note" class="field-control" rows="2" placeholder="例如：包厢空调不出风，压缩机有异响" style="flex:1;min-width:0;resize:vertical;"></textarea>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-add-note')" title="上传故障照片">📷</button>
         </div>
-      </div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-subtle);">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">图片 <span class="hint">选填，最多3张</span></label>
-        <div id="duty-add-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="addDutyImage('add')">📷 添加图片</button>
-        <input type="file" id="duty-add-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'add')" />
+        <div id="duty-add-note-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
+        <input type="file" id="duty-add-note-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'duty-add-note')" />
       </div>
     </div>
     <div class="modal-actions">
@@ -1206,18 +1248,17 @@
         </select>
       </div>
       <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理方案 <span style="color:var(--danger);">*</span></label>
-        <input type="text" id="duty-handle-method" placeholder="例如:更换灯泡、修复线路" maxlength="200" style="width:100%;" />
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理方案 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="duty-handle-method" class="" placeholder="例如:更换灯泡 或 传图" style="flex:1;min-width:0;" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-handle-method')" title="传图片代替文字">📷</button>
+        </div>
+        <div id="duty-handle-method-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
+        <input type="file" id="duty-handle-method-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'duty-handle-method')" />
       </div>
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
         <input type="text" id="duty-handle-note" placeholder="选填" maxlength="200" style="width:100%;" />
-      </div>
-      <div style="margin-top:12px;padding-top:12px;border-top:1px dashed var(--border-subtle);">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">图片 <span class="hint">选填，最多3张</span></label>
-        <div id="duty-handle-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="addDutyImage('handle')">📷 添加图片</button>
-        <input type="file" id="duty-handle-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'handle')" />
       </div>
     </div>
     <div class="modal-actions">
@@ -1227,16 +1268,11 @@
   </div>
 </div>
 
-<!-- 抄表录入弹窗（抄表/水电 二合一,带 Tab 切换;在抄表记录页面点 ➕ 新增抄表 触发） -->
+<!-- 抄表/水电录入弹窗：面板由入口决定（记录页 Tab 已分开，弹窗内不再做二选一） -->
 <div id="reading-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title">📝 新增抄表</h3>
+    <h3 class="modal-title" id="reading-add-title">📝 新增抄表</h3>
     <div class="modal-body">
-      <!-- Tab 切换 -->
-      <div class="tab-nav" id="reading-add-tabs" style="margin-bottom:16px;">
-        <button type="button" class="tab-btn active" data-tab="reading">📝 抄表录入</button>
-        <button type="button" class="tab-btn" data-tab="utility">💧 水电录入</button>
-      </div>
       <!-- 抄表录入面板 -->
       <div class="tab-panel" data-panel="reading">
         <div style="margin-bottom:12px;">
@@ -1399,7 +1435,7 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="reading-edit-close">取消</button>
-      <button type="button" class="btn btn-primary" id="reading-edit-confirm">保存修改</button>
+      <button type="button" class="btn btn-primary" id="reading-edit-confirm">保存</button>
     </div>
   </div>
 </div>
@@ -1432,7 +1468,7 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="water-edit-close">取消</button>
-      <button type="button" class="btn btn-primary" id="water-edit-confirm">保存修改</button>
+      <button type="button" class="btn btn-primary" id="water-edit-confirm">保存</button>
     </div>
   </div>
 </div>
@@ -1469,51 +1505,48 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="charge-edit-close">取消</button>
-      <button type="button" class="btn btn-primary" id="charge-edit-confirm">保存修改</button>
+      <button type="button" class="btn btn-primary" id="charge-edit-confirm">保存</button>
     </div>
   </div>
 </div>
 
   <!-- 模块化加载 -->
-  <script src="js/utils_helpers.js"></script>
-  <script src="js/core_meterConfig.js"></script>
-  <script src="js/core_theme.js"></script>
-  <script src="js/core_accessibility.js"></script>
-  <script src="js/data_water_migration.js"></script>
-  <script src="js/data_global.js"></script>
-  <script src="js/data_fetch.js"></script>
-  <script src="js/data_helpers.js"></script>
-  <script src="js/ui_toast.js"></script>
-  <script src="js/ui_modals.js"></script>
-  <script src="js/render_charge_alert.js"></script>
-  <script src="js/render_stats.js"></script>
-  <script src="js/render_charts.js"></script>
-  <script src="js/render_pie_charts.js"></script>
-  <script src="js/render_tables.js"></script>
-  <script src="js/render_records.js"></script>
-  <script src="js/render_edit.js"></script>
-  <script src="js/render_duty_images.js"></script>
-  <script src="js/render_duty_image_upload.js"></script>
-  <script src="js/render_monthly.js"></script>
-  <script src="js/render_reports.js"></script>
-  <script src="js/render_yearly.js"></script>
-  <script src="js/render_weekly_utils.js"></script>
-  <script src="js/render_weekly.js"></script>
-  <script src="js/render_weekly_trend.js"></script>
-  <script src="js/features_topup.js"></script>
-  <script src="js/features_utilities.js"></script>
-  <script src="js/features_image_settings.js"></script>
-  <script src="js/forms_submit.js"></script>
-  <script src="js/forms_buttons.js"></script>
-  <script src="js/forms_confirm.js"></script>
-  <script src="js/forms_open.js"></script>
-  <script src="js/forms_tab.js"></script>
-  <script src="js/forms_close.js"></script>
-  <script src="js/forms_selectors.js"></script>
-  <script src="js/init.js"></script>
+  <script src="js/helpers/utils.js"></script>
+  <script src="js/core/meterConfig.js"></script>
+  <script src="js/core/api.js"></script>
+  <script src="js/core/state.js"></script>
+  <script src="js/core/navigation.js"></script>
+  <script src="js/shared/theme.js"></script>
+  <script src="js/shared/accessibility.js"></script>
+  <script src="js/shared/toast.js"></script>
+  <script src="js/shared/modals.js"></script>
+  <script src="js/shared/image_settings.js"></script>
+  <script src="js/modules/readings.js"></script>
+  <script src="js/modules/charges.js"></script>
+  <script src="js/modules/utilities.js"></script>
+  <script src="js/modules/items.js"></script>
+  <script src="js/modules/purchases.js"></script>
+  <script src="js/modules/duty.js"></script>
+  <script src="js/modules/reports.js"></script>
+  <script src="js/modules/alerts.js"></script>
+  <script src="js/modules/render_charts.js"></script>
+  <script src="js/modules/render_pie_charts.js"></script>
+  <script src="js/modules/render_weekly_utils.js"></script>
+  <script src="js/modules/render_weekly_trend.js"></script>
+  <script src="js/modules/render_weekly.js"></script>
+  <script src="js/modules/backup.js"></script>
   <script src="js/nas_sync.js"></script>
-  <!-- 兼容入口 -->
-  <script src="app.js"></script>
-  <script src="admin.js"></script>
+  <script src="admin.js?v=<TIMESTAMP>"></script>
+  <script src="js/core/init.js"></script>
+  <script src="js/modules/modal_bindings.js"></script>
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        if (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) {
+          if (typeof renderAll === 'function') {
+            renderAll();
+          }
+        }
+      });
+    </script>
 </body>
 </html>

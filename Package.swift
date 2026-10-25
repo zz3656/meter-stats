@@ -21,7 +21,6 @@ let package = Package(
             resources: [
                 .process("server.py"),
                 .process("index.html"),
-                .process("app.js"),
                 .process("admin.js"),
                 .process("style.css"),
                 .process("app_handler.py"),

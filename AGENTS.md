@@ -27,32 +27,29 @@ MeterStats/
 ├── app_handler.py         # HTTP handler, 路由分发
 ├── routing.py             # URL → handler 映射
 ├── constants.py           # 常量定义
-├── handlers/              # API 处理模块(按业务域拆分)
+├── modules/               # API 处理模块(按业务域拆目录)
 │   ├── _base.py           # JsonModelHandler 基类
-│   ├── readings.py        # 抄表 CRUD
-│   ├── charges.py         # 充值 CRUD
-│   ├── items.py           # 物品管理
-│   ├── purchases.py       # 申购流程
-│   ├── duty.py            # 值班记录
-│   ├── reports.py         # 报表生成
-│   ├── backup.py          # 备份/恢复
-│   ├── settings.py        # 系统设置
-│   ├── auth.py            # 登录/鉴权
-│   ├── permissions.py     # 三级权限
-│   └── users.py           # 用户管理
+│   ├── readings/          # 抄表 + 水电表底
+│   ├── charges/           # 充值
+│   ├── items/             # 物品 + 借还流水
+│   ├── purchases/         # 申购流程
+│   ├── duty/              # 值班记录 + 图片上传
+│   ├── reports/           # 报表生成
+│   ├── backup/            # 备份/恢复/NAS 同步
+│   ├── system/            # 设置/用户/权限/鉴权
+│   └── utilities/         # 水电计算
 ├── utils/
 │   ├── api.py             # send_json / read_body / CORS 工具
 │   └── audit.py           # 审计日志
-├── js/                    # 前端 JS (按功能拆分,~40 文件)
-│   ├── init.js            # 初始化 + 路由
-│   ├── core_*.js          # 核心模块 (theme/meterConfig/accessibility)
-│   ├── data_*.js          # 数据获取/处理
-│   ├── forms_*.js         # 表单交互
-│   ├── render_*.js        # 渲染 (charts/tables/reports)
-│   └── features_*.js      # 功能模块 (topup/image_settings)
+├── js/                    # 前端 JS (无构建步骤)
+│   ├── core/              # api / init / navigation / state / meterConfig
+│   ├── helpers/utils.js   # 压缩图片 / 字段图片组件 / 格式化
+│   ├── modules/           # 业务模块 + render_*.js + modal_bindings.js
+│   ├── shared/            # modals / theme / toast / accessibility / image_settings
+│   └── nas_sync.js        # NAS 远端同步
 ├── index.html             # SPA 入口
 ├── style.css              # 主题变量 + 响应式
-├── app.js / admin.js      # 前端主逻辑
+├── admin.js               # 管理页逻辑(仍保留)
 └── VERSION                # 版本文件 (server.py 启动时读取)
 ```
 

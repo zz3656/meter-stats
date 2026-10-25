@@ -1,0 +1,110 @@
+"""充值相关 API handler。"""
+from __future__ import annotations
+
+from datetime import datetime
+
+from utils import send_json, opt_float, read_body
+
+_now = datetime.now
+from storage import log, load_json, save_json
+from modules._base import get_data_paths, get_lock
+from report import invalidate_report_cache as _invalidate_report_cache
+
+
+def _load_charges() -> list:
+    return load_json(get_data_paths()["charges"], [])
+
+
+# ==================== GET ====================
+
+def handle_get_charges(handler):
+    """GET /api/charges"""
+    send_json(handler, 200, _load_charges())
+
+
+# 注：handle_get_charges_monthly 已删除 — 详见 handlers/readings.py 同名注释。
+# ==================== POST ====================
+
+def handle_post_charges(handler):
+    """POST /api/charges"""
+    body = read_body(handler)
+    if not body.get("date"):
+        send_json(handler, 400, {"error": "日期不能为空"})
+        return
+    charges = _load_charges()
+    new_charge = {
+        "id": f"{body['date']}-{int(_now().timestamp() * 1000)}",
+        "date": body["date"],
+        "hall": opt_float(body, "hall"),
+        "fire": opt_float(body, "fire"),
+        "private_room": opt_float(body, "private_room"),
+        "ac": opt_float(body, "ac"),
+        "note": body.get("note", ""),
+    }
+    if all(v is None or v == 0 for v in [new_charge["hall"], new_charge["fire"],
+                                          new_charge["private_room"], new_charge["ac"]]):
+        send_json(handler, 400, {"error": "四表至少填一个非 0 值"})
+        return
+    charges.append(new_charge)
+    _save_charges(charges)
+    log(f"  OK 充值 {body['date']}")
+    _invalidate_report_cache()
+    send_json(handler, 200, {"ok": True, "row": new_charge})
+
+
+# ==================== PUT ====================
+
+def handle_put_charges(handler, path_clean: str):
+    """PUT /api/charges/{id}"""
+    cid = path_clean[len("/api/charges/"):]
+    body = read_body(handler)
+    charges = _load_charges()
+    idx = next((i for i, c in enumerate(charges) if c.get("id") == cid), None)
+    if idx is None:
+        send_json(handler, 404, {"error": f"未找到 {cid}"})
+        return
+    charge = charges[idx]
+    for key in ["hall", "fire", "private_room", "ac"]:
+        val = body.get(key)
+        if val is not None:
+            charge[key] = opt_float(body, key)
+    if body.get("note") is not None:
+        charge["note"] = str(body.get("note", "") or "")
+    for key in ["hall", "fire", "private_room", "ac"]:
+        if charge[key] is not None and charge[key] < 0:
+            send_json(handler, 400, {"error": str(key) + " 不能为负数"})
+            return
+    if all(v is None or v == 0 for v in [charge["hall"], charge["fire"],
+                                          charge["private_room"], charge["ac"]]):
+        send_json(handler, 400, {"error": "四表至少保留一个非 0 值"})
+        return
+    charges[idx] = charge
+    _save_charges(charges)
+    log(f"  OK 充值更新 {cid}")
+    _invalidate_report_cache()
+    send_json(handler, 200, {"ok": True, "row": charge})
+
+
+# ==================== DELETE ====================
+
+def handle_delete_charges(handler, path_clean: str):
+    """DELETE /api/charges/{id}"""
+    cid = path_clean[len("/api/charges/"):]
+    charges = _load_charges()
+    new = [c for c in charges if c.get("id") != cid]
+    if len(new) == len(charges):
+        send_json(handler, 404, {"error": f"未找到 {cid}"})
+        return
+    _save_charges(new)
+    log(f"  -- 删除充值 {cid}")
+    _invalidate_report_cache()
+    send_json(handler, 200, {"ok": True})
+
+
+def _save_charges(data):
+    lock = get_lock("charges")
+    with lock:
+        save_json(get_data_paths()["charges"], data)
+
+from modules._storage import ModuleStorage
+_storage = ModuleStorage('charges')

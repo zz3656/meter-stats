@@ -21,15 +21,8 @@ _DEFAULT_ORIGIN = f"http://localhost:{_default_port}"
 CORS_ORIGIN = os.environ.get("METER_CORS_ORIGIN", _DEFAULT_ORIGIN)
 
 CORS = {
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
-    # 只有放开跨域时才需要 Credentials；同源下浏览器忽略此头。
-    **(
-        {"Access-Control-Allow-Credentials": "true"}
-        if CORS_ORIGIN != _DEFAULT_ORIGIN
-        else {}
-    ),
 }
 
 # ---- 1x1 透明 PNG（favicon 静默响应） ----
@@ -48,6 +41,24 @@ def _write_cors_headers(handler, headers: dict) -> None:
         handler.send_header(k, v)
 
 
+def _add_cors(handler) -> None:
+    """动态写入 CORS 头：回显请求的 Origin 头。
+
+    关键修复：页面从 http://127.0.0.1:8765/ 加载时，
+    如果 CORS 头固定为 http://localhost:8765，
+    浏览器会认为 127.0.0.1 和 localhost 是不同的源，
+    导致跨域请求被拒绝（"Load failed"）。
+
+    解决方案：回显请求的 Origin 头，使 CORS 头与请求源完全匹配。
+    如果请求没有 Origin 头（非跨域），则不发送 CORS 头。
+    """
+    origin = handler.headers.get("Origin")
+    if origin:
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Access-Control-Allow-Credentials", "true")
+    # 非跨域请求不需要 CORS 头
+
+
 def send_json(handler, status: int, payload: Any) -> None:
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
@@ -58,7 +69,7 @@ def send_json(handler, status: int, payload: Any) -> None:
     handler.send_header("X-Content-Type-Options", "nosniff")
     handler.send_header("X-XSS-Protection", "1; mode=block")
     handler.send_header("Cache-Control", "no-store")
-    _write_cors_headers(handler, CORS)
+    _add_cors(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -78,7 +89,7 @@ def send_csv(handler, filename: str, headers: list, rows: list) -> None:
     handler.send_header("X-XSS-Protection", "1; mode=block")
     handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
     handler.send_header("Cache-Control", "no-store")
-    _write_cors_headers(handler, CORS)
+    _add_cors(handler)
     handler.end_headers()
     handler.wfile.write(body)
 
@@ -88,7 +99,7 @@ def send_favicon(handler) -> None:
     handler.send_response(200)
     handler.send_header("Content-Type", "image/png")
     handler.send_header("Content-Length", str(len(_FAKE_FAVICON)))
-    _write_cors_headers(handler, CORS)
+    _add_cors(handler)
     handler.end_headers()
     handler.wfile.write(_FAKE_FAVICON)
 

@@ -29,7 +29,7 @@ class TestDataImportParsing(unittest.TestCase):
     """纯解析测试（无磁盘 I/O）。"""
 
     def test_parse_number_valid(self):
-        from handlers.dataimport import _parse_number
+        from modules.dataimport.handler import _parse_number
         self.assertEqual(_parse_number("123.45"), 123.45)
         self.assertEqual(_parse_number("0"), 0.0)
         self.assertIsNone(_parse_number(""))
@@ -37,29 +37,29 @@ class TestDataImportParsing(unittest.TestCase):
         self.assertEqual(_parse_number("  42  "), 42.0)
 
     def test_parse_number_chinese_comma(self):
-        from handlers.dataimport import _parse_number
+        from modules.dataimport.handler import _parse_number
         self.assertEqual(_parse_number("1,5"), 1.5)  # ASCII 逗号作小数点
         self.assertEqual(_parse_number("1，5"), 1.5)  # 中文逗号
 
     def test_parse_number_thousands_sep(self):
-        from handlers.dataimport import _parse_number
+        from modules.dataimport.handler import _parse_number
         self.assertEqual(_parse_number("1,000"), 1000.0)  # 千分位
         self.assertEqual(_parse_number("12,345"), 12345.0)
 
     def test_parse_number_empty(self):
-        from handlers.dataimport import _parse_number
+        from modules.dataimport.handler import _parse_number
         self.assertIsNone(_parse_number(""))
         self.assertIsNone(_parse_number("  "))
 
     def test_parse_int_valid(self):
-        from handlers.dataimport import _parse_int
+        from modules.dataimport.handler import _parse_int
         self.assertEqual(_parse_int("5"), 5)
         self.assertEqual(_parse_int("0"), 0)
         self.assertIsNone(_parse_int(""))
         self.assertIsNone(_parse_int("abc"))
 
     def test_validate_date_valid(self):
-        from handlers.dataimport import _validate_date
+        from modules.dataimport.handler import _validate_date
         self.assertTrue(_validate_date("2026-08-18"))
         self.assertTrue(_validate_date("2026-01-01"))
         self.assertFalse(_validate_date("2026/08/18"))
@@ -68,7 +68,7 @@ class TestDataImportParsing(unittest.TestCase):
         self.assertFalse(_validate_date("2026-8-1"))
 
     def test_model_fields(self):
-        from handlers.dataimport import VALID_MODELS, MODEL_FIELDS
+        from modules.dataimport.handler import VALID_MODELS, MODEL_FIELDS
         expected = {"readings", "charges", "items", "purchases"}
         self.assertEqual(VALID_MODELS, expected)
         self.assertIn("date", MODEL_FIELDS["readings"])
@@ -103,7 +103,7 @@ class TestDataImportDisk(unittest.TestCase):
             if model in app_handler.DATA_PATHS:
                 app_handler.DATA_PATHS[model] = filepath
         # 初始化 settings
-        from handlers.settings import init_settings
+        from modules.system.settings_handler import init_settings
         init_settings(_IMPORT_TEST_DIR)
 
     @classmethod
@@ -123,7 +123,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_readings_import_success(self):
         """有效 readings CSV 应成功导入。"""
-        from handlers.dataimport import _import_readings
+        from modules.dataimport.handler import _import_readings
 
         csv_text = "date,hall,fire,private_room,ac\n2026-08-18,100.0,1.0,50.0,200.0\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -136,7 +136,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_readings_import_duplicate_updates(self):
         """同一日期的导入应更新而非重复。"""
-        from handlers.dataimport import _import_readings
+        from modules.dataimport.handler import _import_readings
         from storage import load_json
 
         # 先创建一条
@@ -162,7 +162,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_readings_import_invalid_date(self):
         """无效日期应被拒绝。"""
-        from handlers.dataimport import _import_readings
+        from modules.dataimport.handler import _import_readings
 
         csv_text = "date,hall\n08-18-2026,100.0\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -175,7 +175,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_readings_import_all_zero(self):
         """所有表都未填应被拒绝。"""
-        from handlers.dataimport import _import_readings
+        from modules.dataimport.handler import _import_readings
 
         csv_text = "date\n2026-08-18\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -188,7 +188,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_charges_import_success(self):
         """有效 charges CSV 应导入成功。"""
-        from handlers.dataimport import _import_charges
+        from modules.dataimport.handler import _import_charges
 
         csv_text = "date,hall,fire\n2026-08-18,50.0,10.0\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -200,7 +200,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_charges_import_zero_rejected(self):
         """充值全为零应被拒绝。"""
-        from handlers.dataimport import _import_charges
+        from modules.dataimport.handler import _import_charges
 
         csv_text = "date\n2026-08-18\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -212,7 +212,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_items_import_success(self):
         """有效 items CSV 应导入成功。"""
-        from handlers.dataimport import _import_items
+        from modules.dataimport.handler import _import_items
 
         csv_text = "id,name,qty,unit\nitem-1,扫把,5,把\nitem-2,垃圾袋,100,卷\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -224,7 +224,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_items_import_duplicate_updates(self):
         """同一名称的 item 应更新而非重复。"""
-        from handlers.dataimport import _import_items
+        from modules.dataimport.handler import _import_items
         from storage import load_json
 
         csv_text = "id,name,qty,unit\nitem-1,扫把,10,把\n"
@@ -248,7 +248,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_items_import_negative_qty(self):
         """负数数量应被拒绝。"""
-        from handlers.dataimport import _import_items
+        from modules.dataimport.handler import _import_items
 
         csv_text = "id,name,qty,unit\nitem-1,扫把,-5,把\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -260,7 +260,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_items_import_empty_name(self):
         """空名称应被拒绝。"""
-        from handlers.dataimport import _import_items
+        from modules.dataimport.handler import _import_items
 
         csv_text = "id,name,qty,unit\nitem-1,,5,把\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -272,7 +272,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_purchases_import_success(self):
         """有效 purchases CSV 应导入成功。"""
-        from handlers.dataimport import _import_purchases
+        from modules.dataimport.handler import _import_purchases
 
         csv_text = "date,name,qty,unit,est_price\n2026-08-18,扫把,5,把,10.5\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -284,7 +284,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_purchases_import_multiple_same_day(self):
         """purchases 允许同日同名多个。"""
-        from handlers.dataimport import _import_purchases
+        from modules.dataimport.handler import _import_purchases
 
         csv_text = "date,name,qty,unit\n2026-08-18,扫把,5,把\n2026-08-18,扫把,3,把\n"
         reader = csv.DictReader(io.StringIO(csv_text))
@@ -296,7 +296,7 @@ class TestDataImportDisk(unittest.TestCase):
 
     def test_multi_thread_import(self):
         """并发导入应安全（每个线程导入同一数据）。"""
-        from handlers.dataimport import _import_items
+        from modules.dataimport.handler import _import_items
 
         csv_text = "id,name,qty,unit\nitem-1,扫把,1,把\n"
         results = []
@@ -326,7 +326,7 @@ class TestImportTemplate(unittest.TestCase):
 
     def test_examples_aligned_with_fields(self):
         """每个模型的示例行字段数必须和表头字段数一致（防止以后改字段忘了同步示例）。"""
-        from handlers.dataimport import MODEL_FIELDS, MODEL_EXAMPLES, VALID_MODELS
+        from modules.dataimport.handler import MODEL_FIELDS, MODEL_EXAMPLES, VALID_MODELS
         for model in VALID_MODELS:
             self.assertEqual(
                 len(MODEL_EXAMPLES[model]),
@@ -336,7 +336,7 @@ class TestImportTemplate(unittest.TestCase):
 
     def test_examples_first_col_is_meaningful(self):
         """示例行应包含可识别的数据，不应全空（避免用户下载到空模板不知格式）。"""
-        from handlers.dataimport import MODEL_EXAMPLES, VALID_MODELS
+        from modules.dataimport.handler import MODEL_EXAMPLES, VALID_MODELS
         for model in VALID_MODELS:
             example = MODEL_EXAMPLES[model]
             non_empty = [v for v in example if v and v.strip()]
@@ -349,13 +349,14 @@ class TestImportTemplate(unittest.TestCase):
         """GET /api/import/template?model=items 应返回 text/csv 格式的模板。"""
         import csv as csv_mod
         from io import StringIO
-        from handlers.dataimport import (
+        from modules.dataimport.handler import (
             handle_get_import_template, MODEL_FIELDS,
         )
 
         captured = {"headers": {}, "body": b""}
 
         class _FakeHandler:
+            headers = {}   # utils.api._add_cors 读 handler.headers.get("Origin")
             path = "/api/import/template?model=items"
             def send_response(self, status):
                 captured["status"] = status
@@ -390,7 +391,7 @@ class TestImportTemplate(unittest.TestCase):
 
     def test_get_template_all_models(self):
         """4 个模型都应能成功生成模板。"""
-        from handlers.dataimport import (
+        from modules.dataimport.handler import (
             handle_get_import_template, VALID_MODELS, MODEL_FIELDS,
         )
         import csv as csv_mod
@@ -400,6 +401,7 @@ class TestImportTemplate(unittest.TestCase):
             captured = {"headers": {}, "body": b""}
 
             class _FakeHandler:
+                headers = {}   # utils.api._add_cors 读 handler.headers.get("Origin")
                 path = f"/api/import/template?model={model}"
                 def send_response(self, status):
                     captured["status"] = status
@@ -430,11 +432,12 @@ class TestImportTemplate(unittest.TestCase):
     def test_get_template_invalid_model(self):
         """未知模型应返回 400 JSON 错误。"""
         import json as json_mod
-        from handlers.dataimport import handle_get_import_template
+        from modules.dataimport.handler import handle_get_import_template
 
         captured = {"headers": {}, "body": b""}
 
         class _FakeHandler:
+            headers = {}   # utils.api._add_cors 读 handler.headers.get("Origin")
             path = "/api/import/template?model=bogus"
             def send_response(self, status):
                 captured["status"] = status

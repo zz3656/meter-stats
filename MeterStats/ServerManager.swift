@@ -23,21 +23,13 @@ final class ServerManager {
     }
 
     private func getBundleResources() -> URL? {
-        // 从 ~/MeterStats/MeterStats.app 读取（不受 SIP 保护）
-        let appPath = URL(fileURLWithPath: "\(NSHomeDirectory())/MeterStats/MeterStats.app")
-        if FileManager.default.fileExists(atPath: appPath.appendingPathComponent("Contents/Resources").path) {
-            return appPath.appendingPathComponent("Contents/Resources")
+        // 直接硬编码 /Applications/MeterStats.app/Contents/Resources
+        // 绕过 Bundle.main.resourceURL 在签名失效时的异常行为
+        let appResources = URL(fileURLWithPath: "/Applications/MeterStats.app/Contents/Resources")
+        if FileManager.default.fileExists(atPath: appResources.path) {
+            return appResources
         }
-        // 回退：从 /Applications/MeterStats.app 读取（Swift Bundle.main 指向这里）
-        let bundlePath = URL(fileURLWithPath: "/Applications/MeterStats.app")
-        if FileManager.default.fileExists(atPath: bundlePath.appendingPathComponent("Contents/Resources").path) {
-            return bundlePath.appendingPathComponent("Contents/Resources")
-        }
-        // 回退：尝试从当前运行的 .app 路径获取
-        if let bundle = Bundle.main.resourceURL {
-            return bundle
-        }
-        // 最后回退：从项目目录获取（开发环境）
+        // 回退：项目目录（开发环境）
         return URL(fileURLWithPath: ".").appendingPathComponent("MeterStats").appendingPathComponent("Contents/Resources")
     }
 
@@ -64,14 +56,17 @@ final class ServerManager {
         try FileManager.default.createDirectory(at: runtime, withIntermediateDirectories: true)
 
         guard let bundleResources = getBundleResources() else {
+            print("[ServerManager] 错误：找不到 bundle Resources")
             throw NSError(domain: "MeterStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "找不到 bundle Resources"])
         }
+        print("[ServerManager] bundleResources = \(bundleResources.path)")
+        print("[ServerManager] runtime = \(getRuntimeDir().path)")
 
         // ⚠️ 不能用 VERSION 相同就跳过复制:版本号不变但文件内容可能已更新
         // (如 0.1.0 内部多次构建修复 UI),否则 runtime 会一直用旧文件。
         // 改为始终按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
 
-        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "app.js", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
+        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
         for filename in files {
             let src = bundleResources.appendingPathComponent(filename)
             let dst = runtime.appendingPathComponent(filename)
@@ -80,9 +75,9 @@ final class ServerManager {
                 continue
             }
 
-            // server.py 每次都必须覆盖（内容可能包含新的 fallback 逻辑）
-            if filename == "server.py" {
-                try FileManager.default.removeItem(at: dst)
+            // server.py 和 admin.js 每次都必须覆盖（内容可能更新）
+            if filename == "server.py" || filename == "admin.js" {
+                if FileManager.default.fileExists(atPath: dst.path) { try FileManager.default.removeItem(at: dst) }
                 try FileManager.default.copyItem(at: src, to: dst)
             } else {
                 // 其他文件：按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
@@ -111,7 +106,7 @@ final class ServerManager {
         }
 
         // SwiftPM .process("Resources") 不拷贝子目录，需要手动复制
-        for subdir in ["handlers", "js", "utils"] {
+        for subdir in ["handlers", "js", "modules", "utils"] {
             let srcDir = bundleResources.appendingPathComponent(subdir)
             let dstDir = runtime.appendingPathComponent(subdir)
             guard FileManager.default.fileExists(atPath: srcDir.path) else { continue }
@@ -131,12 +126,16 @@ final class ServerManager {
         }
     }
 
-    func start() throws {
+    func start() async throws {
         // 每次启动时先检查端口是否被占用，如果被占用就杀掉再启动
         if isPortBusy {
             print("[ServerManager] 端口被占用，先杀掉旧服务...")
             killPortOccupants()
-            Thread.sleep(forTimeInterval: 3.0)  // 等待端口释放和旧服务完全退出
+            // 异步等待端口释放（最多等 3 秒，不用固定 sleep）
+            let pollDeadline = Date().addingTimeInterval(3.0)
+            while isPortBusy && Date() < pollDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         }
         
         if isRunning { return }
@@ -153,8 +152,12 @@ final class ServerManager {
         // 工作目录设为运行时目录（包含 server.py 和所有依赖文件）
         proc.currentDirectoryURL = getRuntimeDir()
         
-        // 设置 METER_DATA_DIR 指向项目下的 .data/ 目录（与本地运行一致）
-        let dataDir = projectRoot.appendingPathComponent(".data")
+        // 设置 METER_DATA_DIR 指向沙盒 Application Support 目录（与本地运行不同）
+        let supportDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library")
+            .appendingPathComponent("Application Support")
+            .appendingPathComponent("com.meter.stats")
+        let dataDir = supportDir.appendingPathComponent(".data")
         try? FileManager.default.createDirectory(at: dataDir, withIntermediateDirectories: true)
         proc.environment = ["METER_DATA_DIR": dataDir.path]
 
@@ -244,7 +247,11 @@ final class ServerManager {
         try? proc.run()
         proc.waitUntilExit()
 
-        Thread.sleep(forTimeInterval: 2.0)
+        // 等待 TERM 信号处理（最多 1 秒），而非固定 sleep
+        let deadline = Date().addingTimeInterval(1.0)
+        while isPortBusy && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05) // 50ms 轮询
+        }
 
         let proc2 = Process()
         proc2.executableURL = URL(fileURLWithPath: "/bin/sh")

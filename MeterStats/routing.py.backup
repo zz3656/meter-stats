@@ -1,0 +1,248 @@
+"""
+MeterStats — 路由分发 (模块自动注册版)
+=======================================
+所有路由由 modules/ 下的各模块 handlers 自动注册。
+
+新增/删除功能时，只需在对应模块的 handler.py 中定义路由函数，
+然后在 modules/<module>/__init__.py 中导出即可。
+
+不再需要手动在此文件中导入所有 handler 函数。
+"""
+from __future__ import annotations
+import inspect
+import traceback
+from urllib.parse import parse_qs, urlparse
+from utils import send_json
+
+# 从各模块导入路由字典 (由 __init__.py 导出)
+from modules.readings import _get_routes as _readings_get, _post_prefixes as _readings_post, _put_prefixes as _readings_put, _delete_prefixes as _readings_delete
+from modules.charges import _get_routes as _charges_get, _post_prefixes as _charges_post, _put_prefixes as _charges_put, _delete_prefixes as _charges_delete
+from modules.utilities import _get_routes as _utilities_get, _post_prefixes as _utilities_post, _put_prefixes as _utilities_put, _delete_prefixes as _utilities_delete
+from modules.items import _get_routes as _items_get, _post_prefixes as _items_post, _put_prefixes as _items_put, _delete_prefixes as _items_delete
+from modules.purchases import _get_routes as _purchases_get, _post_prefixes as _purchases_post, _put_prefixes as _purchases_put, _delete_prefixes as _purchases_delete
+from modules.duty import _get_routes as _duty_get, _post_prefixes as _duty_post, _put_prefixes as _duty_put, _delete_prefixes as _duty_delete
+from modules.reports import _get_routes as _reports_get
+from modules.backup import _get_routes as _backup_get, _post_prefixes as _backup_post, _put_prefixes as _backup_put
+from modules.system import _get_routes as _system_get, _post_prefixes as _system_post, _put_prefixes as _system_put
+from modules.dataimport import _get_routes as _dataimport_get, _post_prefixes as _dataimport_post
+
+
+def _match_prefix(paths, path_clean):
+    """前缀匹配: 查找 path_clean 匹配的 handler。"""
+    for prefix, handler_fn in paths.items():
+        if path_clean.startswith(prefix + "/") or path_clean == prefix:
+            return handler_fn
+    return None
+
+
+def _call_handler(fn_name, handler, path_clean):
+    """根据函数名调用对应 handler。"""
+    # 从各模块查找并调用 handler
+    import sys
+    for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases', 
+                     'duty', 'reports', 'backup', 'system', 'dataimport']:
+        try:
+            mod = __import__(f'modules.{mod_name}', fromlist=[fn_name])
+            handler_fn = getattr(mod, f'handle_{fn_name}')
+            sig = inspect.signature(handler_fn)
+            if "path_clean" in sig.parameters:
+                return handler_fn(handler, path_clean)
+            return handler_fn(handler)
+        except (AttributeError, ImportError):
+            continue
+    raise ValueError(f"Handler not found: {fn_name}")
+
+
+def _route(method: str, handler, path: str) -> bool:
+    """分发请求到 handler。返回 True 表示已处理，False 表示 404。"""
+
+    def _dispatch_fn(label: str, *args, **kwargs):
+        """调用 handler 并统一错误处理。"""
+        try:
+            return kwargs.pop('_handler_fn')(*args, **kwargs) if '_handler_fn' in kwargs else None
+        except Exception as e:
+            from storage import log
+            log(f"[ERROR] {label} {handler.path}: {e}")
+            log(traceback.format_exc())
+            send_json(handler, 500, {"error": "服务器内部错误"})
+
+    path_clean = path.split("?", 1)[0]
+
+    if method == "OPTIONS":
+        handler.send_response(204)
+        from utils import CORS
+        for k, v in CORS.items():
+            handler.send_header(k, v)
+        handler.end_headers()
+        return True
+
+    # GET 路由
+    if method == "GET":
+        # 特殊路由: 值班图片 (需要 path_clean 提取文件名)
+        if path_clean.startswith("/api/duty/image/"):
+            filename = path_clean[len("/api/duty/image/"):]
+            from modules.duty import handle_get_duty_image
+            handle_get_duty_image(handler, filename)
+            return True
+
+        if path_clean == "/api/admin/images":
+            from modules.duty import handle_get_images_config
+            handle_get_images_config(handler)
+            return True
+
+        # 合并所有 GET 路由
+        all_get = {}
+        for routes in [_readings_get, _charges_get, _utilities_get, _items_get,
+                       _purchases_get, _duty_get, _reports_get, _backup_get,
+                       _system_get, _dataimport_get]:
+            all_get.update(routes)
+
+        if path_clean in all_get:
+            fn_name = all_get[path_clean]
+            from modules.duty import (handle_get_duty_image, handle_post_duty_handle,
+                                      handle_post_duty_image, handle_get_images_config,
+                                      handle_put_images_config)
+            from modules.purchases import handle_put_purchases_stock
+            from modules.items import handle_put_items_lend, handle_put_items_return
+            
+            # 根据函数名找到 handler
+            import importlib
+            for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases',
+                             'duty', 'reports', 'backup', 'system', 'dataimport']:
+                try:
+                    mod = importlib.import_module(f'modules.{mod_name}.handler')
+                    handler_fn = getattr(mod, f'handle_{fn_name}')
+                    sig = inspect.signature(handler_fn)
+                    if "path_clean" in sig.parameters:
+                        handler_fn(handler, path_clean)
+                    else:
+                        handler_fn(handler)
+                    return True
+                except (AttributeError, ImportError):
+                    continue
+
+        # 前缀匹配
+        all_get = {}
+        for routes in [_readings_get, _charges_get, _utilities_get, _items_get,
+                       _purchases_get, _duty_get, _reports_get, _backup_get,
+                       _system_get, _dataimport_get]:
+            all_get.update(routes)
+        
+        for prefix, fn_name in all_get.items():
+            if path_clean.startswith(prefix + "/") or path_clean == prefix:
+                import importlib
+                for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases',
+                                 'duty', 'reports', 'backup', 'system', 'dataimport']:
+                    try:
+                        mod = importlib.import_module(f'modules.{mod_name}.handler')
+                        handler_fn = getattr(mod, f'handle_{fn_name}')
+                        sig = inspect.signature(handler_fn)
+                        if "path_clean" in sig.parameters:
+                            handler_fn(handler, path_clean)
+                        else:
+                            handler_fn(handler)
+                        return True
+                    except (AttributeError, ImportError):
+                        continue
+
+    # POST 路由
+    if method == "POST":
+        # 特殊路由: 值班处理/图片
+        if path_clean.startswith("/api/duty/") and path_clean.endswith("/handle"):
+            from modules.duty import handle_post_duty_handle
+            handle_post_duty_handle(handler, path_clean)
+            return True
+
+        if path_clean == "/api/duty/image":
+            from modules.duty import handle_post_duty_image
+            handle_post_duty_image(handler)
+            return True
+
+        # 合并所有 POST 路由
+        all_post = {}
+        for prefixes in [_readings_post, _charges_post, _utilities_post, _items_post,
+                         _purchases_post, _duty_post, _reports_get, _backup_post,
+                         _system_post, _dataimport_post]:
+            all_post.update(prefixes)
+
+        for prefix, fn_name in all_post.items():
+            if path_clean.startswith(prefix + "/") or path_clean == prefix:
+                import importlib
+                for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases',
+                                 'duty', 'reports', 'backup', 'system', 'dataimport']:
+                    try:
+                        mod = importlib.import_module(f'modules.{mod_name}.handler')
+                        handler_fn = getattr(mod, f'handle_{fn_name}')
+                        handler_fn(handler)
+                        return True
+                    except (AttributeError, ImportError):
+                        continue
+
+    # PUT 路由
+    if method == "PUT":
+        # 特殊路由: 申购入库/物品借还
+        if path_clean.startswith("/api/purchases/") and path_clean.endswith("/stock"):
+            from modules.purchases import handle_put_purchases_stock
+            handle_put_purchases_stock(handler, path_clean)
+            return True
+        elif path_clean.startswith("/api/items/") and path_clean.endswith("/lend"):
+            from modules.items import handle_put_items_lend
+            handle_put_items_lend(handler, path_clean)
+            return True
+        elif path_clean.startswith("/api/items/") and path_clean.endswith("/return"):
+            from modules.items import handle_put_items_return
+            handle_put_items_return(handler, path_clean)
+            return True
+
+        # 合并所有 PUT 路由
+        all_put = {}
+        for prefixes in [_readings_put, _charges_put, _utilities_put, _items_put,
+                         _purchases_put, _duty_put, _backup_put, _system_put]:
+            all_put.update(prefixes)
+
+        for prefix, fn_name in all_put.items():
+            if path_clean.startswith(prefix + "/") or path_clean == prefix:
+                import importlib
+                for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases',
+                                 'duty', 'reports', 'backup', 'system', 'dataimport']:
+                    try:
+                        mod = importlib.import_module(f'modules.{mod_name}.handler')
+                        handler_fn = getattr(mod, f'handle_{fn_name}')
+                        sig = inspect.signature(handler_fn)
+                        if "path_clean" in sig.parameters:
+                            handler_fn(handler, path_clean)
+                        else:
+                            handler_fn(handler)
+                        return True
+                    except (AttributeError, ImportError):
+                        continue
+
+    # DELETE 路由
+    if method == "DELETE":
+        all_delete = {}
+        for prefixes in [_readings_delete, _charges_delete, _utilities_delete,
+                         _items_delete, _purchases_delete, _duty_delete]:
+            all_delete.update(prefixes)
+
+        for prefix, fn_name in all_delete.items():
+            if path_clean.startswith(prefix + "/") or path_clean == prefix:
+                import importlib
+                for mod_name in ['readings', 'charges', 'utilities', 'items', 'purchases',
+                                 'duty', 'reports', 'backup', 'system', 'dataimport']:
+                    try:
+                        mod = importlib.import_module(f'modules.{mod_name}.handler')
+                        handler_fn = getattr(mod, f'handle_{fn_name}')
+                        sig = inspect.signature(handler_fn)
+                        if "path_clean" in sig.parameters:
+                            handler_fn(handler, path_clean)
+                        else:
+                            handler_fn(handler)
+                        return True
+                    except (AttributeError, ImportError):
+                        continue
+
+    return False
+
+
+# 导出路由 (供 server.py 使用)
+route = _route

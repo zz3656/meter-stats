@@ -3112,3 +3112,428 @@ a:hover {
     border-radius: 8px;
   }
 }
+
+/* ===== 数据管理页 ===== */
+.data-line {
+  margin-bottom: 8px;
+  word-break: break-all;
+  font-size: 12.5px;
+}
+.data-muted {
+  color: var(--text-muted);
+}
+.data-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+.data-input-wrap {
+  display: none;
+  margin-bottom: 8px;
+}
+.data-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.data-actions:last-child {
+  margin-bottom: 0;
+}
+.data-actions-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 2px;
+}
+.data-grow {
+  flex: 1;
+  min-width: 180px;
+  font-size: 12.5px;
+}
+.auto-backup-label {
+  flex: 1;
+  min-width: 160px;
+}
+.auto-backup-retention {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ===== 报表页工具栏（月度/年度 header 右侧的下拉+按钮）===== */
+.report-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.report-month-select {
+  width: 132px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.yearly-year-select {
+  width: 108px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+/* ===== 年度汇总表格 ===== */
+.yearly-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin: 18px 0 8px;
+  letter-spacing: 0.02em;
+}
+.yearly-table {
+  width: 100%;
+}
+.yearly-table th,
+.yearly-table td {
+  padding: 8px 10px;
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.yearly-table th {
+  font-weight: 600;
+}
+.yearly-table .col-total {
+  font-weight: 600;
+}
+.yearly-total-row td {
+  font-weight: 700;
+  background: rgba(113, 112, 255, 0.07);
+  border-top: 2px solid var(--border);
+}
+
+/* ===== 侧栏版本号 ===== */
+.sidebar-version {
+  margin-top: auto;
+  padding: 10px 16px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  border-top: 1px solid var(--border);
+  letter-spacing: 0.03em;
+  opacity: 0.75;
+}
+
+/* ===== 设置页：分区 / 双列 / 用户徽章 ===== */
+.settings-block {
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.settings-block:first-of-type {
+  border-top: none;
+  padding-top: 4px;
+}
+.settings-block-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+.settings-block-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.settings-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: flex-end;
+}
+.settings-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.settings-field .field-control {
+  width: 96px;
+}
+.settings-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.settings-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.settings-grid-2 .settings-panel {
+  margin-bottom: 0;
+}
+.role-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+.role-badge.role-admin {
+  background: rgba(113, 112, 255, .12);
+  color: var(--primary);
+}
+.role-badge.role-supervisor {
+  background: rgba(245, 158, 11, .14);
+  color: #b45309;
+}
+.role-badge.role-employee {
+  background: rgba(107, 114, 128, .12);
+  color: var(--text-secondary);
+}
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+.status-dot.on { background: #10b981; }
+.status-dot.off { background: #9ca3af; }
+
+/* ===== 用电记录：抄表 / 充值 / 水电 三 Tab ===== */
+.record-tabs {
+  display: flex;
+  gap: 2px;
+  margin: 0 0 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.record-tab {
+  appearance: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  margin-bottom: -1px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: color .15s ease, border-color .15s ease;
+}
+.record-tab:hover {
+  color: var(--text-primary);
+}
+.record-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  font-weight: 600;
+}
+
+/* ===== 每周汇报 ===== */
+.weekly-headline {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.weekly-headline-main {
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+.weekly-headline-main strong {
+  font-size: 17px;
+  color: var(--primary);
+  font-weight: 700;
+}
+.weekly-headline-sub {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.weekly-total-row td {
+  font-weight: 700;
+  background: rgba(113, 112, 255, 0.06);
+  border-top: 2px solid var(--border);
+}
+
+/* ===== 每日用电：概况 + 当日明细双栏 ===== */
+.trend-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.trend-stat {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.trend-stat-label {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.trend-stat-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.trend-stat-value small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: 3px;
+}
+.trend-stat-sub {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.day-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 20px;
+  align-items: center;
+  margin-top: 4px;
+}
+.day-detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.day-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 2px;
+  font-size: 13px;
+  border-bottom: 1px dashed var(--border);
+}
+.day-detail-row:last-child {
+  border-bottom: none;
+}
+.day-detail-row .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.day-detail-name {
+  flex: 1;
+  color: var(--text-secondary);
+}
+.day-detail-kwh {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.day-detail-pct {
+  width: 52px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.day-detail-total {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 2px 0;
+  margin-top: 4px;
+  border-top: 2px solid var(--border);
+  font-size: 13px;
+  font-weight: 700;
+}
+@media (max-width: 768px) {
+  .day-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ===== 水电表参数说明（电表设置页）===== */
+.util-config-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+.util-config-item {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.util-config-name {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 4px;
+}
+.util-config-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ===== 水电当月用量（嵌在抄表记录页的水电表底卡片内）===== */
+#monthly-utilities-block {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+.util-title {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin: 0;
+}
+.util-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+#monthly-utilities-block .stat-grid {
+  margin-top: 4px;
+}
+
+@media (max-width: 768px) {
+  .yearly-table th,
+  .yearly-table td {
+    padding: 6px 6px;
+    font-size: 11.5px;
+  }
+  .report-month-select,
+  .yearly-year-select {
+    width: 100%;
+  }
+}
+
+/* 弹窗里的可选复选框（如「同时添加到物品记录」） */
+.modal-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border-subtle);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+
+.modal-checkbox input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}

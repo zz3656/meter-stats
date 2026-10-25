@@ -41,7 +41,7 @@ def _sync_data_paths():
     """同步 DATA_PATHS（供 server.py 调用，作为未来扩展的入口）。"""
     try:
         # 初始化 settings.json（用户/权限/电表参数）
-        from handlers.settings import init_settings
+        from modules.system.settings_handler import init_settings
         for model, path in DATA_PATHS.items():
             if path:
                 data_dir = Path(path).parent
@@ -85,7 +85,15 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 from routing import route
-                route(method, self, self.path)
+                handled = route(method, self, self.path)
+                if handled is False:
+                    # ⚠️ 绝不能什么都不做就返回：不发响应会让客户端收到空连接，
+                    # 在 WKWebView/浏览器里表现为 "TypeError: Load failed"（-1005 Connection reset）。
+                    # 路由未命中必须显式返回 404 JSON。
+                    from storage import log
+                    log(f"[404] {method} {self.path}")
+                    from utils import send_json
+                    send_json(self, 404, {"error": f"未知接口: {self.path.split('?')[0]}"})
             except Exception as e:
                 from storage import log
                 elapsed = time.time() - start
@@ -147,9 +155,13 @@ class Handler(BaseHTTPRequestHandler):
                     src = match.group(3)
                     if src.startswith(("https://", "http://", "//")):
                         return match.group(0)
-                    if "?" in src:
+                    if "?" in src and "<TIMESTAMP>" not in src:
                         return match.group(0)
-                    return f'{attr}={quote}{src}?v={STATIC_VERSION_TOKEN}{quote}'
+                    # 处理 <TIMESTAMP> 占位符：替换为当前时间戳
+                    if "<TIMESTAMP>" in src:
+                        import time
+                        src = src.replace("<TIMESTAMP>", str(int(time.time())))
+                    return f'{attr}={quote}{src}{quote}'
                 html = re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
             body = html.encode("utf-8")
         else:
@@ -168,9 +180,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")
-        from utils import CORS
+        from utils import CORS, _add_cors
         for k, v in CORS.items():
             self.send_header(k, v)
+        _add_cors(self)
         self.end_headers()
         self.wfile.write(body)
 

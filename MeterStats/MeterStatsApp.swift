@@ -60,17 +60,23 @@ final class CopyToClipboardHandler: NSObject, WKScriptMessageHandler {
 
 // WKWebView 消息处理器:前端请求弹出系统目录选择器(备份目录设置用)
 final class BackupDirHandler: NSObject, WKScriptMessageHandler {
-    weak var webView: WKWebView? = nil
-
-    init(webView: WKWebView? = nil) {
-        self.webView = webView
-    }
+    // ⚠️ 不要存 weak var webView —— 注册时传 nil 就永远是 nil，
+    //    目录路径永远回传不到 JS（「选择」按钮看起来毫无反应）。用 message.webView。
+    override init() { super.init() }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "pickBackupDir" else { return }
+        let webView = message.webView
+        // kind: "backup"(默认) / "image" —— 同一个桥服务两个卡片，标题和回调不同
+        let kind = ((message.body as? [String: Any])?["kind"] as? String) ?? "backup"
+        let isImage = (kind == "image")
+        let cbName = isImage ? "__imageDirChosen" : "__backupDirChosen"
+
         let panel = NSOpenPanel()
-        panel.title = "选择备份目录"
-        panel.message = "备份数据将以「日期时间」命名的文件夹保存在所选目录中"
+        panel.title = isImage ? "选择图片目录" : "选择备份目录"
+        panel.message = isImage
+            ? "上传的图片会保存在所选目录中"
+            : "备份数据将以「日期时间」命名的文件夹保存在所选目录中"
         panel.prompt = "选择此目录"
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -83,10 +89,10 @@ final class BackupDirHandler: NSObject, WKScriptMessageHandler {
             let jsonPath = (try? JSONSerialization.data(withJSONObject: [url.path], options: []))
                 .flatMap { String(data: $0, encoding: .utf8) }
                 .map { String($0.dropFirst().dropLast()) } ?? "\"\""
-            webView?.evaluateJavaScript("window.__backupDirChosen && window.__backupDirChosen(\(jsonPath));", completionHandler: nil)
+            webView?.evaluateJavaScript("window.\(cbName) && window.\(cbName)(\(jsonPath));", completionHandler: nil)
         } else {
-            // 用户取消 → 回传 null,前端回退默认目录
-            webView?.evaluateJavaScript("window.__backupDirChosen && window.__backupDirChosen(null);", completionHandler: nil)
+            // 用户取消 → 回传 null
+            webView?.evaluateJavaScript("window.\(cbName) && window.\(cbName)(null);", completionHandler: nil)
         }
     }
 }
@@ -101,14 +107,14 @@ final class BackupDirHandler: NSObject, WKScriptMessageHandler {
 // 协议: JS postMessage({ accept: ".zip" }),Swift 弹文件选择器,返回
 // { name, content } (base64) 或 null(用户取消)。
 final class PickFileHandler: NSObject, WKScriptMessageHandler {
-    weak var webView: WKWebView? = nil
-
-    init(webView: WKWebView? = nil) {
-        self.webView = webView
-    }
+    // ⚠️ 不要存 weak var webView —— 注册时传的是 nil，之后永远是 nil，
+    //    evaluateJavaScript 根本不执行（备份恢复的桥一直是这样坏的）。
+    //    用 message.webView，每次调用都是活的。
+    override init() { super.init() }
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard message.name == "macOSPickFile" else { return }
+        let webView = message.webView
         // 解析前端传入的过滤扩展名(默认 .zip)
         var acceptExts: [String] = ["zip"]
         if let body = message.body as? [String: Any], let accept = body["accept"] as? String {
@@ -152,21 +158,156 @@ final class PickFileHandler: NSObject, WKScriptMessageHandler {
     }
 }
 
+/// 原生图片选择桥 —— 绕开 WKWebView 对 <input type="file"> 的限制。
+///
+/// 前端点 📷 时调：
+///   window.webkit.messageHandlers.macOSPickImage.postMessage({ max: 3 })
+/// Swift 弹 NSOpenPanel → 原生压缩（最长边 1600 / JPEG 0.82）→ base64 回传 JS：
+///   window.onNativeImagePicked({ files: [{ name, content, ext }] })   // 取消传 null
+final class PickImageHandler: NSObject, WKScriptMessageHandler {
+    override init() { super.init() }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.name == "macOSPickImage" else { return }
+        NSLog("[PickImage] ▶ 收到选图请求")
+        let webView = message.webView
+        if webView == nil { NSLog("[PickImage] ⚠️ message.webView 为 nil，无法回传") }
+
+        var maxCount = 3
+        if let body = message.body as? [String: Any], let m = body["max"] as? Int, m > 0 {
+            maxCount = min(m, 5)
+        }
+
+        let panel = NSOpenPanel()
+        panel.title = "选择照片"
+        panel.message = "最多选择 \(maxCount) 张"
+        panel.prompt = "选择"
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = maxCount > 1
+        panel.allowedContentTypes = [.image]
+
+        let cancelJS = "window.onNativeImagePicked && window.onNativeImagePicked(null)"
+
+        NSLog("[PickImage] 弹出面板...")
+        let modalResult = panel.runModal()
+        NSLog("[PickImage] 面板返回: \(modalResult == .OK ? "选中 \(panel.urls.count) 个文件" : "取消")")
+        guard modalResult == .OK, !panel.urls.isEmpty else {
+            webView?.evaluateJavaScript(cancelJS, completionHandler: nil)
+            return
+        }
+
+        var files: [[String: Any]] = []
+        for url in panel.urls.prefix(maxCount) {
+            guard let raw = try? Data(contentsOf: url) else { continue }
+            let compressed = Self.compress(raw)
+            let didCompress = compressed.count < raw.count
+            let ext = didCompress ? "jpg" : url.pathExtension.lowercased()
+            files.append([
+                "name": url.lastPathComponent,
+                "content": compressed.base64EncodedString(),
+                "ext": ext.isEmpty ? "jpg" : ext,
+            ])
+        }
+
+        guard !files.isEmpty,
+              let jsonData = try? JSONSerialization.data(withJSONObject: ["files": files], options: []),
+              let jsonStr = String(data: jsonData, encoding: .utf8) else {
+            webView?.evaluateJavaScript(cancelJS, completionHandler: nil)
+            return
+        }
+        NSLog("[PickImage] 压缩完成，回传 \(files.count) 张")
+        // ⚠️ NSJSONSerialization 顶层必须是数组/字典（传 String 会 SIGABRT）
+        webView?.evaluateJavaScript(
+            "window.onNativeImagePicked && window.onNativeImagePicked(\(jsonStr))",
+            completionHandler: nil
+        )
+    }
+
+    /// 原生压缩：最长边 1600，JPEG 质量 0.82。压完反而更大就返回原图。
+    static func compress(_ data: Data) -> Data {
+        guard let src = NSImage(data: data),
+              let cg = src.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return data }
+        let w = CGFloat(cg.width), h = CGFloat(cg.height)
+        let longest = max(w, h)
+        guard longest > 0 else { return data }
+        let scale = min(1, 1600 / longest)
+        let nw = Int((w * scale).rounded()), nh = Int((h * scale).rounded())
+        guard nw > 0, nh > 0,
+              let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: nw, pixelsHigh: nh,
+                bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else { return data }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        NSGraphicsContext.current?.imageInterpolation = .high
+        NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+            .draw(in: NSRect(x: 0, y: 0, width: nw, height: nh))
+        NSGraphicsContext.restoreGraphicsState()
+        guard let jpeg = rep.representation(using: .jpeg, properties: [.compressionFactor: 0.82]),
+              jpeg.count < data.count else { return data }
+        return jpeg
+    }
+}
+
 // 实现 WKUIDelegate: 让 <input type="file"> 也能正常弹原生文件选择器
 // 作为 macOSPickFile Swift 桥的兜底(任何 <input type="file"> 都会走这里)
 final class WebViewUIDelegate: NSObject, WKUIDelegate {
     func webView(_ webView: WKWebView, runOpenPanelWith parameters: WKOpenPanelParameters, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping ([URL]?) -> Void) {
+        NSLog("[UIDelegate] ▶ runOpenPanelWith 被调用")
         let panel = NSOpenPanel()
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = parameters.allowsMultipleSelection
-        // 允许 zip / json / 文本类文件
-        panel.allowedContentTypes = [.zip, .json, .plainText, .text]
+        // ⚠️ 必须包含 .image：借出/归还/申购/工作记录都要选照片。
+        // WKOpenPanelParameters 拿不到 <input accept>，只能在这里给宽集合；
+        // 少写 .image 的话 input accept="image/*" 的图片会全部变灰，
+        // 用户点「📷 图片」看起来就是"完全没反应"。
+        panel.allowedContentTypes = [
+            .image, .pdf, .zip, .json, .plainText, .text, .commaSeparatedText
+        ]
 
         if panel.runModal() == .OK {
             completionHandler(panel.urls)
         } else {
             completionHandler(nil)
+        }
+    }
+}
+
+// MARK: - WKWebView delegate 强引用持有
+//
+// ⚠️ WKWebView.uiDelegate / navigationDelegate 都是 **weak** 引用。
+// 写成 `wv.uiDelegate = WebViewUIDelegate()` 的话，对象创建完当场就释放，
+// delegate 立刻变 nil —— 表现就是 App 里点任何 <input type="file"> 都毫无反应，
+// 而浏览器里一切正常。必须在这里持有住。
+enum WebViewDelegates {
+    static let ui = WebViewUIDelegate()
+    static var nav: WebViewNavigationDelegate?
+}
+
+// MARK: - WKWebView 网络错误处理
+
+final class WebViewNavigationDelegate: NSObject, WKNavigationDelegate {
+    let failMessageSetter: (String) async -> Void
+    
+    init(failMessageSetter: @escaping (String) async -> Void) {
+        self.failMessageSetter = failMessageSetter
+    }
+    
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        let msg = error.localizedDescription
+        NSLog("[WebViewNavigationDelegate] 页面加载失败: \(msg)")
+        Task {
+            await failMessageSetter(msg)
+        }
+    }
+    
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        let msg = error.localizedDescription
+        NSLog("[WebViewNavigationDelegate] 请求失败: \(msg)")
+        Task {
+            await failMessageSetter(msg)
         }
     }
 }
@@ -331,18 +472,26 @@ struct ContentView: View {
             try? await Task.sleep(nanoseconds: 200_000_000)
             await setStep(.killing)
             ServerManager.shared.killPortOccupants()
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // 异步等待端口释放（最多等 2 秒）
+            let pollDeadline = Date().addingTimeInterval(2.0)
+            while ServerManager.shared.isPortBusy && Date() < pollDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         } else if ServerManager.shared.isPortBusy {
             // PID 文件不存在, 回退到端口扫描
             await setStep(.killing)
             ServerManager.shared.killPortOccupants()
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            // 异步等待端口释放（最多等 2 秒）
+            let pollDeadline = Date().addingTimeInterval(2.0)
+            while ServerManager.shared.isPortBusy && Date() < pollDeadline {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         }
 
         // 2. 启动 Python
         await setStep(.startingPython)
         do {
-            try ServerManager.shared.start()
+            try await ServerManager.shared.start()
             NSLog("[App] ✓ Python 后端启动成功")
         } catch {
             await MainActor.run {
@@ -368,10 +517,10 @@ struct ContentView: View {
 
         // 4. 创建 WKWebView 并加载
         await setStep(.loadingPage)
-        // 先同步清除缓存，再创建 WKWebView
+        // 仅清除 cache（不清 cookies/session），避免过度清理
         let dataStore = WKWebsiteDataStore.default()
         await dataStore.removeData(
-            ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
+            ofTypes: ["cache"],
             modifiedSince: Date.distantPast
         )
 
@@ -385,12 +534,27 @@ struct ContentView: View {
             // ⚠️ 必须在 WKWebView 创建之前注册所有 handler（userContentController 是值快照）
             userContentController.add(CopyToClipboardHandler(webView: nil), name: "macOSCopyToClipboard")
             NSLog("[App] ✓ CopyToClipboard handler registered as 'macOSCopyToClipboard'")
-            userContentController.add(BackupDirHandler(webView: nil), name: "pickBackupDir")
-            userContentController.add(PickFileHandler(webView: nil), name: "macOSPickFile")
+            userContentController.add(BackupDirHandler(), name: "pickBackupDir")
+            userContentController.add(PickFileHandler(), name: "macOSPickFile")
+            // 原生图片选择（借出人/归还人/申购名称/故障信息等所有 📷 都走这里）
+            userContentController.add(PickImageHandler(), name: "macOSPickImage")
+            NSLog("[App] ✓ PickImage handler registered as 'macOSPickImage'")
             let wv = WKWebView(frame: .zero, configuration: cfg)
+            // WKNavigationDelegate: 捕获网络错误，显示友好的错误提示
+            // ⚠️ navigationDelegate 也是 weak，必须存到静态变量里保活
+            let navDel = WebViewNavigationDelegate(failMessageSetter: { msg in
+                await MainActor.run {
+                    self.failMessage = "网络连接失败: \(msg)\n请确认后端服务正在运行。"
+                    self.bootStep = .none
+                }
+            })
+            WebViewDelegates.nav = navDel
+            wv.navigationDelegate = navDel
             // WKUIDelegate: 让所有 <input type="file"> 也能弹原生选择器(兜底)
-            wv.uiDelegate = WebViewUIDelegate()
-            let req = URLRequest(url: URL(string: "http://localhost:8765")!)
+            // ⚠️ uiDelegate 同样是 weak —— 直接写 WebViewUIDelegate() 会被立刻释放，
+            //    导致 App 里点图片永远没反应（浏览器正常）。必须用静态实例。
+            wv.uiDelegate = WebViewDelegates.ui
+            let req = URLRequest(url: URL(string: "http://127.0.0.1:8765")!)
             wv.load(req)
             self.webView = wv
             self.bootStep = .ready

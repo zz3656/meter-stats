@@ -14,11 +14,12 @@
 | 💰 **充值管理** | 4 表分别充值记录;实时余量预警(按日均推算剩余天数 + 建议充值金额) |
 | 📊 **报表分析** | 日报(每日用电趋势 + 当日占比)、月报(按日分表用电 + 当月占比)、水电月报、年报汇总;支持复制到剪贴板(Numbers/Excel 表格格式) |
 | 🧮 **充值计算器** | 按预充天数 × 本月日均,自动算出每块表需充值表读数 + 金额(实时联动) |
-| 📦 **物品管理** | 工具/耗材登记、借出/归还流水;借出强制填借出人,归还支持部分归还 |
-| 🛒 **申购管理** | 申购→确认购买→自动入库三步流程;跟踪待购/已购/已入库状态 |
-| 🔧 **值班工作记录** | 类型(维修/更换/拆除)+ 故障区域 + 班次(白/中/夜班) + 处理状态(已处理/未处理);按月筛选 |
+| 📦 **物品管理** | 工具/耗材登记、借出/归还流水;借出人支持「填名字」或「直接传照片」;归还支持部分归还 |
+| 🛒 **申购管理** | 申购→确认购买→自动入库三步流程;跟踪待购/已购/已入库状态;购买时可选「同时添加到物品记录」 |
+| 🔧 **值班工作记录** | 类型(维修/更换/拆除)+ 故障区域 + 班次(白/中/夜班) + 处理状态;故障信息必填,支持文字 + 照片同时填写 |
+| 🖼️ **图片上传** | 图片归到具体字段(借出人/归还人/申购名称/故障信息/处理方案);上传前自动压缩(最长边 1600px);文件名带来源前缀;表格显示缩略图 |
 | 🔐 **三级权限** | 员工(读写)/ 主管(读+写+删)/ 管理员(全部 + 用户管理);SHA-256 密码 + Session Token |
-| 💾 **数据备份** | 启动时每日自动备份(可配置保留天数 ZIP);支持手动备份/上传恢复/下载 |
+| 💾 **数据备份** | 启动时 + 每日 0 点自动备份,按**保留个数**清理(默认最新 5 个);支持手动备份/恢复/下载;备份目录与图片目录均可配置 |
 | 🔄 **NAS 同步** | 从 NAS Docker 实例拉取全部数据到本地;解决 WKWebView 跨域问题;支持配置远程地址 |
 | 📋 **App 内复制** | 月度报告复制到剪贴板,Numbers/Excel 自动成表;App 内通过 Swift 桥接写入 .string + .tabularText + .html |
 | 🎨 **UI** | 浅色/深色/跟随系统三档主题;完整移动端响应式;侧栏分组 + 抽屉;弹窗底部 sheet |
@@ -141,53 +142,55 @@ docker compose down && docker compose up -d
 ```
 .
 ├── MeterStats/                  # 后端 + macOS bundle 内容(共享)
-│   ├── handlers/              # API 路由处理
+│   ├── modules/                 # API 处理模块(按业务域拆分)
 │   │   ├── _base.py             # JsonModelHandler 基类
-│   │   ├── readings.py          # 电表抄表 CRUD
-│   │   │   ├── readings_water.py  # 水电表底 CRUD
-│   │   │   ├── charges.py       # 充值记录 CRUD
-│   │   │   ├── items.py         # 物品管理
-│   │   │   ├── purchases.py     # 申购流程
-│   │   │   ├── duty.py          # 值班记录
-│   │   │   ├── reports.py       # 报表生成
-│   │   │   ├── backup.py        # 备份业务逻辑
-│   │   │   ├── backup_admin.py  # 备份 HTTP 入口
-│   │   │   ├── admin.py         # 管理门面(re-export)
-│   │   │   ├── admin_tools.py   # 目录浏览/审计日志/水电迁移
-│   │   │   ├── settings.py      # 系统设置
-│   │   │   ├── auth.py          # 登录/鉴权
-│   │   │   ├── permissions.py   # 三级权限
-│   │   │   ├── users.py         # 用户管理
-│   │   │   └── dataimport.py    # CSV 导入
+│   │   ├── readings/            # 电表抄表 + 水电表底
+│   │   ├── charges/             # 充值记录
+│   │   ├── items/               # 物品管理(含借还流水)
+│   │   ├── purchases/           # 申购流程
+│   │   ├── duty/                # 值班记录 + 图片上传
+│   │   ├── reports/             # 报表生成
+│   │   ├── backup/              # 备份/恢复/NAS 同步
+│   │   ├── system/              # 设置/用户/权限/鉴权
+│   │   └── utilities/           # 水电计算
 │   ├── utils/api.py             # send_json / read_body / CORS
 │   ├── index.html               # SPA 入口(所有页面都在这里)
-│   ├── js/                    # 前端 JS (按功能拆分,~40 文件)
-│   │   ├── init.js            # 初始化 + 路由
-│   │   ├── core_*.js          # 核心模块 (theme/meterConfig/accessibility)
-│   │   ├── data_*.js          # 数据获取/处理
-│   │   ├── forms_*.js         # 表单交互
-│   │   ├── render_*.js        # 渲染 (charts/tables/reports)
-│   │   └── features_*.js      # 功能模块 (topup/image_settings)
-│   ├── app.js / admin.js        # 前端逻辑(兼容旧入口)
+│   ├── js/                      # 前端 JS(无构建步骤)
+│   │   ├── core/                # api / init / navigation / state / meterConfig
+│   │   ├── helpers/utils.js     # 压缩图片、字段图片组件、格式化
+│   │   ├── modules/             # 业务模块
+│   │   │   ├── readings.js / charges.js / utilities.js
+│   │   │   ├── items.js / purchases.js / duty.js
+│   │   │   ├── reports.js / backup.js / alerts.js
+│   │   │   ├── render_charts.js / render_pie_charts.js
+│   │   │   ├── render_weekly*.js
+│   │   │   └── modal_bindings.js   # 所有弹窗的提交/取消绑定
+│   │   ├── shared/              # modals / theme / toast / accessibility / image_settings
+│   │   └── nas_sync.js          # NAS 远端同步
 │   ├── style.css                # 主题变量 + 响应式
 │   ├── server.py                # 入口
-│   ├── ServerManager.swift      # macOS 启动 Python 后端
+│   ├── MeterStatsApp.swift      # macOS WKWebView 壳 + 原生桥
+│   ├── VERSION                  # 版本号(server.py 启动时读取)
 │   └── ...
 ├── docker/                      # Docker 镜像构建
 │   ├── Dockerfile
 │   ├── docker-compose.yml
-│   ├── entrypoint.sh
+│   ├── entrypoint.sh            # 注入 METER_DOCKER / 备份/图片目录
 │   └── .dockerignore
-├── docker-compose.yml           # 项目根目录 compose(指向 docker/)
+├── docker-compose.yml           # 项目根目录 compose
 ├── Package.swift                # SwiftPM 依赖(Chart.js 等)
 ├── .github/workflows/           # CI/CD
 │   ├── docker-publish.yml       # push main → 自动构建并推送镜像
-│   ├── sync-readme-to-dockerhub.yml  # push README → 自动同步到 DockerHub 描述
+│   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
-├── tests/                       # 单元测试
-├── Scripts/                     # 辅助脚本(图标生成等)
+├── tests/                       # 单元测试(88 用例)
+├── docs/                        # 架构文档
+│   ├── ARCHITECTURE.md
+│   └── architecture-api-contract.md
+├── scripts/                     # 辅助脚本(图标生成等)
 ├── Assets/                      # macOS 应用图标资源
-└── README.Docker.md             # Docker Hub 镜像描述(独立文件,sync workflow 读取)
+├── CHANGELOG.md                 # 更新日志
+└── README.Docker.md             # Docker Hub 镜像描述(sync workflow 读取)
 ```
 
 ## 📡 API 速览
