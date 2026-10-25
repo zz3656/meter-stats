@@ -24,6 +24,9 @@ __pycache__/
 
 # Backup & temp
 *.bak
+*.backup
+*.orig
+*.rej
 *.tmp
 *.log
 *.tar.gz
