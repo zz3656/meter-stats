@@ -94,7 +94,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 v0.3.0
 
-提交 `6c8bdc3`
+提交 `43325a3`
 
 **升级 Docker 容器**:
 ```bash
@@ -103,22 +103,11 @@ docker compose up -d
 ```
 
 
-- 字段级图片上传、原生文件桥与备份系统重构 — 图片 / - 图片入口下沉到具体字段：借出人 / 归还人 / 申购物品名称 / 故障信息 / 处理方案 / - 必填校验放宽为「文字或图片满足其一」
-
-### 🐛 问题修复
-
-- 修复模块化重构后缺失的 renderAll() 和 refreshAndRender()
-- 修复登录后空白 — 移除重复的app.js, 修复数据目录和handlers导入 — 关键修复: / 1.
-- 修复 server.py 复制逻辑 — 首次启动时不存在也应复制
-- 清理 handlers/ 目录，更新审查报告
-
-### 📖 文档
-
-- 版本升至 0.3.0，补充 CHANGELOG 与架构文档 — - 新增 CHANGELOG.
+- Dockerfile 仍 COPY MeterStats/handlers/，重构改名 modules/ 后构建必失败 — 模块化重构把 handlers/ 迁到 modules/，Dockerfile 第 42 行的 COPY 路径没跟着改， / 导致 "/MeterStats/h
 
 ### 🔧 杂项
 
-- 移除重构遗留的 routing.py.backup，忽略 *.backup/*.orig/*.rej
+- 移除误提交的 .hermes/plans（agent 工作目录，不应入库）
 
 ### ⬆️ 升级
 
@@ -129,5 +118,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...6c8bdc3)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.3.0...43325a3)
 
