@@ -97,7 +97,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 v0.3.0
 
-提交 `43325a3`
+提交 `1764dca`
 
 **升级 Docker 容器**:
 ```bash
@@ -106,11 +106,12 @@ docker compose up -d
 ```
 
 
-- Dockerfile 仍 COPY MeterStats/handlers/，重构改名 modules/ 后构建必失败 — 模块化重构把 handlers/ 迁到 modules/，Dockerfile 第 42 行的 COPY 路径没跟着改， / 导致 "/MeterStats/h
+- Docker Hub 简介提取取错标题 — 旧逻辑用 '#' 标题不断覆盖 short_desc，最终拿到的是 README 里最后一个一级标题， / 而不是开头的简介；
 
-### 🔧 杂项
+### 📖 文档
 
-- 移除误提交的 .hermes/plans（agent 工作目录，不应入库）
+- 清理重构后残留的旧路径引用 — 模块化重构把 handlers/ 改成 modules/ 后，多处注释和文档还指着旧路径， / 会误导后续维护： / - app_handler.
+- 文档补 METER_DOCKER，Docker Hub 描述同步到 0.3.0 — - README/Docker Hub 的 compose 示例补 METER_DOCKER=1 / - 环境变量表新增 METER_DOCKER 说明 / -
 
 ### ⬆️ 升级
 
@@ -121,5 +122,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.3.0...43325a3)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.3.0...1764dca)
 
