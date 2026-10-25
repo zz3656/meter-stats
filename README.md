@@ -43,6 +43,7 @@ services:
       - TZ=Asia/Shanghai
       - METER_PORT=8765
       - METER_DATA_DIR=/data
+      - METER_DOCKER=1                 # 标记 Docker 环境(锁定目录编辑 UI)
       - METER_BIND=0.0.0.0
       - METER_INITIAL_PASS=admin123    # 首次登录密码(可改)
       - METER_BACKUP_DIR=backup        # 备份目录(相对数据目录,默认 backup)
@@ -98,6 +99,7 @@ macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份�
 | `METER_PORT` | `8765` | 服务端口 |
 | `METER_BIND` | `0.0.0.0` | 监听地址(改成 `127.0.0.1` 仅本机访问) |
 | `METER_DATA_DIR` | `/data` | 数据目录(Docker 推荐挂载到此路径) |
+| `METER_DOCKER` | 自动检测 | 标记 Docker 环境;设为其后备份/图片目录由环境变量锁定,UI 不显示编辑入口(`entrypoint.sh` 会检测 `/.dockerenv` 自动设置) |
 | `METER_INITIAL_PASS` | `admin123` | 初始 admin 密码(**首次启动生效**,之后改不生效) |
 | `METER_INITIAL_ADMIN` | `admin` | 初始 admin 用户名 |
 | `METER_BACKUP_DIR` | `backup` | 备份目录(相对 `METER_DATA_DIR` 的路径) |
