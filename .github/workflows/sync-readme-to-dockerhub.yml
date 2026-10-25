@@ -43,18 +43,35 @@ jobs:
           readme_content = open("README.Docker.md", "r", encoding="utf-8").read()
 
           # 2. 提取简要描述（description 字段最多 100 字节）
-          #    取第一行标题 + 第二行 blockquote 作为简短描述
+          #    优先用 blockquote（它是给人看的一句话简介），没有再用一级标题。
+          #    ⚠️ 旧实现里 `short_desc` 被每个 "# " 行反复覆盖，最终取的是 README
+          #    里最后一个一级标题，而不是文档开头的简介 —— 所以 Docker Hub 上常年
+          #    显示的是硬编码的 fallback 文案。
           lines = readme_content.strip().split("\n")
-          short_desc = ""
+          heading = ""
+          quote = ""
           for line in lines:
               line = line.strip()
-              if line.startswith("# "):
-                  short_desc = line[2:].strip()
-              elif line.startswith("> ") and not short_desc:
-                  short_desc = line[2:].strip()
+              if line.startswith("# ") and not heading:
+                  heading = line[2:].strip()
+              elif line.startswith("> ") and not quote:
+                  quote = line[2:].strip()
+              if heading and quote:
+                  break
+
+          # blockquote 往往比标题长，截到第一个句号更像个"简介"
+          if quote:
+              for sep in ("。", "；", ". "):
+                  idx = quote.find(sep)
+                  if 0 < idx < 90:
+                      quote = quote[: idx + len(sep)].rstrip()
+                      break
+              short_desc = quote
+          else:
+              short_desc = heading
 
           if not short_desc:
-              short_desc = "场所工程部电表统计工具 · Web服务"
+              short_desc = "工程部电表数据管理工具 · Docker 部署"
 
           # 确保不超过 100 字节
           short_desc = short_desc.encode("utf-8")[:100].decode("utf-8", errors="ignore")
