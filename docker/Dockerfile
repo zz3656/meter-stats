@@ -39,7 +39,7 @@ COPY MeterStats/*.png ./
 COPY MeterStats/*.icns ./
 # VERSION 文件无后缀,glob 不匹配,单独复制(server.py 启动时需要)
 COPY MeterStats/VERSION ./
-COPY MeterStats/handlers/ handlers/
+COPY MeterStats/modules/ modules/
 COPY MeterStats/utils/ utils/
 
 # 复制 entrypoint 脚本
