@@ -6,6 +6,26 @@ import os
 import re
 import subprocess
 import sys
+from pathlib import Path
+
+
+def notes_from_changelog(version: str) -> str:
+    """从 CHANGELOG.md 提取指定版本的完整章节。
+
+    CHANGELOG 是人工整理的，比把 commit 消息按类型归类要完整得多。
+    重新发布同一版本时尤其重要 —— 那时 tag..HEAD 几乎是空的，
+    只按 commit 生成会让 release 页面只剩一两条收尾提交。
+    """
+    path = Path("CHANGELOG.md")
+    if not path.exists():
+        return ""
+    text = path.read_text(encoding="utf-8")
+    pat = re.compile(
+        rf"^##\s*\[{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s*\[|\Z)",
+        re.MULTILINE | re.DOTALL,
+    )
+    m = pat.search(text)
+    return m.group(1).strip() if m else ""
 
 
 # 噪音 commit 过滤:这些类型的提交不出现在 release notes 中
@@ -25,7 +45,10 @@ def main() -> int:
     prev_tag = subprocess.run(
         ["git", "tag", "--sort=-creatordate", "--list", "v*"],
         capture_output=True, text=True).stdout.strip().split("\n")
-    prev_tag = next((t for t in prev_tag if t), "")
+    # 排除当前版本自身的 tag —— 重新发布同一版本时它已存在，
+    # 若拿它当起点，v0.3.0..HEAD 只剩几条收尾提交，release 页面会空得离谱。
+    current_tag = f"v{version}"
+    prev_tag = next((t for t in prev_tag if t and t != current_tag), "")
 
     if prev_tag:
         rng = f"{prev_tag}..HEAD"
@@ -140,6 +163,11 @@ def main() -> int:
 
     body_sections = "\n".join(sections).rstrip()
 
+    # CHANGELOG 有该版本的整理稿就用它，commit 分类只作兜底
+    changelog_body = notes_from_changelog(version)
+    if changelog_body:
+        body_sections = changelog_body
+
     # 升级提示
     upgrade_hints: list[str] = []
     if "fix" in buckets:
@@ -168,7 +196,7 @@ def main() -> int:
         )
     footer = "\n".join(footer_parts)
 
-    body = header + body_sections + "\n\n" + upgrade_section + footer
+    body = header + "\n" + body_sections + "\n\n" + upgrade_section + footer
     print(body.rstrip())
     return 0
 
