@@ -432,19 +432,44 @@ function renderChargeTable(charges) {
             cells += '<td>' + (v > 0 ? v.toFixed(1) : '—') + '</td>';
         }
         var noteCell = c.note ? escapeHtml(c.note) : '—';
+        var pending = c.status === 'pending';
+        var statusCell = pending
+            ? '<span class="badge-status warn">待确认</span>'
+            : '';
+        var actions = '';
+        if (pending) {
+            actions += '<button class="edit-btn" data-action="confirm-charge" data-id="' + c.id + '" style="color:var(--success);">✓ 确认到账</button> ';
+        }
+        actions += '<button class="edit-btn" data-action="edit-charge" data-id="' + c.id + '">编辑</button> ' +
+                  '<button class="delete-btn" data-action="delete-charge" data-id="' + c.id + '" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;font-family:inherit;">删除</button>';
         return (
-            '<tr data-charge-id="' + c.id + '">' +
-                '<td>' + c.date + '</td>' +
+            '<tr data-charge-id="' + c.id + '"' + (pending ? ' style="opacity:.75;"' : '') + '>' +
+                '<td>' + c.date + ' ' + statusCell + '</td>' +
                 cells +
                 '<td>¥ ' + totalYuan.toFixed(2) + '</td>' +
                 '<td style="text-align:left;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + noteCell + '">' + noteCell + '</td>' +
-                '<td>' +
-                    '<button class="edit-btn" data-action="edit-charge" data-id="' + c.id + '">编辑</button> ' +
-                    '<button class="delete-btn" data-action="delete-charge" data-id="' + c.id + '" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;font-family:inherit;">删除</button>' +
-                '</td>' +
+                '<td>' + actions + '</td>' +
             '</tr>'
         );
     }).join('');
+
+    tbody.querySelectorAll('[data-action="confirm-charge"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var id = btn.dataset.id;
+            var target = (charges || []).find(function(c) { return c.id === id; });
+            showModal({
+                title: '确认充值到账', icon: '✅',
+                body: '确认 <strong>' + (target ? target.date : '') + '</strong> 的充值已到账?<br><span style="opacity:0.7">确认后将计入日报/月报等所有统计。</span>',
+                confirmText: '确认到账'
+            }).then(function(ok) {
+                if (!ok) return;
+                Api.charges.confirm(id).then(function() {
+                    showAlert('✓ 充值已确认到账', 'success');
+                    refreshAndRender();
+                }).catch(function(err) { showAlert('确认失败: ' + (err.message || err), 'error'); });
+            });
+        });
+    });
 
     // 编辑/删除 绑定
     tbody.querySelectorAll('[data-action="edit-charge"]').forEach(function(btn) {
@@ -469,11 +494,11 @@ function renderChargeTable(charges) {
         });
     });
 
-    // 汇总（跟随下拉选中的月份；未选中时才退回当前自然月）
-    // ⚠️ 这里原来硬用当前自然月，导致选中 9 月时表格显示 9 月数据、
-    // 汇总却算 10 月（0 条），看起来"有记录但次数/度数/金额全是 0"。
+    // 汇总(只计已确认到账的记录;待确认申请不计)
     var monthKey = month || formatDate(new Date()).slice(0, 7);
-    var monthCharges = (charges || []).filter(function(c) { return c.date.startsWith(monthKey); });
+    var monthCharges = (charges || []).filter(function(c) {
+        return c.date.startsWith(monthKey) && c.status !== 'pending';
+    });
     var monthCount = monthCharges.length;
     var monthKwh = 0;
     for (var i = 0; i < monthCharges.length; i++) {

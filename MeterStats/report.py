@@ -81,10 +81,11 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
         if span <= 0:
             continue
 
-        # 找 (X_date, Y_date] 期间的充值
+        # 找 (X_date, Y_date] 期间的充值(待确认的申请不计入统计)
         charges_in_range = [
             c for c in charges
             if X["date"] < c.get("date", "") <= Y["date"]
+            and c.get("status", "confirmed") != "pending"
         ]
 
         # 计算每表的"原始用电 + 期间充值"

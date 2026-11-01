@@ -59,11 +59,12 @@ function realKwh(value, key) {
   return value * MULTIPLIER(key);
 }
 
-/** 计算两个日期之间的充值度数总和 */
+/** 计算两个日期之间的充值度数总和(待确认的充值申请不计入) */
 function sumChargesBetween(charges, meterKey, startDate, endDate) {
   if (!charges) return 0;
   let sum = 0;
   for (const c of charges) {
+    if (c.status === 'pending') continue;
     if (c.date > startDate && c.date <= endDate) {
       sum += realKwh(c[meterKey] || 0, meterKey);
     }

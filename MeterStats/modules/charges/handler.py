@@ -40,6 +40,9 @@ def handle_post_charges(handler):
         "private_room": opt_float(body, "private_room"),
         "ac": opt_float(body, "ac"),
         "note": body.get("note", ""),
+        # 充值申请流程: pending=待确认(不计入统计), confirmed=已确认(默认)
+        "status": "pending" if body.get("status") == "pending" else "confirmed",
+        "created_at": _now().isoformat(),
     }
     if all(v is None or v == 0 for v in [new_charge["hall"], new_charge["fire"],
                                           new_charge["private_room"], new_charge["ac"]]):
@@ -47,7 +50,7 @@ def handle_post_charges(handler):
         return
     charges.append(new_charge)
     _save_charges(charges)
-    log(f"  OK 充值 {body['date']}")
+    log(f"  OK 充值 {body['date']} status={new_charge.get('status', 'confirmed')}")
     _invalidate_report_cache()
     send_json(handler, 200, {"ok": True, "row": new_charge})
 
@@ -55,8 +58,11 @@ def handle_post_charges(handler):
 # ==================== PUT ====================
 
 def handle_put_charges(handler, path_clean: str):
-    """PUT /api/charges/{id}"""
+    """PUT /api/charges/{id} 或 PUT /api/charges/{id}/confirm"""
     cid = path_clean[len("/api/charges/"):]
+    if cid.endswith("/confirm"):
+        _confirm_charge(handler, cid[: -len("/confirm")])
+        return
     body = read_body(handler)
     charges = _load_charges()
     idx = next((i for i, c in enumerate(charges) if c.get("id") == cid), None)
@@ -83,6 +89,21 @@ def handle_put_charges(handler, path_clean: str):
     log(f"  OK 充值更新 {cid}")
     _invalidate_report_cache()
     send_json(handler, 200, {"ok": True, "row": charge})
+
+
+def _confirm_charge(handler, cid: str):
+    """确认充值到账: pending → confirmed,此后计入所有统计。"""
+    charges = _load_charges()
+    idx = next((i for i, c in enumerate(charges) if c.get("id") == cid), None)
+    if idx is None:
+        send_json(handler, 404, {"error": f"未找到 {cid}"})
+        return
+    charges[idx]["status"] = "confirmed"
+    charges[idx]["confirmed_at"] = _now().isoformat()
+    _save_charges(charges)
+    log(f"  OK 充值确认 {cid}")
+    _invalidate_report_cache()
+    send_json(handler, 200, {"ok": True, "row": charges[idx]})
 
 
 # ==================== DELETE ====================
