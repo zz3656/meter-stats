@@ -37,3 +37,6 @@ function cycleTheme() {
   const next = THEMES[(idx + 1) % THEMES.length];
   setTheme(next);
 }
+
+// 页面加载时立即应用主题(auto 模式跟随系统配色)
+applyTheme();
