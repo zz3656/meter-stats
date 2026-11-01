@@ -56,6 +56,9 @@ data/
 # Restore & local config
 .restore/
 
+# AI 工具临时输入图片
+.qoder-input-images/
+
 # .data/ local data directories
 MeterStats/.data/
 MeterStats/.server.log
