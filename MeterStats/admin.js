@@ -914,16 +914,46 @@ function submitReadingAdd(source) {
 
   // 检查是否已有该日期的抄表记录
   fetchReadings().then(function(all) {
-    var existing = all.find(function(r) { return r.date === row.date; });
-    if (existing) {
-      showModal({ title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
-        body: '<strong>' + row.date + '</strong> 已存在数据,是否覆盖?<br><br>' +
-          '<span style="opacity:0.7">现有:</span> 大厅 ' + existing.hall + ' · 消防 ' + existing.fire + ' · 包厢 ' + existing.private_room + ' · 空调 ' + existing.ac + '<br>' +
-          '<span style="opacity:0.7">新数据:</span> 大厅 ' + row.hall + ' · 消防 ' + row.fire + ' · 包厢 ' + row.private_room + ' · 空调 ' + row.ac,
-        confirmText: '覆盖', confirmKind: 'primary' }).then(function(overOK) {
-          if (!overOK) return; doSaveReading();
+    var list = Array.isArray(all) ? all : ((all && all.data) || []);
+    // 表数不降反升检查：表数上升通常意味着刚充值，提醒先录充值再保存
+    var prev = null;
+    list.forEach(function(r) {
+      if (r.date && r.date < row.date && (!prev || r.date > prev.date)) prev = r;
+    });
+    var ups = [];
+    if (prev) {
+      [['hall', '大厅'], ['fire', '消防'], ['private_room', '包厢'], ['ac', '空调']].forEach(function(m) {
+        var nv = row[m[0]], pv = prev[m[0]];
+        if (nv !== null && typeof pv === 'number' && nv > pv) {
+          ups.push(m[1] + ' +' + Math.round((nv - pv) * 100) / 100);
+        }
+      });
+    }
+    var proceed = function() {
+      var existing = list.find(function(r) { return r.date === row.date; });
+      if (existing) {
+        showModal({ title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
+          body: '<strong>' + row.date + '</strong> 已存在数据,是否覆盖?<br><br>' +
+            '<span style="opacity:0.7">现有:</span> 大厅 ' + existing.hall + ' · 消防 ' + existing.fire + ' · 包厢 ' + existing.private_room + ' · 空调 ' + existing.ac + '<br>' +
+            '<span style="opacity:0.7">新数据:</span> 大厅 ' + row.hall + ' · 消防 ' + row.fire + ' · 包厢 ' + row.private_room + ' · 空调 ' + row.ac,
+          confirmText: '覆盖', confirmKind: 'primary' }).then(function(overOK) {
+            if (!overOK) return; doSaveReading();
+          });
+      } else { doSaveReading(); }
+    };
+
+    if (ups.length) {
+      showModal({ title: '表数上升提醒', icon: '💡', iconKind: 'info',
+        body: '<strong>' + row.date + '</strong> 的表数比上一条记录（' + prev.date + '）不降反升：<br><br>' +
+          '<strong>' + ups.join('　') + '</strong><br><br>' +
+          '表数上升通常是因为刚充值。请确认：<br>' +
+          '① 本次充值记录是否已经录入；<br>' +
+          '② 是否录入了错误的字段（如把 A 表的数填到了 B 表）。',
+        confirmText: '已充值，继续保存', confirmKind: 'primary',
+        cancelText: '修正' }).then(function(ok) {
+          if (!ok) showAlert('已返回录入，请检查修正后重新保存', 'info');
         });
-    } else { doSaveReading(); }
+    } else { proceed(); }
 
     function doSaveReading() {
       setSubmitting(true);
