@@ -97,7 +97,7 @@ docker compose down && docker compose up -d
 
 ## 📦 工程部管理系统 v0.3.0
 
-提交 `fbfd098`
+提交 `90707d5`
 
 **升级 Docker 容器**:
 ```bash
@@ -201,5 +201,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...fbfd098)
+💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.2.0...90707d5)
 
