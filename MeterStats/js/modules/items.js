@@ -24,8 +24,11 @@ function refreshItems() {
 
 // ==================== CRUD 操作 ====================
 
-function addItem(name, qty, unit, note) {
-    Api.items.create({ name: name, qty: parseFloat(qty) || 0, unit: unit, note: note })
+function addItem(name, qty, unit, note, noteImages) {
+    Api.items.create({
+        name: name, qty: parseFloat(qty) || 0, unit: unit, note: note,
+        note_image_filenames: noteImages || []
+    })
         .then(function() { refreshItems(); })
         .catch(function(err) { showAlert("添加失败: " + err); });
 }
@@ -72,6 +75,7 @@ function renderItemTable(items) {
         tbody.innerHTML = '<tr><td colspan="7" class="empty">还没有物品,点击上方表单添加</td></tr>';
         return;
     }
+    if (typeof initHoverPreview === 'function') initHoverPreview();
     tbody.innerHTML = items.map(function(it) {
         var safeName = escapeHtml(it.name);
         var safeUnit = escapeHtml(it.unit || '');
@@ -89,13 +93,20 @@ function renderItemTable(items) {
             actionBtns.push('<button class="btn btn-secondary btn-sm" data-action="return-item" data-id="' + it.id + '" data-name="' + safeName + '" data-lent="' + lentQty + '" data-unit="' + safeUnit + '">归还</button>');
         }
         actionBtns.push('<button class="del-btn" data-action="del-item" data-id="' + it.id + '">删除</button>');
+        // 备注 + 图片预览（点开看大图，与申购页一致）
+        var noteImgs = it.note_image_filenames || [];
+        var noteCell = safeNote + noteImgs.map(function(fn) {
+            return '<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" data-hover-preview="1" ' +
+                'onclick="openLightbox(this.dataset.full)" title="备注图片" ' +
+                'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;vertical-align:middle;margin-left:4px;" />';
+        }).join('');
         return '<tr>' +
             '<td>' + safeName + '</td>' +
             '<td><strong>' + totalQty + '</strong></td>' +
             '<td>' + availableQty + '</td>' +
             '<td>' + lentQty + '</td>' +
             '<td>' + safeUnit + '</td>' +
-            '<td>' + safeNote + '</td>' +
+            '<td>' + (noteCell || '—') + '</td>' +
             '<td>' + actionBtns.join(' ') + '</td>' +
         '</tr>';
     }).join('');
@@ -135,7 +146,7 @@ function _personCell(name, images) {
     var out = '';
     if (name) out += escapeHtml(name);
     (images || []).forEach(function(fn) {
-        out += '<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+        out += '<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" data-hover-preview="1" ' +
             'onclick="openLightbox(this.dataset.full)" ' +
             'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;vertical-align:middle;margin-left:4px;" />';
     });
@@ -146,12 +157,12 @@ function _personCell(name, images) {
 function _lendThumbs(r) {
     var out = [];
     (r.image_filenames || []).forEach(function(fn) {
-        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" data-hover-preview="1" ' +
             'title="借出照片" onclick="openLightbox(this.dataset.full)" ' +
             'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;margin-right:2px;" />');
     });
     (r.return_image_filenames || []).forEach(function(fn) {
-        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" ' +
+        out.push('<img src="' + getDutyImageUrl(fn) + '" data-full="' + getDutyImageUrl(fn) + '" data-hover-preview="1" ' +
             'title="归还照片" onclick="openLightbox(this.dataset.full)" ' +
             'style="width:26px;height:26px;object-fit:cover;border-radius:4px;cursor:pointer;margin-right:2px;border:2px solid var(--success);" />');
     });
@@ -165,10 +176,11 @@ function renderLendHistory(items) {
     if (!tbody) return;
 
     var rows = [];
+    if (typeof initHoverPreview === 'function') initHoverPreview();
     (items || []).forEach(function(it) {
         var records = it.lend_records || [];
         records.forEach(function(r) {
-            rows.push(Object.assign({}, r, { item_name: it.name, item_unit: it.unit || '' }));
+            rows.push(Object.assign({}, r, { item_name: it.name, item_unit: it.unit || '', item_id: it.id }));
         });
     });
 
@@ -198,8 +210,24 @@ function renderLendHistory(items) {
             '<td>' + _lendThumbs(r) + '</td>' +
             '<td><span style="color:' + (statusColor[r.status] || 'var(--text-muted)') + ';font-weight:510;">' + (statusText[r.status] || r.status || '—') + '</span></td>' +
             '<td>' + escapeHtml(r.note || r.return_note || '—') + '</td>' +
+            '<td><button class="del-btn" data-action="del-lend-record" data-item-id="' + r.item_id + '" data-record-id="' + r.id + '">删除</button></td>' +
         '</tr>';
     }).join('');
+
+    // 绑定删除借出记录按钮（仅管理员/主管，后端有权限校验）
+    tbody.querySelectorAll('[data-action="del-lend-record"]').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var itemId = btn.dataset.itemId, recordId = btn.dataset.recordId;
+            showModal({ title: '删除借出记录', body: '确定删除这条借出/归还记录？这会从历史中移除（未归还部分将自动扣回可借数量）。', icon: '⚠', confirmText: '删除', confirmKind: 'danger' })
+                .then(function(ok) {
+                    if (!ok) return;
+                    Api.items.deleteLendRecord(itemId, recordId).then(function() {
+                        showAlert('✓ 已删除记录', 'success');
+                        refreshItems();
+                    }).catch(function(e) { showAlert('删除失败:' + (e && e.message ? e.message : e), 'error'); });
+                });
+        });
+    });
 }
 
 // ==================== 弹窗管理 (替代 openLendModal + openReturnModal) ====================
@@ -208,12 +236,16 @@ function openLendModal(id, name, available, unit) {
     document.getElementById('lend-item-id').value = id;
     document.getElementById('lend-item-name').textContent = name;
     document.getElementById('lend-available-qty').textContent = available + ' ' + unit;
-    document.getElementById('lend-qty').value = '';
-    document.getElementById('lend-qty').max = available;
+    var qtyEl = document.getElementById('lend-qty');
+    qtyEl.value = available;   // 预填全部可借数量，可自行改小
+    qtyEl.max = available;
+    qtyEl.readOnly = false;    // 显式确保可编辑（防被其他逻辑置只读）
     document.getElementById('lend-borrower').value = '';
     document.getElementById('lend-note').value = '';
     if (typeof resetFieldImages === 'function') resetFieldImages(['lend-borrower']);
     document.getElementById('lend-modal-backdrop').classList.add('show');
+    qtyEl.focus();
+    qtyEl.select();
 }
 
 function closeLendModal() {

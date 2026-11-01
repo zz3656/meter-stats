@@ -31,6 +31,26 @@
     --danger: #dc2626;          /* 警告红(浅色背景需更深)*/
     --warn: #d97706;
     --success: #059669;
+    --danger-soft: rgba(220,38,38,0.2);      /* 危险色浅底(错误框/徽标) */
+    --danger-border: rgba(220,38,38,0.35);   /* 危险色描边 */
+
+    /* 主色浅染梯度(合计卡/汇总行/表头强调,深色主题整组换为亮紫) */
+    --tint-1: rgba(99,102,241,0.04);
+    --tint-2: rgba(99,102,241,0.06);
+    --tint-3: rgba(99,102,241,0.08);
+    --tint-4: rgba(99,102,241,0.10);
+    --tint-5: rgba(99,102,241,0.12);
+    --tint-border: rgba(99,102,241,0.25);
+    --focus-ring: 0 0 0 3px rgba(99,102,241,0.18);
+
+    /* 中性叠加(黑/白方向随主题翻转) */
+    --soft-overlay: rgba(0,0,0,0.03);        /* tab 条/次要卡底 */
+    --row-line: rgba(0,0,0,0.06);            /* 表格行分隔线 */
+    --line-strong: rgba(0,0,0,0.14);         /* 表头下边框 */
+    --backdrop: rgba(0,0,0,0.55);            /* 弹窗遮罩 */
+    --shadow-modal: 0 20px 40px rgba(0,0,0,0.5);
+    --shadow-pop: 0 8px 24px rgba(0,0,0,0.1);
+    --shadow-banner: 0 2px 8px rgba(0,0,0,0.06);
     /* 4 块表颜色(浅色背景下加深,保持可读)*/
     --hall: #2563eb;            /* 蓝*/
     --fire: #dc2626;            /* 红*/
@@ -325,7 +345,7 @@
 
   /* 深色模式侧栏高亮 */
   [data-theme="dark"] .sidebar-item.active {
-    background: rgba(129, 140, 248, 0.12);
+    background: var(--tint-5);
   }
 
   /* ===== 响应式 ===== */
@@ -533,6 +553,21 @@
     border-color: var(--border);
   }
 
+  /* ===== 语义状态徽标(全局统一,替代散落的内联状态色) ===== */
+  .badge-status {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.6;
+    white-space: nowrap;
+  }
+  .badge-status.warn    { background: rgba(217,119,6,0.15);  color: var(--warn); }
+  .badge-status.success { background: rgba(5,150,105,0.15);  color: var(--success); }
+  .badge-status.danger  { background: var(--danger-soft);    color: var(--danger); }
+  .badge-status.info    { background: var(--tint-3);         color: var(--primary); }
+
   /* 表单 */
   .form-row {
     display: flex;
@@ -637,7 +672,7 @@
   .btn-danger {
     background: transparent;
     color: var(--danger);
-    border-color: rgba(220, 38, 38, 0.35);
+    border-color: var(--danger-border);
   }
   .btn-danger:hover {
     background: rgba(220, 38, 38, 0.08);
@@ -682,7 +717,7 @@
     transition: border-color 0.15s ease, background 0.15s ease;
   }
   .card:hover {
-    border-color: rgba(0, 0, 0, 0.16);
+    border-color: var(--line-strong);
   }
 
   /* 统计卡片 */
@@ -701,8 +736,8 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    background: rgba(113, 112, 255, 0.08);
-    border: 1px solid rgba(113, 112, 255, 0.25);
+    background: var(--tint-3);
+    border: 1px solid var(--tint-border);
     flex-wrap: wrap;
   }
   .stat-card.total-wide .value { font-size: 36px; line-height: 1.1; }
@@ -749,7 +784,7 @@
   .stat-card.fire { border-left-color: var(--fire); }
   .stat-card.private { border-left-color: var(--private); }
   .stat-card.ac { border-left-color: var(--ac); }
-  .stat-card.total { border-left-color: var(--text-faint); background: rgba(0,0,0,0.03); }
+  .stat-card.total { border-left-color: var(--text-faint); background: var(--soft-overlay); }
 
   .stat-card .label {
     font-size: 12px;
@@ -859,6 +894,19 @@
     font-family: inherit;
   }
   .history-table .edit-btn:hover { background: rgba(113, 112, 255, 0.1); }
+  /* 表格删除按钮（物品/借还记录/申购/工作记录通用，此前一直漏定义样式） */
+  .del-btn {
+    background: transparent;
+    color: var(--danger);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    white-space: nowrap;
+  }
+  .del-btn:hover { background: rgba(220, 38, 38, 0.08); border-color: var(--danger); }
   .history-table .save-btn {
     background: var(--primary-bg);
     color: white;
@@ -926,7 +974,7 @@
   /* 单列紧凑预警卡 */
   .charge-compact {
     position: relative;
-    background: white;
+    background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: 10px;
     margin-bottom: 6px;
@@ -991,7 +1039,7 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     padding: 12px 14px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+    box-shadow: var(--shadow-pop);
     font-size: 13px;
     line-height: 1.7;
   }
@@ -1121,7 +1169,7 @@
   .modal-backdrop {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.55);
+    background: var(--backdrop);
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
     display: flex;
@@ -1147,7 +1195,7 @@
     padding: 24px;
     width: 90%;
     max-width: 420px;
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-modal);
     transform: scale(0.96);
     transition: transform 0.15s;
   }
@@ -1275,7 +1323,7 @@
     transition: background 0.15s, color 0.15s;
   }
   .admin-sidebar-btn:hover { background: var(--bg-subtle); }
-  .admin-sidebar-btn.active { background: rgba(99, 102, 241, 0.1); color: var(--primary); font-weight: 510; }
+  .admin-sidebar-btn.active { background: var(--tint-4); color: var(--primary); font-weight: 510; }
 
   .legend {
     display: flex;
@@ -1353,7 +1401,7 @@
 .compare-table .c-sub { color: var(--text-faint); font-size: 11px; }
 .compare-table .c-chg { width: 90px; }
 .compare-table tr.c-total td {
-  background: rgba(99, 102, 241, 0.08);
+  background: var(--tint-3);
   font-weight: 600;
   color: var(--primary);
 }
@@ -1364,15 +1412,15 @@
   font-weight: 600;
   text-align: right;
   padding: 8px 12px;
-  border-bottom: 2px solid rgba(0,0,0,0.14);
+  border-bottom: 2px solid var(--line-strong);
   color: var(--text);
 }
 .report-grid-table thead th.col-date { text-align: left; }
-.report-grid-table thead th.col-total { background: rgba(99,102,241,0.12); color: var(--primary); }
+.report-grid-table thead th.col-total { background: var(--tint-5); color: var(--primary); }
 .report-grid-table tbody td {
   padding: 6px 12px;
   text-align: right;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
+  border-bottom: 1px solid var(--row-line);
   font-variant-numeric: tabular-nums;
   color: var(--text);
 }
@@ -1383,17 +1431,17 @@
 }
 .report-grid-table tbody td.col-total {
   font-weight: 600;
-  background: rgba(99,102,241,0.06);
+  background: var(--tint-2);
   color: var(--primary);
 }
 .report-grid-table tbody tr.total-row td {
-  background: rgba(99,102,241,0.10);
+  background: var(--tint-4);
   font-weight: 600;
-  border-top: 2px solid rgba(99,102,241,0.25);
+  border-top: 2px solid var(--tint-border);
   color: var(--primary);
 }
 .report-grid-table tbody tr.reading-day td {
-  background: rgba(99,102,241,0.04);
+  background: var(--tint-1);
   font-weight: 500;
   color: var(--text);
 }
@@ -1406,13 +1454,13 @@
   font-size: 11px;
 }
 .report-grid-table tbody tr.empty-row td {
-  color: rgba(0,0,0,0.22);
+  color: var(--text-faint);
 }
 .report-summary {
   margin-top: 12px;
   padding: 12px 16px;
   background: var(--bg-surface);
-  border: 1px solid rgba(0,0,0,0.08);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: 13px;
   line-height: 1.7;
@@ -1495,7 +1543,7 @@
   display: flex;
   gap: 4px;
   padding: 4px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--soft-overlay);
   border-radius: 8px;
   margin-bottom: 16px;
   border: 1px solid var(--border-subtle);
@@ -1555,19 +1603,12 @@
 }
 .status-item .em { color: var(--warn); font-weight: 600; }
 
-/* Tab 导航深色模式 */
-[data-theme="dark"] .tab-nav {
-  background: rgba(255, 255, 255, 0.03);
-}
-[data-theme="dark"] .entry-tabs {
-  background: rgba(255, 255, 255, 0.03);
-}
 /* 录入卡内切换小 Tab(抄表 / 充值) */
 .entry-tabs {
   display: flex;
   gap: 4px;
   padding: 3px;
-  background: rgba(0, 0, 0, 0.03);
+  background: var(--soft-overlay);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   margin-bottom: 14px;
@@ -1732,7 +1773,7 @@
 }
 
 .report-empty {
-  color: #999;
+  color: var(--text-muted);
   font-size: 13px;
   text-align: center;
   padding: 40px 0;
@@ -1865,6 +1906,26 @@
     --danger: #f87171;
     --warn: #fbbf24;
     --success: #34d399;
+    --danger-soft: rgba(248,113,113,0.25);
+    --danger-border: rgba(248,113,113,0.45);
+
+    /* 主色浅染(深色下用亮紫,透明度与浅色一致) */
+    --tint-1: rgba(129,140,248,0.04);
+    --tint-2: rgba(129,140,248,0.06);
+    --tint-3: rgba(129,140,248,0.08);
+    --tint-4: rgba(129,140,248,0.10);
+    --tint-5: rgba(129,140,248,0.12);
+    --tint-border: rgba(129,140,248,0.25);
+    --focus-ring: 0 0 0 3px rgba(129,140,248,0.18);
+
+    /* 中性叠加(白色方向) */
+    --soft-overlay: rgba(255,255,255,0.03);
+    --row-line: rgba(255,255,255,0.06);
+    --line-strong: rgba(255,255,255,0.14);
+    --backdrop: rgba(0,0,0,0.75);
+    --shadow-modal: 0 20px 40px rgba(0,0,0,0.7);
+    --shadow-pop: 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-banner: 0 2px 8px rgba(0,0,0,0.2);
     --hall: #60a5fa;              /* 蓝(加深) */
     --fire: #f87171;              /* 红(加深) */
     --private: #34d399;           /* 绿(加深) */
@@ -1922,7 +1983,7 @@
 [data-theme="dark"] .field-control:focus {
     background: var(--bg-surface);  /* 聚焦时稍微提亮 */
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(129, 140, 248, 0.18);
+    box-shadow: var(--focus-ring);
 }
 [data-theme="dark"] select option,
 [data-theme="dark"] .form-row select option,
@@ -1931,124 +1992,10 @@
     color: var(--text);
 }
 
-/* 深色按钮 — 去掉浅色背景的硬编码,使用语义化变量 */
-[data-theme="dark"] .btn {
-    background: var(--bg-elevated);
-    color: var(--text);
-    border-color: var(--border);
-}
-[data-theme="dark"] .btn-secondary {
-    background: var(--bg-surface);
-    color: var(--text-secondary);
-}
-[data-theme="dark"] .btn-secondary:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-    border-color: var(--text-muted);
-}
+/* 深色按钮:仅保留与浅色不一致的 ghost 文字色
+   (.btn/.btn-secondary 基础规则已全部 token 化,深色自动生效) */
 [data-theme="dark"] .btn-ghost {
-    background: transparent;
     color: var(--text-muted);
-    border-color: transparent;
-}
-[data-theme="dark"] .btn-ghost:hover {
-    background: var(--bg-hover);
-    color: var(--text);
-}
-
-/* 深色卡片悬停 */
-[data-theme="dark"] .card:hover {
-    border-color: rgba(255, 255, 255, 0.18);
-}
-
-/* 深色合计卡 */
-[data-theme="dark"] .stat-card.total-wide {
-    background: rgba(129, 140, 248, 0.08);
-    border-color: rgba(129, 140, 248, 0.25);
-}
-[data-theme="dark"] .stat-card.total {
-    background: rgba(255,255,255,0.03);
-}
-
-/* 深色合计值文字 */
-[data-theme="dark"] .stat-card .value small { color: var(--text-muted); }
-
-/* 深色模态框阴影 */
-[data-theme="dark"] .modal {
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
-}
-[data-theme="dark"] .modal-backdrop {
-    background: rgba(0, 0, 0, 0.75);
-}
-
-/* 深色模态框代码 */
-[data-theme="dark"] .modal-body code {
-    background: var(--bg-surface);
-    border-color: var(--border-subtle);
-}
-
-/* 深色充电详情弹窗 */
-[data-theme="dark"] .charge-detail-popup {
-    background: var(--bg-elevated);
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-}
-
-/* 深色状态栏 */
-[data-theme="dark"] .status-bar {
-    background: var(--bg-surface);
-    border-color: var(--border-subtle);
-}
-
-/* 深色表头 */
-[data-theme="dark"] .history-table th {
-    background: transparent;
-}
-[data-theme="dark"] .report-grid-table thead th {
-    background: var(--bg-surface);
-    border-bottom-color: rgba(255,255,255,0.14);
-}
-[data-theme="dark"] .compare-table th {
-    background: var(--bg-surface);
-}
-[data-theme="dark"] .settings-table th {
-    background: transparent;
-}
-
-/* 深色报告摘要 */
-[data-theme="dark"] .report-summary {
-    background: var(--bg-surface);
-    border-color: rgba(255,255,255,0.08);
-}
-
-/* 深色比较表 */
-[data-theme="dark"] .compare-table-wrap {
-    border-color: var(--border);
-}
-[data-theme="dark"] .compare-table .c-total td {
-    background: rgba(129, 140, 248, 0.08);
-}
-
-/* 深色表格行 */
-[data-theme="dark"] .report-grid-table tbody td {
-    border-bottom-color: rgba(255,255,255,0.06);
-}
-[data-theme="dark"] .report-grid-table tbody td.col-total {
-    background: rgba(129, 140, 248, 0.06);
-}
-[data-theme="dark"] .report-grid-table tbody tr.total-row td {
-    background: rgba(129, 140, 248, 0.10);
-    border-top-color: rgba(129, 140, 248, 0.25);
-}
-[data-theme="dark"] .report-grid-table tbody tr.reading-day td {
-    background: rgba(129, 140, 248, 0.04);
-}
-[data-theme="dark"] .report-grid-table tbody tr.empty-row td {
-    color: rgba(255,255,255,0.22);
-}
-
-/* 深色充值记录汇总 */
-[data-theme="dark"] .charge-summary {
-    border-color: var(--border);
 }
 
 /* 深色数据管理弹窗背景 */
@@ -2057,33 +2004,11 @@
     border-color: var(--border);
 }
 
-/* 深色数据管理弹窗背景 */
+/* 深色数据管理弹窗背景(内联 bg-subtle 的兜底) */
 [data-theme="dark"] .modal-body > div[style*="bg-subtle"],
 [data-theme="dark"] #datamgmt-modal-backdrop .modal-body > div:first-child {
     background: var(--bg-surface) !important;
     border-color: var(--border) !important;
-}
-
-/* 深色空状态 */
-[data-theme="dark"] .empty {
-    color: var(--text-muted);
-}
-[data-theme="dark"] .report-empty {
-    color: var(--text-muted);
-}
-
-/* 深色充值紧凑卡 */
-[data-theme="dark"] .charge-compact {
-    background: var(--bg-elevated);
-    border-color: var(--border);
-}
-[data-theme="dark"] .charge-compact:hover {
-    background: var(--bg-hover);
-}
-
-/* 深色管理员角色表 */
-[data-theme="dark"] .admin-sidebar-btn.active {
-    background: rgba(129, 140, 248, 0.12);
 }
 
 /* 抄表提醒横幅 */
@@ -2096,10 +2021,7 @@
     align-items: center;
     justify-content: space-between;
     background: var(--reminder-bg);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-[data-theme="dark"] .meter-reminder {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-banner);
 }
 .meter-reminder #meter-reminder-text {
     color: var(--reminder-text);
@@ -2134,10 +2056,7 @@
     align-items: center;
     justify-content: space-between;
     background: var(--reminder-bg);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-}
-[data-theme="dark"] #duty-reminder {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-banner);
 }
 #duty-reminder #duty-reminder-text {
     color: var(--reminder-text);
@@ -2180,7 +2099,15 @@
   font-weight: 600;
 }
 .topup-meter-row .topup-meter { width: 72px; padding: 4px 6px; text-align: center; }
-.topup-meter-row .topup-actual { width: 88px; padding: 4px 6px; text-align: center; }
+.topup-meter-row .topup-actual-val {
+  width: 88px;
+  padding: 4px 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg-subtle);
+  border-radius: 6px;
+}
 .topup-mult {
   font-size: 12px;
   color: var(--text-muted);
@@ -2200,6 +2127,7 @@
   line-height: 1.5;
 }
 .topup-daysleft { color: var(--success); font-weight: 600; }
+#topup-days-modal:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ==================== 移动端响应式 ====================
    断点策略:
@@ -2214,6 +2142,10 @@
   .btn-sm { min-height: 36px; padding: 6px 14px !important; }
   /* sidebar-item 增大点击区 */
   .sidebar-item { min-height: 42px; padding: 10px 10px 10px 14px; }
+  /* 表格内小按钮加大触控区 */
+  .del-btn, .save-btn { min-height: 34px; padding: 6px 12px; }
+  /* 弹窗按钮区允许换行（如「批量」勾选框 + 两个按钮） */
+  .modal-actions { flex-wrap: wrap; }
 }
 
 @media (max-width: 600px) {

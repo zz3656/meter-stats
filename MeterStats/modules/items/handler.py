@@ -29,6 +29,8 @@ class _ItemsHandler(JsonModelHandler):
             "qty": float(qty) if qty is not None else 0,
             "unit": body.get("unit", ""),
             "note": body.get("note", ""),
+            # 备注图片（前端 item-add-note 字段上传，读取走 /api/duty/image/{filename}）
+            "note_image_filenames": _clean_filenames(body.get("note_image_filenames")),
             "created_at": _now().isoformat(),
         }, None
 
@@ -208,6 +210,47 @@ def handle_put_items_return(handler, path_clean: str):
     item["lent_qty"] = lent_qty - qty
     _save_items(items)
     log(f"  OK 归还 {item['name']} x{qty}")
+    send_json(handler, 200, {"ok": True, "row": item})
+
+
+def handle_delete_items_lend(handler, path_clean: str):
+    """DELETE /api/items/{id}/lend/{record_id} — 删除一条借出/归还记录。
+
+    仅管理员/主管可操作（复用 _check_delete）。
+    删除未归还完的记录时，把其未归还部分从 lent_qty 中扣回。
+    """
+    _check_delete(handler)
+    rest = path_clean[len("/api/items/"):]
+    if "/lend/" not in rest:
+        send_json(handler, 404, {"error": "路径格式应为 /api/items/{id}/lend/{record_id}"})
+        return
+    iid, rid = rest.split("/lend/", 1)
+    iid, rid = iid.strip(), rid.strip()
+    if not rid:
+        send_json(handler, 400, {"error": "缺少记录 ID"})
+        return
+
+    items = _load_items()
+    item, _ = _h._find_by_id(items, iid)
+    if not item:
+        send_json(handler, 404, {"error": f"未找到物品 {iid}"})
+        return
+
+    records = item.get("lend_records") or []
+    record = next((r for r in records if r.get("id") == rid), None)
+    if not record:
+        send_json(handler, 404, {"error": "未找到该借出记录"})
+        return
+
+    record_qty = float(record.get("qty", 0))
+    returned = float(record.get("return_qty", 0) or 0)
+    still_lent = max(0.0, record_qty - returned)
+    if still_lent > 0:
+        item["lent_qty"] = max(0.0, float(item.get("lent_qty", 0)) - still_lent)
+
+    item["lend_records"] = [r for r in records if r.get("id") != rid]
+    _save_items(items)
+    log(f"  OK 删除借出记录 {rid}（物品 {item.get('name')}，未归还部分 {still_lent} 已扣回）")
     send_json(handler, 200, {"ok": True, "row": item})
 
 

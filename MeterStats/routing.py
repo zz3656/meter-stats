@@ -16,7 +16,7 @@ from modules.charges import (
 )
 from modules.items import (
     handle_get_items, handle_post_items, handle_put_items, handle_delete_items,
-    handle_put_items_lend, handle_put_items_return,
+    handle_put_items_lend, handle_put_items_return, handle_delete_items_lend,
 )
 from modules.purchases import (
     handle_get_purchases, handle_post_purchases, handle_put_purchases, handle_put_purchases_stock, handle_delete_purchases,
@@ -249,6 +249,10 @@ def _route(method: str, handler, path: str) -> bool:
 
     # DELETE
     if method == "DELETE":
+        # 特殊路径: /api/items/{id}/lend/{record_id} 删除借出记录
+        if path_clean.startswith("/api/items/") and "/lend/" in path_clean:
+            _dispatch_fn(handle_delete_items_lend, "DELETE", handler, path_clean)
+            return True
         handler_fn = _match_prefix(_DELETE_PREFIX, path_clean)
         if handler_fn:
             _dispatch_fn(_call_handler, "DELETE", handler_fn, handler, path_clean)

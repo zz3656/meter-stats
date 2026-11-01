@@ -53,6 +53,7 @@ var Api = (() => {
         },
         create: function(data) { return _request('POST', '/api/charges', data); },
         update: function(id, data) { return _request('PUT', '/api/charges/' + id, data); },
+        confirm: function(id) { return _request('PUT', '/api/charges/' + id + '/confirm', {}); },
         delete: function(id) { return _request('DELETE', '/api/charges/' + id); },
     };
 
@@ -69,10 +70,12 @@ var Api = (() => {
     var items = {
         list: function() { return _request('GET', '/api/items'); },
         create: function(data) { return _request('POST', '/api/items', data); },
+        createBatch: function(data) { return _request('POST', '/api/items/batch', data); },
         update: function(id, data) { return _request('PUT', '/api/items/' + id, data); },
         delete: function(id) { return _request('DELETE', '/api/items/' + id); },
         lend: function(id, data) { return _request('PUT', '/api/items/' + id + '/lend', data); },
         return: function(id, data) { return _request('PUT', '/api/items/' + id + '/return', data); },
+        deleteLendRecord: function(id, recordId) { return _request('DELETE', '/api/items/' + id + '/lend/' + recordId); },
     };
 
     // 申购模块 API (5个端点)

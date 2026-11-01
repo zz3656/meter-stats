@@ -4,6 +4,16 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>工程部管理系统</title>
+<script>
+// 尽早应用主题,避免浅色闪屏(auto 跟随系统)
+(function () {
+  try {
+    var mode = localStorage.getItem('meter_theme_mode') || 'auto';
+    if (mode === 'auto') mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    if (mode === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+  } catch (e) {}
+})();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -29,7 +39,7 @@
         <button type="button" class="header-backup-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式">🔤 大字</button>
       </div>
     </div>
-      <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid rgba(220,38,38,0.2);"></div>
+      <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid var(--danger-soft);"></div>
     <div style="margin-bottom:16px;">
       <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">用户名</label>
       <input type="text" id="login-username" class="field-control" placeholder="输入用户名" autocomplete="username" style="width:100%;">
@@ -137,7 +147,6 @@
           </div>
           <div id="reading-alerts-container"></div>
         </div>
-        <div id="alert" class="alert"></div>
         <form id="entry-form">
           <div class="form-row">
             <label>抄表日期</label>
@@ -232,7 +241,6 @@
         <div class="card-header">
           <h2>💧 水电录入</h2>
         </div>
-        <div id="utility-alert" class="alert"></div>
         <form id="utility-form">
           <div class="form-row">
             <label>抄表日期</label>
@@ -376,7 +384,6 @@
         <div class="card-header">
           <h2>🛠 物品录入</h2>
         </div>
-        <div id="item-alert" class="alert"></div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px 0;">
           录入工程部现有的维修工具、耗材等。
         </p>
@@ -491,6 +498,7 @@
                 <th>照片</th>
                 <th>状态</th>
                 <th>备注</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -535,7 +543,6 @@
         <div class="card-header">
           <h2>🔧 值班录入</h2>
         </div>
-        <div id="duty-alert" class="alert"></div>
         <form id="duty-form">
           <div class="form-row">
             <label>类型</label>
@@ -1000,6 +1007,7 @@
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
         <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">预充天数</label>
         <input type="number" id="topup-days-modal" class="field-control" value="30" min="1" step="1"
+               oninput="recalcTopup()"
                style="width:90px;padding:6px 10px;">
         <span style="font-size:12px;color:var(--text-muted);">天 × 本月日均 = 需充值度数</span>
       </div>
@@ -1014,6 +1022,7 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="topup-close">关闭</button>
+      <button type="button" class="btn" id="topup-submit" onclick="submitTopupApplication()">📋 提交充值申请</button>
     </div>
   </div>
 </div>
@@ -1034,7 +1043,7 @@
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出数量 <span style="color:var(--danger);">*</span></label>
-        <input type="number" id="lend-qty" class="field-control" min="1" placeholder="请输入借出数量" style="width:100%;">
+        <input type="number" id="lend-qty" class="field-control" min="1" step="any" inputmode="decimal" placeholder="请输入借出数量" style="width:100%;">
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
@@ -1073,7 +1082,7 @@
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还数量 <span style="color:var(--danger);">*</span></label>
-        <input type="number" id="return-qty" class="field-control" min="0.01" step="0.01" placeholder="请输入本次归还数量" style="width:100%;">
+        <input type="number" id="return-qty" class="field-control" min="0.01" step="any" inputmode="decimal" placeholder="请输入本次归还数量" style="width:100%;">
       </div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
@@ -1114,11 +1123,19 @@
         <input type="text" id="item-add-unit" placeholder="例如:把 / 个 / 米" style="width:100%;" />
       </div>
       <div style="margin-bottom:0;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
-        <input type="text" id="item-add-note" placeholder="例如:十字 6mm" maxlength="100" style="width:100%;" />
+        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填，可传图片</span></label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="item-add-note" placeholder="例如:十字 6mm" maxlength="100" style="flex:1;min-width:0;" />
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('item-add-note')" title="上传图片">📷</button>
+        </div>
+        <div id="item-add-note-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
+        <input type="file" id="item-add-note-file" accept="image/*" multiple style="display:none;" onchange="onFieldImagePicked(this, 'item-add-note')" />
       </div>
     </div>
     <div class="modal-actions">
+      <label style="display:flex;align-items:center;gap:5px;margin-right:auto;font-size:13px;color:var(--text);cursor:pointer;user-select:none;">
+        <input type="checkbox" id="item-add-batch" /> 批量
+      </label>
       <button type="button" class="btn btn-secondary" id="item-add-close">取消</button>
       <button type="button" class="btn btn-primary" id="item-add-confirm">新增</button>
     </div>

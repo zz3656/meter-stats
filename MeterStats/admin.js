@@ -973,6 +973,9 @@ function closeReadingAddModal() {
 
 // ===== 物品 / 申购 / 工作记录 新增弹窗（模块化重构时连同 open/close 一起丢失）=====
 function openItemAddModal() {
+  if (typeof resetFieldImages === 'function') resetFieldImages(['item-add-note']);
+  var batch = document.getElementById('item-add-batch');
+  if (batch) batch.checked = false;
   document.getElementById('item-add-modal-backdrop').classList.add('show');
   const el = document.getElementById('item-add-name');
   if (el) el.focus();
@@ -1067,6 +1070,7 @@ function recalcTopup() {
   var resultEl = document.getElementById('topup-result-modal');
   var totalEl = document.getElementById('topup-total-modal');
   if (!daysEl || !resultEl || !totalEl) return;
+  daysEl.disabled = false; // 重新计算 = 回到"建议值"模式,恢复天数输入
   var days = parseFloat(daysEl.value);
   var rs = (CURRENT_READINGS || []).filter(function(r) { return r.hall != null; });
   if (!days || days <= 0 || rs.length === 0) {
@@ -1090,9 +1094,9 @@ function recalcTopup() {
     rows += '<div class="topup-meter-card" data-daily="' + daily.toFixed(4) + '">' +
       '<div class="topup-meter-row">' +
         '<span class="topup-meter-name">' + m.meterNo + m.label + '</span>' +
-        '<input type="number" class="field-control topup-meter" value="' + Math.round(meterVal) + '" step="1" data-mult="' + mult + '" title="表读数(充值录入值,可输入取整,自动反算其他值)">' +
+        '<input type="number" class="field-control topup-meter" value="' + Math.round(meterVal) + '" step="1" data-mult="' + mult + '" oninput="updateTopupFromMeter(this)" title="表读数(充值录入值,可修改取整,自动刷新度数和金额)">' +
         '<span class="topup-mult">×' + mult + '</span>' +
-        '<input type="number" class="field-control topup-actual" value="' + Math.round(actualKwh) + '" step="1" data-mult="' + mult + '" title="实际度数(可输入取整充值,自动反算其他值)">' +
+        '<span class="topup-actual-val" title="实际度数 = 表读数 × 倍率(自动计算,不可修改)">' + Math.round(actualKwh) + '</span>' +
         '<span class="topup-yuan">≈ ¥' + Math.round(yuan) + '</span>' +
       '</div>' +
       '<div class="topup-meter-meta">日均 ' + Math.round(daily) + ' 度/天 ' + basis + ' <span class="topup-daysleft">≈ 可用 ' + Math.round(daysLeft) + ' 天</span></div>' +
@@ -1102,16 +1106,58 @@ function recalcTopup() {
   updateTopupTotal();
 }
 
+// 修改表读数时，动态刷新该行的实际度数、金额、可用天数，以及底部合计；
+// 一旦手动修改过表读数，预充天数就从「输入条件」变成「计算结果」，禁用天数输入框
+function updateTopupFromMeter(input) {
+  var row = input.closest('.topup-meter-card');
+  if (!row) return;
+  var mult = parseFloat(input.getAttribute('data-mult')) || 1;
+  var meter = parseFloat(input.value) || 0;
+  var actual = meter * mult;
+  row.querySelector('.topup-actual-val').textContent = Math.round(actual);
+  row.querySelector('.topup-yuan').textContent = '≈ ¥' + Math.round(actual * ELECTRICITY_PRICE);
+  var daily = parseFloat(row.getAttribute('data-daily')) || 0;
+  var daysLeft = daily > 0 ? actual / daily : 0;
+  row.querySelector('.topup-daysleft').textContent = '≈ 可用 ' + Math.round(daysLeft) + ' 天';
+  var daysEl = document.getElementById('topup-days-modal');
+  if (daysEl) daysEl.disabled = true;
+  updateTopupTotal();
+}
+
 function updateTopupTotal() {
   var totalEl = document.getElementById('topup-total-modal');
   if (!totalEl) return;
   var totalActual = 0, totalMeter = 0, totalYuan = 0;
-  document.querySelectorAll('.topup-actual').forEach(function(inp) {
-    var mult = parseFloat(inp.getAttribute('data-mult'));
-    var actual = parseFloat(inp.value) || 0;
-    totalActual += actual; totalMeter += actual / mult; totalYuan += actual * ELECTRICITY_PRICE;
+  document.querySelectorAll('.topup-meter').forEach(function(inp) {
+    var mult = parseFloat(inp.getAttribute('data-mult')) || 1;
+    var meter = parseFloat(inp.value) || 0;
+    var actual = meter * mult;
+    totalMeter += meter; totalActual += actual; totalYuan += actual * ELECTRICITY_PRICE;
   });
   totalEl.value = '合计 ' + Math.round(totalActual) + ' 度(实际) ≈ ¥ ' + Math.round(totalYuan) + '  (表读数 ' + Math.round(totalMeter) + ')';
+}
+
+// 充值计算器 → 提交充值申请:生成一条「待确认」充值记录,确认到账后才计入统计
+function submitTopupApplication() {
+  var charge = { date: todayStr(), status: 'pending', note: '充值申请(充值计算器)' };
+  var total = 0;
+  var cards = document.querySelectorAll('.topup-meter-card');
+  cards.forEach(function(card, idx) {
+    var m = CHARGE_METERS[idx];
+    if (!m) return;
+    var v = parseFloat(card.querySelector('.topup-meter').value) || 0;
+    charge[m.key] = v;
+    total += v;
+  });
+  if (!cards.length) { showAlert('请先计算充值度数', 'error'); return; }
+  if (total <= 0) { showAlert('四表充值度数不能全为 0', 'error'); return; }
+  Api.charges.create(charge).then(function() {
+    showAlert('✓ 充值申请已提交(待确认)，确认到账后计入统计', 'success');
+    closeTopupModal();
+    refreshCharges();
+  }).catch(function(err) {
+    showAlert('提交失败: ' + (err.message || err), 'error');
+  });
 }
 
 // Tab 切换 (从旧 forms_tab.js 迁移)

@@ -280,6 +280,7 @@ window.FIELD_SCOPES = {
   'return-by': 'return',
   'purchase-add-name': 'purchase-name',
   'purchase-add-note': 'purchase-note',
+  'item-add-note': 'item-note',
   'duty-add-note': 'duty-note',
   'duty-handle-method': 'duty-handle'
 };
@@ -342,9 +343,54 @@ window.resetFieldImages = function resetFieldImages(fieldIds) {
   });
 };
 
+/* ============================================================
+ * 列表图片悬停预览（PC 端）
+ * 带 data-hover-preview="1" 的缩略图，鼠标悬停即浮动显示大图；
+ * 移动端（无 hover 能力）自动禁用，仍走点击开灯箱。
+ * ============================================================ */
+window.initHoverPreview = function initHoverPreview() {
+  if (window.__hoverPreviewReady) return;
+  // 只在有鼠标悬停能力的设备启用，避免手机上误触发
+  if (!window.matchMedia || !window.matchMedia('(hover: hover)').matches) return;
+  var el = document.createElement('img');
+  el.id = 'hover-preview-img';
+  el.style.cssText = 'position:fixed;z-index:99998;display:none;max-width:280px;max-height:280px;' +
+    'border-radius:10px;border:1px solid var(--border);background:var(--bg-elevated);' +
+    'box-shadow:0 8px 28px rgba(0,0,0,.3);pointer-events:none;';
+  document.body.appendChild(el);
+  window.__hoverPreviewReady = true;
+
+  function current(e) {
+    var t = e.target;
+    while (t && t !== document) {
+      if (t.tagName === 'IMG' && t.getAttribute('data-hover-preview') === '1') return t;
+      t = t.parentNode;
+    }
+    return null;
+  }
+  function position(e) {
+    var pad = 14, w = el.offsetWidth, h = el.offsetHeight;
+    var x = e.clientX + pad, y = e.clientY + pad;
+    if (x + w > window.innerWidth - 8) x = e.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = e.clientY - h - pad;
+    el.style.left = Math.max(8, x) + 'px';
+    el.style.top = Math.max(8, y) + 'px';
+  }
+  document.addEventListener('mouseover', function (e) {
+    var t = current(e);
+    if (t && el.src !== t.getAttribute('data-full')) el.src = t.getAttribute('data-full');
+    if (t) { el.style.display = 'block'; position(e); }
+  });
+  document.addEventListener('mousemove', function (e) {
+    if (el.style.display === 'block') position(e);
+  });
+  document.addEventListener('mouseout', function (e) {
+    if (current(e)) el.style.display = 'none';
+  });
+};
+
 /** 打开图片灯箱 */
-window.openLightbox = function openLightbox(src) {
-  const img = document.getElementById('image-lightbox-img');
+window.openLightbox = function openLightbox(src) {  const img = document.getElementById('image-lightbox-img');
   const backdrop = document.getElementById('image-lightbox-backdrop');
   if (!img || !backdrop) return;
   img.src = src;

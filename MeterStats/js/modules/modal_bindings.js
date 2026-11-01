@@ -107,20 +107,30 @@
     if (typeof closeTopupModal === 'function') closeTopupModal();
   });
 
-  // ==================== 物品新增 ====================
+  // ==================== 物品新增（勾选「批量」时提交后不关弹窗，方便连续录入）====================
   on('item-add-confirm', function () {
     var v = function (id) { var el = document.getElementById(id); return el ? el.value : ''; };
     var name = v('item-add-name').trim();
     var qty = parseFloat(v('item-add-qty'));
     if (!name) { showAlert('请填写物品名称', 'error'); return; }
     if (isNaN(qty) || qty < 0) { showAlert('数量必须 ≥ 0', 'error'); return; }
+    var noteImgs = (typeof getFieldImages === 'function') ? getFieldImages('item-add-note') : [];
     if (typeof addItem === 'function') {
-      addItem(name, qty, v('item-add-unit').trim() || '个', v('item-add-note').trim());
+      addItem(name, qty, v('item-add-unit').trim() || '个', v('item-add-note').trim(), noteImgs);
     }
     ['item-add-name', 'item-add-qty', 'item-add-unit', 'item-add-note'].forEach(function (id) {
       var el = document.getElementById(id); if (el) el.value = '';
     });
-    if (typeof closeItemAddModal === 'function') closeItemAddModal();
+    if (typeof resetFieldImages === 'function') resetFieldImages(['item-add-note']);
+    var batchBox = document.getElementById('item-add-batch');
+    if (batchBox && batchBox.checked) {
+      // 批量模式：弹窗保持打开，聚焦到名称继续录入
+      showAlert('✓ 已添加 ' + name, 'success');
+      var nameEl = document.getElementById('item-add-name');
+      if (nameEl) nameEl.focus();
+    } else {
+      if (typeof closeItemAddModal === 'function') closeItemAddModal();
+    }
   });
 
   // ==================== 申购新增 ====================
