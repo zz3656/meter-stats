@@ -95,9 +95,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.3.3
+## 📦 工程部管理系统 v0.3.4
 
-提交 `70827ea`
+提交 `07f342b`
 
 **升级 Docker 容器**:
 ```bash
@@ -106,12 +106,12 @@ docker compose up -d
 ```
 
 
-小幅更新：每日趋势页数据实时刷新 + 发布版本号源头统一。
+小幅更新：Release 说明统一为 GitHub 自动生成的更新日志格式。
 
-### 修复
+### 调整
 
-- 录入抄表/充值后，每日趋势页（趋势图、统计卡、单天下拉、单天复制）立即反映最新数据，无需刷新网页或重新登入
-- CI 发布版本号统一读 `MeterStats/VERSION`（与 Docker 构建同源），删除过期的根目录 `VERSION`，修复 GitHub Release 版本倒退为 v0.3.0、v0.3.1/v0.3.2 发布记录缺失的问题
+- release notes 末尾改为 GitHub「自动生成更新日志」同款 `**Full Changelog**` 版本对版本对比链接（替换原先指向提交 SHA 的「完整代码改动」链接）；补发旧版本时自动取版本号小于当前的最大 tag，避免生成倒序对比
+- 已有 v0.1.1 – v0.3.3 六个 release 的说明同步补齐该链接
 
 ### ⬆️ 升级
 
@@ -122,5 +122,5 @@ docker compose up -d
 
 ---
 
-💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/v0.3.2...70827ea)
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.3.3...v0.3.4
 
