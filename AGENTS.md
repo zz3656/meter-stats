@@ -59,6 +59,7 @@ MeterStats/
 - **存储**: JSON 文件 + 原子写入 (写 tmp 再 rename) + `threading.Lock` 行级锁。数据目录: Docker 用 `METER_DATA_DIR`(默认 `/data`), macOS `.app` 用 `~/Library/Application Support/com.meter.stats/`, 本地源码运行用 `MeterStats/.data/`。
 - **前端**: 纯 HTML/CSS/JS, 无构建步骤。Chart.js 通过 CDN 加载。JS 文件按功能拆到 `js/` 目录,在 `index.html` 中 `<script>` 引入。
 - **提交规范**: 约定式提交 (feat/fix/refactor/docs/style/scope)。`./run.sh` 首次运行自动设置 `.gitmessage` 为 commit template。
+- **版本号**: 唯一来源是 `MeterStats/VERSION`,每次推送(会触发构建的改动)都要递增——小幅更新末位 +1,破坏性更新中间位 +1,并在 `CHANGELOG.md` 顶部补对应章节;GitHub Release 与 Docker 镜像标签由 CI 依据此文件自动发布,不要新建其他 VERSION 文件。
 - **测试**: `tests/` 下 5 个测试文件, 88 个用例。运行: `python3 -m unittest discover -s tests -v`。
 
 ## Pitfalls

@@ -46,7 +46,9 @@ jobs:
           if [[ "${{ github.event.inputs.version }}" != "" ]]; then
             VERSION="${{ github.event.inputs.version }}"
           else
-            VERSION=$(cat VERSION | tr -d ' \n\r')
+            # 唯一版本号来源:MeterStats/VERSION(与 docker-publish.yml 一致)。
+            # 曾误读根目录 VERSION(长期停在 0.3.0),导致每次推送 Release 都发成 v0.3.0
+            VERSION=$(cat MeterStats/VERSION | tr -d ' \n\r')
           fi
           if [ -z "$VERSION" ]; then
             echo "❌ 无法确定版本号"
