@@ -40,15 +40,27 @@ def main() -> int:
     version = os.environ["VERSION"]
     sha = os.environ["SHA"]
     sha_short = sha[:7]
+    repo = os.environ.get("GITHUB_REPOSITORY", "zz3656/meter-stats")
+
+    def ver_tuple(tag: str):
+        try:
+            return tuple(int(p) for p in tag[1:].split("."))
+        except ValueError:
+            return None
 
     # 解析上次发布点(只看 v* 版本标签,过滤 latest 等其它标签)
-    prev_tag = subprocess.run(
-        ["git", "tag", "--sort=-creatordate", "--list", "v*"],
+    tags = subprocess.run(
+        ["git", "tag", "--list", "v*"],
         capture_output=True, text=True).stdout.strip().split("\n")
-    # 排除当前版本自身的 tag —— 重新发布同一版本时它已存在，
-    # 若拿它当起点，v0.3.0..HEAD 只剩几条收尾提交，release 页面会空得离谱。
+    # 排除当前版本自身的 tag —— 重新发布同一版本时它已存在。
+    # 取「版本号严格小于当前版本」的最大 tag 作对比起点,
+    # 避免补发旧版本时拿到更新的 tag 生成倒序对比链接。
     current_tag = f"v{version}"
-    prev_tag = next((t for t in prev_tag if t and t != current_tag), "")
+    current_ver = ver_tuple(current_tag)
+    candidates = [t for t in tags
+                  if t and t != current_tag and ver_tuple(t) is not None
+                  and current_ver is not None and ver_tuple(t) < current_ver]
+    prev_tag = max(candidates, key=ver_tuple) if candidates else ""
 
     if prev_tag:
         rng = f"{prev_tag}..HEAD"
@@ -189,10 +201,15 @@ def main() -> int:
         "",
     ])
 
+    # GitHub「自动生成更新日志」同款格式:tag 对 tag 的 Full Changelog 对比链接
     footer_parts = ["", "---", ""]
-    if prev_tag and prev_tag != "HEAD":
+    if prev_tag:
         footer_parts.append(
-            f"💡 [完整代码改动](https://github.com/zz3656/meter-stats/compare/{prev_tag}...{sha_short})"
+            f"**Full Changelog**: https://github.com/{repo}/compare/{prev_tag}...v{version}"
+        )
+    else:
+        footer_parts.append(
+            f"**Full Changelog**: https://github.com/{repo}/commits/v{version}"
         )
     footer = "\n".join(footer_parts)
 
