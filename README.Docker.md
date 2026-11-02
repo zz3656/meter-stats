@@ -95,9 +95,9 @@ docker compose down && docker compose up -d
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.3.4
+## 📦 工程部管理系统 v0.3.5
 
-提交 `07f342b`
+提交 `c708dec`
 
 **升级 Docker 容器**:
 ```bash
@@ -106,21 +106,21 @@ docker compose up -d
 ```
 
 
-小幅更新：Release 说明统一为 GitHub 自动生成的更新日志格式。
+小幅更新：充值计算器扣减表显余量，余量足够的表不再多充。
 
-### 调整
+### 新增
 
-- release notes 末尾改为 GitHub「自动生成更新日志」同款 `**Full Changelog**` 版本对版本对比链接（替换原先指向提交 SHA 的「完整代码改动」链接）；补发旧版本时自动取版本号小于当前的最大 tag，避免生成倒序对比
-- 已有 v0.1.1 – v0.3.3 六个 release 的说明同步补齐该链接
+- 充值计算器把每块表最新抄表读数当作表显余量（表字）参与计算：需充值 = 预充天数 × 日均 − 余量×倍率；余量足够时该表建议 0 并标记「✓ 余量足够，本次无需充值」，不再越充余量越多
+- 卡片显示余量来源（表字数、折算度数、抄表日期）；「可用天数」改为真实值——余量足够时显示纯余量可用天数，需充值时显示充后可用天数；手动改表读数同样把余量计入
+- 四表建议均为 0 时提交申请给出明确提示「无需提交充值申请」
 
 ### ⬆️ 升级
 
-⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.3.3...v0.3.4
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.3.4...v0.3.5
 
