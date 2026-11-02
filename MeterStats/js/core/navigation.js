@@ -63,7 +63,9 @@ function _afterSectionShown(sectionId) {
         var cv = document.getElementById('chart-trend');
         // Chart.js 在 display:none 的容器里创建时 canvas 会是 0x0，
         // 之后 resize() 恢复不了 → 必须在可见后重建。
-        if (cv && cv.width === 0 && typeof renderTrendChart === 'function') {
+        // 每次进入都重建:录入抄表/充值后 CURRENT_* 已同步更新,
+        // 旧图表实例里的数据不会自动变,只有重建才能反映最新抄表数据。
+        if (cv && typeof renderTrendChart === 'function') {
           renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
         } else if (typeof trendChart !== 'undefined' && trendChart) {
           trendChart.resize();

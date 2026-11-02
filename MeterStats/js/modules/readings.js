@@ -602,6 +602,15 @@ function refreshAndRenderTables() {
         State.set("charges", charges.sort(function(a, b) { return a.date.localeCompare(b.date); }));
         renderChargeTable(State.get("charges"));
 
+        // 同步全局快照:每日趋势图/统计卡/单天下拉/单天复制/每月统计读的是
+        // CURRENT_* 而非 State,不同步会导致录入抄表后报表页仍是旧数据,
+        // 必须刷新网页或重新登入才能看到。
+        window.CURRENT_READINGS = State.get("readings");
+        window.CURRENT_CHARGES = State.get("charges");
+        if (typeof refreshDayCopySelect === 'function') {
+            refreshDayCopySelect(window.CURRENT_READINGS, window.CURRENT_CHARGES);
+        }
+
         return Api.utilities.list();
     }).then(function(water) {
         State.set("water", water.sort(function(a, b) { return a.date.localeCompare(b.date); }));
@@ -630,6 +639,10 @@ async function renderAll() {
         console.warn('snapshot 失败:', e);
         // 回退：各模块自行加载
     }
+
+    // 同步全局快照(与 refreshAndRenderTables 同理,报表模块读的是 CURRENT_*)
+    window.CURRENT_READINGS = State.get("readings");
+    window.CURRENT_CHARGES = State.get("charges");
 
     // 2. 渲染所有模块的表格
     renderReadingTable(State.get("readings"));
