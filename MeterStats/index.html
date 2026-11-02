@@ -1009,7 +1009,7 @@
         <input type="number" id="topup-days-modal" class="field-control" value="30" min="1" step="1"
                oninput="recalcTopup()"
                style="width:90px;padding:6px 10px;">
-        <span style="font-size:12px;color:var(--text-muted);">天 × 本月日均 = 需充值度数</span>
+        <span style="font-size:12px;color:var(--text-muted);">天 × 日均 − 表显余量 = 需充值度数</span>
       </div>
       <div id="topup-result-modal" style="display:flex;flex-direction:column;gap:8px;"></div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
@@ -1017,7 +1017,8 @@
         <input type="text" id="topup-total-modal" class="field-control" readonly style="flex:1;background:var(--bg-subtle);">
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
-        💡 表读数 = 充值录入时填写的值;实际度数 = 表读数 × 倍率;金额 = 实际度数 × 0.9 元
+        💡 最新抄表读数就是表显余量(表字);需充值 = 天数 × 日均 − 余量×倍率,余量足够则建议 0 不用充<br>
+        💡 表读数 = 充值录入时填写的值;实际度数 = 表读数 × 倍率;金额 = 实际度数 × 电价
       </div>
     </div>
     <div class="modal-actions">

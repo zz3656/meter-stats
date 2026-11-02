@@ -1110,26 +1110,46 @@ function recalcTopup() {
   }
   var totalMeter = 0, totalActual = 0, totalYuan = 0;
   var rows = '';
+  // 抄表读数即表显余量(表字):取每块表最近一次抄表读数 × 倍率 = 当前剩余度数
+  var sorted = rs.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
   for (var i = 0; i < CHARGE_METERS.length; i++) {
     var m = CHARGE_METERS[i];
+    var mult = MULTIPLIER(m.key);
     var usage = calcMonthlyDailyUsage(rs, CURRENT_CHARGES, m.key);
     var daily = usage ? usage.daily : 0;
-    var actualKwh = daily * days;
-    var meterVal = actualKwh / MULTIPLIER(m.key);
-    var yuan = actualKwh * ELECTRICITY_PRICE;
-    totalMeter += meterVal; totalActual += actualKwh; totalYuan += yuan;
     var basis = usage ? '<span style="opacity:.7">' + (usage.basisLabel || '本月日均') + '</span>' : '暂无日均数据';
-    var mult = MULTIPLIER(m.key);
-    var daysLeft = daily > 0 ? (actualKwh / daily) : 0;
-    rows += '<div class="topup-meter-card" data-daily="' + daily.toFixed(4) + '">' +
+
+    var latest = null;
+    for (var j = sorted.length - 1; j >= 0; j--) {
+      if (sorted[j][m.key] != null) { latest = sorted[j]; break; }
+    }
+    var balMeter = latest ? latest[m.key] : null;          // 表显余量(表字)
+    var balKwh = balMeter != null ? balMeter * mult : null; // 余量(实际度数)
+
+    // 需充值 = 预充天数 × 日均 − 现有余量;余量足够则建议 0(不再多充)
+    var needKwh = daily * days;
+    var toBuyKwh = balKwh != null ? Math.max(0, needKwh - balKwh) : needKwh;
+    var meterVal = toBuyKwh / mult;
+    var yuan = toBuyKwh * ELECTRICITY_PRICE;
+    totalMeter += meterVal; totalActual += toBuyKwh; totalYuan += yuan;
+
+    var daysLeft = daily > 0 ? ((balKwh || 0) + toBuyKwh) / daily : 0;
+    var enough = balKwh != null && daily > 0 && toBuyKwh <= 0;
+    var balText = balMeter != null
+      ? '余量 ' + balMeter + ' 表字(≈' + Math.round(balKwh) + ' 度,' + latest.date + ' 抄表)'
+      : '未录余量';
+    rows += '<div class="topup-meter-card" data-daily="' + daily.toFixed(4) + '" data-balkwh="' + (balKwh == null ? '' : balKwh) + '">' +
       '<div class="topup-meter-row">' +
         '<span class="topup-meter-name">' + m.meterNo + m.label + '</span>' +
         '<input type="number" class="field-control topup-meter" value="' + Math.round(meterVal) + '" step="1" data-mult="' + mult + '" oninput="updateTopupFromMeter(this)" title="表读数(充值录入值,可修改取整,自动刷新度数和金额)">' +
         '<span class="topup-mult">×' + mult + '</span>' +
-        '<span class="topup-actual-val" title="实际度数 = 表读数 × 倍率(自动计算,不可修改)">' + Math.round(actualKwh) + '</span>' +
+        '<span class="topup-actual-val" title="本次需充值度数 = 天数 × 日均 − 表显余量×倍率(自动计算,不可修改)">' + Math.round(toBuyKwh) + '</span>' +
         '<span class="topup-yuan">≈ ¥' + Math.round(yuan) + '</span>' +
       '</div>' +
-      '<div class="topup-meter-meta">日均 ' + Math.round(daily) + ' 度/天 ' + basis + ' <span class="topup-daysleft">≈ 可用 ' + Math.round(daysLeft) + ' 天</span></div>' +
+      '<div class="topup-meter-meta">日均 ' + Math.round(daily) + ' 度/天 ' + basis + ' · ' + balText +
+        ' <span class="topup-daysleft">' + (enough ? '余量 ≈ 可用 ' : '充后 ≈ 可用 ') + Math.round(daysLeft) + ' 天</span>' +
+        (enough ? ' <span style="color:var(--success);font-weight:600;">✓ 余量足够,本次无需充值</span>' : '') +
+      '</div>' +
     '</div>';
   }
   resultEl.innerHTML = rows;
@@ -1147,8 +1167,10 @@ function updateTopupFromMeter(input) {
   row.querySelector('.topup-actual-val').textContent = Math.round(actual);
   row.querySelector('.topup-yuan').textContent = '≈ ¥' + Math.round(actual * ELECTRICITY_PRICE);
   var daily = parseFloat(row.getAttribute('data-daily')) || 0;
-  var daysLeft = daily > 0 ? actual / daily : 0;
-  row.querySelector('.topup-daysleft').textContent = '≈ 可用 ' + Math.round(daysLeft) + ' 天';
+  var balKwh = parseFloat(row.getAttribute('data-balkwh'));
+  if (isNaN(balKwh)) balKwh = 0; // 该表没抄过数则视为无余量
+  var daysLeft = daily > 0 ? (balKwh + actual) / daily : 0;
+  row.querySelector('.topup-daysleft').textContent = '充后 ≈ 可用 ' + Math.round(daysLeft) + ' 天';
   var daysEl = document.getElementById('topup-days-modal');
   if (daysEl) daysEl.disabled = true;
   updateTopupTotal();
@@ -1180,7 +1202,7 @@ function submitTopupApplication() {
     total += v;
   });
   if (!cards.length) { showAlert('请先计算充值度数', 'error'); return; }
-  if (total <= 0) { showAlert('四表充值度数不能全为 0', 'error'); return; }
+  if (total <= 0) { showAlert('各表余量均足够(建议充值均为 0),无需提交充值申请', 'error'); return; }
   Api.charges.create(charge).then(function() {
     showAlert('✓ 充值申请已提交(待确认)，确认到账后计入统计', 'success');
     closeTopupModal();
