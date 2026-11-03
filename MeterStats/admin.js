@@ -1,5 +1,12 @@
 // ===== 后台管理: 全局会话 =====
-let ADMIN_TOKEN = localStorage.getItem('meter_admin_token');
+let ADMIN_TOKEN = localStorage.getItem('token') || localStorage.getItem('meter_admin_token');
+
+// 统一的 token 读取口。历史上有 'token' / 'meter_admin_token' / 'meter_token' 三种键名，
+// 登录后实际只写 'token'，另两个是死键 —— 导致刷新后掉登录态、备份下载/删除永远不带 token。
+// 现在所有需要 token 的代码都走这里，不要再直接读 localStorage。
+function currentAuthToken() {
+  return ADMIN_TOKEN || localStorage.getItem('token') || '';
+}
 let ADMIN_USER = null;
 
 const ROLE_NAMES = { admin: '管理员', supervisor: '主管', employee: '员工' };
@@ -10,6 +17,7 @@ const ADMIN_MANAGE_ROLES = new Set(['admin']);
 
 // ===== 初始化: 有token则验证, 否则显示登录页 =====
 function initAuth() {
+  showLoginVersion();
   if (ADMIN_TOKEN) {
     // Store in localStorage so Api.* can use it
     localStorage.setItem('token', ADMIN_TOKEN);
@@ -28,19 +36,39 @@ function initAuth() {
   }
 }
 
+// 登录页显示版本号：/api/version 无需登录即可访问，取不到就整行隐藏
+function showLoginVersion() {
+  var el = document.getElementById('login-version');
+  if (!el) return;
+  fetch('/api/version').then(function(r) {
+    return r.ok ? r.json() : null;
+  }).then(function(d) {
+    el.textContent = (d && d.version) ? ('版本 v' + d.version) : '';
+    if (!el.textContent) el.style.display = 'none';
+  }).catch(function() {
+    el.style.display = 'none';
+  });
+}
+
 // 验证通过后: 隐藏登录页, 显示主应用
 function setLoggedIn(user) {
   ADMIN_USER = user;
   document.getElementById('logout-btn').style.display = '';
   document.getElementById('login-page').style.display = 'none';
   // admin-user-info was in the removed popup modal
+  // 鉴权通过才允许加载业务数据（后端 /api/* 已强制 token）
+  if (typeof window.loadAppData === 'function') window.loadAppData();
 }
 
 // 无权限时: 显示登录页
 function clearAuth() {
   ADMIN_TOKEN = null;
   ADMIN_USER = null;
+  // 'token' 才是登录后实际写入的键，之前只删了死键 meter_admin_token，
+  // 导致登出后 api.js 仍能读到旧 token。三个键一律清掉。
+  localStorage.removeItem('token');
   localStorage.removeItem('meter_admin_token');
+  localStorage.removeItem('meter_token');
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
 }
@@ -70,10 +98,16 @@ async function doLogin() {
 
   try {
     const res = await Api.system.login(username, password);
+    // 登录失败时后端仍返回 HTTP 200 + {ok:false}，Api 包装器不会抛错，
+    // 必须在这里显式校验，否则会把 undefined 当 token 直接进入主界面。
+    if (!res || res.ok !== true || !res.token || !res.user) {
+      errEl.textContent = (res && res.error) ? res.error : '登录失败，请重试';
+      errEl.style.display = 'block';
+      return;
+    }
     ADMIN_TOKEN = res.token;
     localStorage.setItem('token', ADMIN_TOKEN);
-    setLoggedIn(res.user);
-    renderAll();
+    setLoggedIn(res.user);  // 内部会触发 loadAppData，不要再 renderAll() 一次
   } catch (e) {
     // 如果健康检查失败，显示更友好的错误提示
     if (retries === 0) {
@@ -473,7 +507,7 @@ function formatBytes(bytes) {
 
 function downloadBackup(zipName) {
   // 下载备份 zip（使用 zip_name 参数）
-  const token = localStorage.getItem('meter_token');
+  const token = currentAuthToken();
   const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
   const a = document.createElement('a');
   a.href = url;
@@ -496,7 +530,7 @@ async function deleteBackup(zipName) {
   });
   if (!ok) return;
 
-  const token = localStorage.getItem('meter_token');
+  const token = currentAuthToken();
   const url = `/api/admin/backup-delete?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
   try {
     const res = await fetch(url, { method: 'GET' });
@@ -516,7 +550,7 @@ async function deleteBackup(zipName) {
 // 统一备份恢复（后台管理和数据管理弹窗共用）
 async function restoreBackup(zipName) {
   showAlert('正在下载备份文件…', 'info');
-  const token = localStorage.getItem('meter_token');
+  const token = currentAuthToken();
   const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
 
   try {
@@ -559,7 +593,7 @@ async function restoreBackup(zipName) {
 async function adminRestoreFromZip(zipName) {
   // 先下载到本地
   showAlert('正在下载备份文件…', 'info');
-  const token = localStorage.getItem('meter_token');
+  const token = currentAuthToken();
   const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
 
   const btn = document.querySelector('#admin-page-data button[onclick^="adminRestore"]');
@@ -609,7 +643,7 @@ async function adminRestoreFromZip(zipName) {
 // 数据管理弹窗中从备份列表恢复
 async function datamgmtRestoreFromZip(zipName) {
   showAlert('正在下载备份文件…', 'info');
-  const token = localStorage.getItem('meter_token');
+  const token = currentAuthToken();
   const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
 
   const btn = document.getElementById('datamgmt-restore-btn');
@@ -821,7 +855,8 @@ function loadRolesInfo() {
 
 // ===== 通用工具 =====
 function getAuthParam() {
-  return ADMIN_TOKEN ? '?token=' + encodeURIComponent(ADMIN_TOKEN) : '';
+  var t = currentAuthToken();
+  return t ? '?token=' + encodeURIComponent(t) : '';
 }
 
 // ===== 备份目录：选择 / 保存 =====
@@ -920,15 +955,18 @@ function submitReadingAdd(source) {
     list.forEach(function(r) {
       if (r.date && r.date < row.date && (!prev || r.date > prev.date)) prev = r;
     });
-    var ups = [];
+    var rises = [];   // { key, label, deltaMeter } —— 保留数值，后面估算充值数要用
     if (prev) {
       [['hall', '大厅'], ['fire', '消防'], ['private_room', '包厢'], ['ac', '空调']].forEach(function(m) {
         var nv = row[m[0]], pv = prev[m[0]];
         if (nv !== null && typeof pv === 'number' && nv > pv) {
-          ups.push(m[1] + ' +' + Math.round((nv - pv) * 100) / 100);
+          rises.push({ key: m[0], label: m[1], deltaMeter: nv - pv });
         }
       });
     }
+    var ups = rises.map(function(r) {
+      return r.label + ' +' + Math.round(r.deltaMeter * 100) / 100;
+    });
     var proceed = function() {
       var existing = list.find(function(r) { return r.date === row.date; });
       if (existing) {
@@ -951,7 +989,8 @@ function submitReadingAdd(source) {
           '② 是否录入了错误的字段（如把 A 表的数填到了 B 表）。',
         confirmText: '已充值，继续保存', confirmKind: 'primary',
         cancelText: '修正' }).then(function(ok) {
-          if (!ok) showAlert('已返回录入，请检查修正后重新保存', 'info');
+          // 「已充值，继续保存」= 确认上升合理，继续走保存流程（覆盖检查 + 提交）
+          if (ok) { proceed(); } else { showAlert('已返回录入，请检查修正后重新保存', 'info'); }
         });
     } else { proceed(); }
 
@@ -967,9 +1006,93 @@ function submitReadingAdd(source) {
         if (paths.programming) document.getElementById(paths.programming).checked = false;
         if (source === 'modal') closeReadingAddModal();
         refreshAndRender();
+        // 抄表已保存；若表底上升却找不到对应充值记录，再追问一句，避免"忘了录充值"导致统计失真
+        maybePromptReadingRiseCharge(row, prev, rises);
       }).catch(function(err) { showAlert('保存失败: ' + err.message, 'error'); }).finally(function() { setSubmitting(false); });
     }
   });
+}
+
+// 抄表保存后：表底上升但找不到对应充值记录 → 提示补录，并把估算值预填进充值表单。
+// 预付费表的钱一旦打进表，表底立刻上升；但充值记录要人手工录。漏录会让余量、
+// 日均、报表全部失真，所以这里主动追问，而不是等用户自己去对账。
+function maybePromptReadingRiseCharge(row, prev, rises) {
+  if (!prev || !rises || !rises.length) return;
+
+  var charges = (typeof CURRENT_CHARGES !== 'undefined' && CURRENT_CHARGES) || [];
+  var inWindow = charges.filter(function(c) {
+    var rec = (c && c.date) || '';
+    var land = (typeof chargeEffectiveDate === 'function') ? chargeEffectiveDate(c) : rec;
+    return (rec >= prev.date && rec <= row.date) || (land >= prev.date && land <= row.date);
+  });
+  // 已有已确认(或历史无状态)的充值 → 说明录过了，不再打扰
+  if (inWindow.some(function(c) { return c.status !== 'pending'; })) return;
+
+  var detail = rises.map(function(r) {
+    return r.label + ' +' + (Math.round(r.deltaMeter * 10) / 10) + ' 表字';
+  }).join('　');
+
+  if (inWindow.length) {
+    // 有申请单但状态还是待确认：钱已进表，只差确认到账
+    showModal({
+      title: '有充值待确认到账', icon: '💡', iconKind: 'info',
+      body: '<strong>' + row.date + '</strong> 的表底比上一条记录（' + prev.date + '）升高了：<br><br>' +
+        '<strong>' + detail + '</strong><br><br>' +
+        '找到 ' + inWindow.length + ' 笔<strong>待确认</strong>的充值申请。钱已经打进表了的话，' +
+        '去确认到账，余量和报表才会把它算进去。',
+      confirmText: '去确认到账', confirmKind: 'primary', cancelText: '稍后'
+    }).then(function(ok) { if (ok) gotoChargeTab(); });
+    return;
+  }
+
+  showModal({
+    title: '充值数据是否没录入？', icon: '💡', iconKind: 'info',
+    body: '抄表已保存。<strong>' + row.date + '</strong> 的表底比上一条（' + prev.date + '）升高了：<br><br>' +
+      '<strong>' + detail + '</strong><br><br>' +
+      '表底上升说明这段时间充过值，但没找到对应的充值记录。现在补录吗？<br>' +
+      '<span style="opacity:.7;font-size:12px;">充值数按「上升量 + 这段时间的日均消耗」估算，取整到十位，可自行修改。</span>',
+    confirmText: '去补录充值', confirmKind: 'primary', cancelText: '稍后再说'
+  }).then(function(ok) { if (ok) prefillChargeFromRise(row, prev, rises); });
+}
+
+function gotoChargeTab() {
+  if (typeof switchSection === 'function') switchSection('reading-record');
+  if (typeof switchRecordTab === 'function') switchRecordTab('charge');
+}
+
+// 按表底上升量 + 日均估算各表充值数（表字，取整到十位），预填进「新增充值」表单
+function prefillChargeFromRise(row, prev, rises) {
+  gotoChargeTab();
+  var ids = { hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac' };
+  Object.keys(ids).forEach(function(k) {
+    var el = document.getElementById(ids[k]);
+    if (el) el.value = '';
+  });
+
+  var days = (new Date(row.date) - new Date(prev.date)) / 86400000;
+  if (!(days > 0)) days = 1;
+  var readings = (typeof CURRENT_READINGS !== 'undefined' && CURRENT_READINGS) || [];
+  var charges = (typeof CURRENT_CHARGES !== 'undefined' && CURRENT_CHARGES) || [];
+  var filled = [];
+
+  rises.forEach(function(r) {
+    var mult = MULTIPLIER(r.key);
+    var usage = calcMonthlyDailyUsage(readings, charges, r.key);
+    var dailyKwh = usage ? usage.daily : 0;
+    var est = r.deltaMeter + (dailyKwh * days) / mult;      // 上升量 + 这段用掉的
+    var v = est >= 10 ? Math.round(est / 10) * 10 : Math.round(est);  // 充值都是整数，不存在个位
+    var el = document.getElementById(ids[r.key]);
+    if (el) el.value = v;
+    filled.push(r.label + ' ' + v);
+  });
+
+  var d = document.getElementById('charge-add-date');
+  if (d) d.value = row.date;                                 // 表数异常的那一天
+  var note = document.getElementById('charge-add-note');
+  if (note && !note.value) note.value = '抄表发现表底上升，补录（' + filled.join('、') + '）';
+
+  openChargeAddModal();
+  showAlert('已按日均估算预填，核对后提交', 'info');
 }
 
 // 抄表/水电弹窗管理
@@ -1110,8 +1233,7 @@ function recalcTopup() {
   }
   var totalMeter = 0, totalActual = 0, totalYuan = 0;
   var rows = '';
-  // 抄表读数即表显余量(表字):取每块表最近一次抄表读数 × 倍率 = 当前剩余度数
-  var sorted = rs.slice().sort(function(a, b) { return a.date.localeCompare(b.date); });
+  // 表显余量走 remainingBalance():最近一次抄表读数 + 已到账未抄表的充值
   for (var i = 0; i < CHARGE_METERS.length; i++) {
     var m = CHARGE_METERS[i];
     var mult = MULTIPLIER(m.key);
@@ -1119,12 +1241,11 @@ function recalcTopup() {
     var daily = usage ? usage.daily : 0;
     var basis = usage ? '<span style="opacity:.7">' + (usage.basisLabel || '本月日均') + '</span>' : '暂无日均数据';
 
-    var latest = null;
-    for (var j = sorted.length - 1; j >= 0; j--) {
-      if (sorted[j][m.key] != null) { latest = sorted[j]; break; }
-    }
-    var balMeter = latest ? latest[m.key] : null;          // 表显余量(表字)
-    var balKwh = balMeter != null ? balMeter * mult : null; // 余量(实际度数)
+    // 余量 = 最新抄表读数 + 已到账但还没抄进读数的充值（今天充的钱，明天抄表才看得见，
+    // 但钱已经在表里了，不能等到明天才算）
+    var bal = remainingBalance(CURRENT_CHARGES, m.key);
+    var balMeter = bal.hasReading ? bal.meterVal : null;   // 表显余量(表字)
+    var balKwh = bal.hasReading ? bal.kwh : null;          // 余量(实际度数)
 
     // 需充值 = 预充天数 × 日均 − 现有余量;余量足够则建议 0(不再多充)
     var needKwh = daily * days;
@@ -1136,7 +1257,8 @@ function recalcTopup() {
     var daysLeft = daily > 0 ? ((balKwh || 0) + toBuyKwh) / daily : 0;
     var enough = balKwh != null && daily > 0 && toBuyKwh <= 0;
     var balText = balMeter != null
-      ? '余量 ' + balMeter + ' 表字(≈' + Math.round(balKwh) + ' 度,' + latest.date + ' 抄表)'
+      ? '余量 ' + (Math.round(balMeter * 10) / 10) + ' 表字(≈' + Math.round(balKwh) + ' 度,' + bal.readingDate + ' 抄表'
+        + (bal.extraKwh > 0 ? ' + 已到账未抄表 ' + Math.round(bal.extraKwh) + ' 度' : '') + ')'
       : '未录余量';
     rows += '<div class="topup-meter-card" data-daily="' + daily.toFixed(4) + '" data-balkwh="' + (balKwh == null ? '' : balKwh) + '">' +
       '<div class="topup-meter-row">' +

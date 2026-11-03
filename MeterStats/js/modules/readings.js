@@ -404,7 +404,7 @@ function renderChargeTable(charges) {
 
     var monthSel = document.getElementById('record-month') || document.getElementById('charge-month');
     var month = monthSel ? monthSel.value : '';
-    var filtered = month ? (charges || []).filter(function(c) { return c.date.startsWith(month); }) : charges;
+    var filtered = month ? (charges || []).filter(function(c) { return chargeEffectiveDate(c).startsWith(month); }) : charges;
 
     if (!charges || charges.length === 0 || filtered.length === 0) {
         tbody.innerHTML = '';
@@ -495,9 +495,10 @@ function renderChargeTable(charges) {
     });
 
     // 汇总(只计已确认到账的记录;待确认申请不计)
+    // 归月按实际到账日 chargeEffectiveDate —— 11-02 提申请、11-03 到账的记进 11-03 所在月
     var monthKey = month || formatDate(new Date()).slice(0, 7);
     var monthCharges = (charges || []).filter(function(c) {
-        return c.date.startsWith(monthKey) && c.status !== 'pending';
+        return chargeEffectiveDate(c).startsWith(monthKey) && c.status !== 'pending';
     });
     var monthCount = monthCharges.length;
     var monthKwh = 0;

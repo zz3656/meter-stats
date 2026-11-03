@@ -65,6 +65,78 @@ from modules.system.admin_tools_handler import (
 #   - modules.backup.admin_handler — 备份 HTTP API
 #   - modules.system.admin_tools_handler  — 辅助工具(目录/审计/迁移)
 
+# ============ 接口级鉴权(全局强制) ============
+# 仅以下三个端点允许匿名访问,其余 /api/* 一律要求有效会话:
+#   /api/health     — Docker HEALTHCHECK / run.sh 启动探测 / 登录页前置健康检查
+#   /api/version    — 登录页需要未登录也能显示版本号
+#   /api/auth/login — 取 token 的入口本身
+PUBLIC_API_PATHS = frozenset({"/api/health", "/api/version", "/api/auth/login"})
+
+# 删除类操作允许的角色,与前端 ADMIN_DELETE_ROLES 保持一致
+DELETE_ROLES = frozenset({"admin", "supervisor"})
+
+# 用户管理仅管理员:否则任何登录用户都能新建管理员账号自我提权
+ADMIN_ONLY_PREFIXES = ("/api/admin/users",)
+
+# 管理类接口至少主管:审计日志、备份删除/恢复、NAS 同步、电价倍率与图片目录配置
+# 这些不该由"只能录入抄表"的员工角色触碰,与前端 ADMIN_MANAGE_ROLES 的意图对齐。
+MANAGER_ONLY_PREFIXES = (
+    "/api/admin/audit",
+    "/api/admin/data-files",
+    "/api/admin/dir-listing",
+    "/api/admin/migrate-water",
+    "/api/admin/restore-upload",
+    "/api/admin/sync-from-nas",
+    "/api/admin/backup-delete",
+    "/api/admin/meter",
+    "/api/admin/images",
+    "/api/admin/auto-backup",
+    "/api/admin/backup-retention",
+    "/api/admin/backup-config",
+)
+MANAGER_ROLES = frozenset({"admin", "supervisor"})
+
+# 单元测试用 _do_api 直接跑业务逻辑时,可在 fixture 内置 False 跳过鉴权。
+# 生产启动路径不读任何环境变量,这个开关在进程内,外部配不出来。
+ENFORCE_AUTH = True
+
+
+def _auth_gate(method: str, path_clean: str, handler) -> bool:
+    """统一鉴权入口。放行返回 True;已发出 401/403 响应则返回 False。
+
+    token 由 _get_token 依次尝试 Cookie / ?token= / Authorization 头,
+    所以 <img src> 与 <a href> 这类带不了请求头的请求也能用 query 通过校验。
+    """
+    if not ENFORCE_AUTH or path_clean in PUBLIC_API_PATHS:
+        return True
+
+    from modules.system.permissions_handler import _get_token
+    from modules.system.auth_handler import get_session, _touch_session
+
+    token = _get_token(handler)
+    sess = get_session(token) if token else None
+    if not sess:
+        send_json(handler, 401, {"error": "未登录或会话已过期,请重新登录"})
+        return False
+
+    _touch_session(token)  # 有活动就续期,与 check_permission 装饰器行为一致
+    role = sess.get("role", "employee")
+
+    if method == "DELETE" and role not in DELETE_ROLES:
+        send_json(handler, 403, {"error": "权限不足: 删除需要主管或管理员权限"})
+        return False
+
+    if path_clean.startswith(ADMIN_ONLY_PREFIXES) and role != "admin":
+        send_json(handler, 403, {"error": "权限不足: 用户管理需要管理员权限"})
+        return False
+
+    if path_clean.startswith(MANAGER_ONLY_PREFIXES) and role not in MANAGER_ROLES:
+        send_json(handler, 403, {"error": "权限不足: 该操作需要主管或管理员权限"})
+        return False
+
+    return True
+
+
 _GET_ROUTES = {
     "/api/health": handle_get_health,
     "/api/version": handle_get_version,
@@ -188,6 +260,9 @@ def _route(method: str, handler, path: str) -> bool:
         return True
 
     # GET: 精确匹配 + 前缀匹配
+    if not _auth_gate(method, path_clean, handler):
+        return True  # 已经发了 401/403,不再往下分发
+
     if method == "GET":
         # 特殊路径: /api/duty/image/{filename}
         if path_clean.startswith("/api/duty/image/"):

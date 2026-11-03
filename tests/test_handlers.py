@@ -66,6 +66,12 @@ class TestApiBase(unittest.TestCase):
     """基类:每个测试用独立临时数据目录,隔离数据。"""
 
     def setUp(self):
+        # 本文件只回归业务逻辑，不带 token。routing._auth_gate 已对 /api/* 全局强制鉴权
+        # （见 tests/test_auth_enforcement.py），所以这里临时关闭开关，避免 401 干扰断言。
+        import routing
+        self._prev_enforce = routing.ENFORCE_AUTH
+        routing.ENFORCE_AUTH = False
+
         self.tmp = tempfile.TemporaryDirectory()
         self.data_dir = Path(self.tmp.name)
         paths = {
@@ -81,6 +87,8 @@ class TestApiBase(unittest.TestCase):
             p.write_text("[]", encoding="utf-8")
 
     def tearDown(self):
+        import routing
+        routing.ENFORCE_AUTH = self._prev_enforce
         self.tmp.cleanup()
 
     def call(self, method: str, path: str, body: Optional[dict] = None) -> FakeHandler:

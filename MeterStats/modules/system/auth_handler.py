@@ -36,6 +36,9 @@ _LOGIN_ATTEMPTS_LOCK = threading.Lock()
 _LOGIN_MAX_FAILED = 5       # 窗口内最大错误尝试次数
 _LOGIN_WINDOW_SECONDS = 60  # 1 分钟滑动窗口
 _LOGIN_COOLDOWN_SECONDS = 5 * 60  # 超限后冷却 5 分钟
+# 锁定到期时间:username -> 解锁时间戳。必须单独记,因为 _LOGIN_ATTEMPTS 只保留
+# 60 秒窗口内的记录,否则"锁 5 分钟"会在 60 秒后随记录被清理而自动失效。
+_LOGIN_LOCKOUT_UNTIL: dict = {}
 
 
 def _cleanup_expired_sessions():
@@ -64,34 +67,37 @@ def _cleanup_expired_sessions():
 def _check_login_rate_limit(username: str) -> tuple[bool, str]:
     """检查登录尝试是否超过速率限制。
 
-    使用滑动窗口算法:
-    - 1 分钟内最多错误尝试 5 次
-    - 超限后进入 5 分钟冷却期
-    - 只记录密码错误的尝试
+    策略:1 分钟滑动窗口内连续错满 5 次,才锁定该账号 5 分钟。
+    错 1 次（打错字、大写锁定）绝不锁人——之前这里写成"只要有任何失败记录就进
+    冷却",而失败记录的时间戳就是刚刚,cooldown_remaining 必然 > 0,导致输错一次
+    密码就被锁 5 分钟。
 
     返回: (allowed, message)
     """
     now = time.time()
     with _LOGIN_ATTEMPTS_LOCK:
-        attempts = _LOGIN_ATTEMPTS.get(username, [])
+        # 1) 先看是否在锁定期内（锁定状态单独记,不随 60 秒窗口被清掉）
+        until = _LOGIN_LOCKOUT_UNTIL.get(username, 0)
+        if until:
+            if now < until:
+                remain_min = -(-(until - now) // 60)  # 向上取整
+                return False, f"错误次数过多,请在 {int(remain_min)} 分钟后再试"
+            _LOGIN_LOCKOUT_UNTIL.pop(username, None)  # 冷却已过,自动解锁
 
-        # 清理过期记录(只保留窗口内)
+        # 2) 清理过期记录(只保留窗口内)
         window_start = now - _LOGIN_WINDOW_SECONDS
-        attempts = [a for a in attempts if a["timestamp"] > window_start]
+        attempts = [a for a in _LOGIN_ATTEMPTS.get(username, []) if a["timestamp"] > window_start]
         _LOGIN_ATTEMPTS[username] = attempts
 
-        # 检查是否处于冷却期
-        failed_attempts = [a for a in attempts if not a["success"]]
-        if failed_attempts:
-            last_failure = max(failed_attempts, key=lambda a: a["timestamp"])["timestamp"]
-            cooldown_remaining = _LOGIN_COOLDOWN_SECONDS - (now - last_failure)
-            if cooldown_remaining > 0:
-                remaining_sec = int(cooldown_remaining / 60) + 1
-                return False, f"尝试次数过多,请在 {remaining_sec} 分钟后再试"
-
-        # 检查窗口内错误尝试次数
-        if len(failed_attempts) >= _LOGIN_MAX_FAILED:
-            return False, f"尝试次数过多,请在 {_LOGIN_WINDOW_SECONDS // 60} 分钟后再试"
+        # 3) 窗口内错误次数达到阈值才触发锁定
+        failed = [a for a in attempts if not a["success"]]
+        if len(failed) >= _LOGIN_MAX_FAILED:
+            _LOGIN_LOCKOUT_UNTIL[username] = now + _LOGIN_COOLDOWN_SECONDS
+            _LOGIN_ATTEMPTS[username] = []
+            return False, (
+                f"连续 {_LOGIN_MAX_FAILED} 次密码错误,已临时锁定 "
+                f"{_LOGIN_COOLDOWN_SECONDS // 60} 分钟"
+            )
 
     return True, ""
 
@@ -99,9 +105,10 @@ def _check_login_rate_limit(username: str) -> tuple[bool, str]:
 def _record_login_attempt(username: str, success: bool) -> None:
     """记录登录尝试(仅记录密码错误的)。"""
     if success:
-        # 成功登录,清理该用户的所有历史记录(防止旧失败记录累积)
+        # 成功登录,清掉该用户的历史记录与锁定(防止旧失败记录累积)
         with _LOGIN_ATTEMPTS_LOCK:
             _LOGIN_ATTEMPTS[username] = []
+            _LOGIN_LOCKOUT_UNTIL.pop(username, None)
         return
 
     now = time.time()

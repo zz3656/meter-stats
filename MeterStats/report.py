@@ -25,6 +25,84 @@ TABLES = [
 ]
 
 
+def _landing_date(charge: dict) -> str:
+    """充值**实际到账**的日期。
+
+    已确认的取 `confirmed_at` 的日期(例:11-02 提交申请、11-03 财务打款到账 → 11-03);
+    待确认、或没有该字段的历史记录(7 条老数据 status 为 null)退回记录日期本身。
+    """
+    if charge.get("status") == "confirmed" and charge.get("confirmed_at"):
+        return str(charge["confirmed_at"])[:10]
+    return charge.get("date", "")
+
+
+def _charge_attribution(readings: list, charges: list) -> dict:
+    """把每笔充值归属到"它真正到账的那个抄表区间"。
+
+    预付费表:表底下降 = 用电,上升 = 刚到账。充值记录的 `date` 是当天算量提申请的日子,
+    真正到账看 `confirmed_at`,两者可能差一天甚至几天。旧口径 (上次, 本次] 无条件把
+    "本次抄表当天"的充值并进这一段用电量,等于把刚充进去、一度还没用的余额当成已经耗掉
+    的电(实测事故:大厅真实 656 度/天被算成 34256 度/天,建议充值 ¥113 万,还提示当天断电)。
+
+    归属规则(逐表独立判断,每笔只归属一次;下面 L = 实际到账日):
+      1. L 当天正好抄了表,且这次抄表相对上一次**上升** → 钱在抄表前就进表了,
+         归属"上一次 → 这一次"。
+      2. L 当天抄了表但没上升(抄表在到账前,或当天就把充进去的额度用光)→ 归属
+         "终点晚于 L 的第一个区间",那个终点读数必然已包含这笔充值。
+      3. L 落在两条读数正中间(当天没抄表) → 必然在这个区间到账,归属该区间。
+      4. L 之后还没有任何抄表 → 钱还没反映进表底,暂不归入任何区间,等下次抄表再算。
+
+    返回 {(区间起点日期, 区间终点日期): {meter_key: 表字数}}
+    """
+    rows = sorted(
+        [r for r in readings if r.get("date") and r.get("hall") is not None],
+        key=lambda r: r["date"],
+    )
+    date_index = {r["date"]: i for i, r in enumerate(rows)}
+    out: dict = {}
+
+    def _add(pair, key, amt):
+        slot = out.setdefault(pair, {})
+        slot[key] = slot.get(key, 0.0) + amt
+
+    for c in charges:
+        if c.get("status", "confirmed") == "pending":
+            continue  # 待确认的充值申请不计入任何统计
+        cdate = _landing_date(c)
+        for t in TABLES:
+            key = t["key"]
+            try:
+                amt = float(c.get(key, 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if amt == 0:
+                continue
+
+            if cdate in date_index:
+                i = date_index[cdate]
+                cur = rows[i].get(key)
+                prev = rows[i - 1].get(key) if i >= 1 else None
+                if i >= 1 and cur is not None and prev is not None and float(cur) > float(prev):
+                    # 规则 1:到账当天就抄了表,而且表底跳升 → 这笔钱已反映在该读数里
+                    _add((rows[i - 1]["date"], cdate), key, amt)
+                elif i + 1 < len(rows):
+                    # 规则 2:当天抄表没体现(抄表在到账前,或当天就用光了)
+                    #        → 归到下一个区间,那条终点读数必然已包含这笔充值
+                    _add((cdate, rows[i + 1]["date"]), key, amt)
+                # 规则 4:到账日之后还没有任何抄表 → 暂不归属,等下次抄表再算
+                continue
+
+            # 规则 1:充值日期不在任何抄表日 → 找包含它的那个区间
+            prev_row = None
+            for r in rows:
+                if r["date"] > cdate:
+                    if prev_row is not None:
+                        _add((prev_row["date"], r["date"]), key, amt)
+                    break  # 充值早于首条读数则无法归属
+                prev_row = r
+    return out
+
+
 def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     """计算指定月份的逐日逐表用电度数。
 
@@ -74,6 +152,9 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     month_total_kwh = 0.0
     sum_by_meter = {t["key"]: 0.0 for t in TABLES}
 
+    # 每笔充值归属到"表底真正跳升"的区间(见 _charge_attribution)
+    attribution = _charge_attribution(readings, charges)
+
     for X, Y in pairs:
         X_dt = datetime.strptime(X["date"], "%Y-%m-%d")
         Y_dt = datetime.strptime(Y["date"], "%Y-%m-%d")
@@ -81,21 +162,14 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
         if span <= 0:
             continue
 
-        # 找 (X_date, Y_date] 期间的充值(待确认的申请不计入统计)
-        charges_in_range = [
-            c for c in charges
-            if X["date"] < c.get("date", "") <= Y["date"]
-            and c.get("status", "confirmed") != "pending"
-        ]
+        credited = attribution.get((X["date"], Y["date"]), {})
 
-        # 计算每表的"原始用电 + 期间充值"
+        # 计算每表的"原始用电 + 本区间实际到账的充值"
         usage = {}
         for t in TABLES:
             X_val = float(X.get(t["key"], 0) or 0)
             Y_val = float(Y.get(t["key"], 0) or 0)
-            charge_sum = sum(
-                float(c.get(t["key"], 0) or 0) for c in charges_in_range
-            )
+            charge_sum = credited.get(t["key"], 0.0)
             u = (X_val - Y_val + charge_sum) * t["mult"]
             usage[t["key"]] = round(max(u, 0), 1)
 

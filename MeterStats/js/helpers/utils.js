@@ -86,9 +86,13 @@ window.copyTextWithFallback = function copyTextWithFallback(text, successMsg) {
   }
 };
 
-/** 值班记录图片的访问地址 */
+/** 值班记录图片的访问地址。
+ *  <img> 无法携带 Authorization 头，后端 _get_token 支持 ?token= 查询参数，
+ *  所以这里把 token 拼到 URL，否则强制鉴权后所有图片会 401。 */
 window.getDutyImageUrl = function getDutyImageUrl(filename) {
-  return `/api/duty/image/${filename}`;
+  var base = `/api/duty/image/${filename}`;
+  var t = (typeof currentAuthToken === 'function') ? currentAuthToken() : '';
+  return t ? (base + '?token=' + encodeURIComponent(t)) : base;
 };
 
 /**

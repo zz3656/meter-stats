@@ -19,7 +19,9 @@ function renderChargeAlert(readings, charges) {
     const latest = readings[readings.length - 1];
     const items = CHARGE_METERS.map(m => {
       const multiplier = MULTIPLIER(m.key);
-      const remaining = latest[m.key] * multiplier;
+      // 余量 = 最新表底 + 已到账但还没抄进读数的充值（否则今天充的钱要等明天才看得见）
+      const bal = remainingBalance(charges, m.key);
+      const remaining = bal.hasReading ? bal.kwh : (latest[m.key] != null ? latest[m.key] * multiplier : null);
       const usage = calcMonthlyDailyUsage(readings, charges, m.key);
       let daysLeft = Infinity, dailyUsage = null, basisLabel = '', hasUsage = false;
       if (usage) {
@@ -28,10 +30,10 @@ function renderChargeAlert(readings, charges) {
         basisLabel = usage.basisLabel;
         hasUsage = true;
       }
-      return { m, multiplier, remaining, usage, daysLeft, dailyUsage, basisLabel, hasUsage };
+      return { m, multiplier, remaining, bal, usage, daysLeft, dailyUsage, basisLabel, hasUsage };
     });
 
-    container.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
+    container.innerHTML = `<div class="stat-grid alert-grid">${items.map(({ m, multiplier, remaining, bal, daysLeft, dailyUsage, basisLabel, hasUsage }) => {
       let level, dotColor, statusText;
       if (!hasUsage) { level = 'pending'; dotColor = 'var(--text-muted)'; statusText = '等待数据'; }
       else if (daysLeft < 3) { level = 'danger'; dotColor = '#dc2626'; statusText = '紧急'; }
@@ -50,10 +52,15 @@ function renderChargeAlert(readings, charges) {
       const daysText = hasUsage ? `${daysLeft.toFixed(1)} 天` : '—';
       const dueDateStr = hasUsage && dailyUsage > 0 && daysLeft !== Infinity ? addDaysToDate(latest.date, daysLeft) : '';
       const multiplierHint = multiplier > 1 ? `<span style="opacity:0.6;font-size:10px;">×${multiplier}</span>` : '';
+      // 有已到账但还没抄进读数的充值时，说明余量的来源，避免看起来"凭空多出一块"
+      const creditHint = (bal && bal.extraKwh > 0)
+        ? `<div style="font-size:11px;color:var(--success);margin-top:2px;">含 ${Math.round(bal.extraKwh)} 度已到账未抄表（${bal.readingDate} 抄表 ${bal.readingMeterVal} 表字）</div>`
+        : '';
       return `
         <div class="stat-card ${cls} alert-stat-${level}">
           <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
-          <div class="value">${remaining.toFixed(0)}<small>度</small></div>
+          <div class="value">${remaining == null ? '—' : remaining.toFixed(0)}<small>度</small></div>
+          ${creditHint}
           <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
             <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${dotColor};margin-right:5px;vertical-align:middle;"></span>${daysText} · ${statusText}</span>
             ${dueDateStr ? `<span style="font-size:11px;opacity:0.85;">预计 ${dueDateStr} 断电</span>` : ''}
@@ -167,7 +174,7 @@ function renderStats(readings, charges) {
 
   // 本月充值金额(从独立的 charges 表算)
   // 用户填的充值度数 = 表度数,需要 ×160 才是实际度数
-  const monthCharges = charges.filter(c => c.date.startsWith(monthKey));
+  const monthCharges = charges.filter(c => chargeEffectiveDate(c).startsWith(monthKey));
   const monthChargeKwh = monthCharges.reduce((s, c) =>
     s + CHARGE_METERS.reduce((ss, m) => ss + realKwh(c[m.key] || 0, m.key), 0), 0);
   const monthChargeYuan = monthChargeKwh * ELECTRICITY_PRICE;

@@ -38,9 +38,10 @@ function loadAppVersion() {
     .catch(function() { el.textContent = ''; });
 }
 
-// 启动时先加载数据，再检查认证状态
-(async () => {
-  // 无论是否有 token，都先加载数据（快照接口不需要认证）
+// 需要登录才能加载的数据:抄表/充值快照、报表月份选项、电表配置、默认月报。
+// 后端已对 /api/* 全局强制鉴权（白名单只有 health/version/login），未登录调用会 401,
+// 因此这部分不能在启动时无条件跑,改由 admin.js 的 setLoggedIn() 在鉴权通过后调用。
+window.loadAppData = async function loadAppData() {
   await renderAll();
   // 报表分析: 加载月份和年份选项，供用户切换时渲染
   const reportMonth = document.getElementById('report-month');
@@ -72,17 +73,20 @@ function loadAppVersion() {
   // 更新待处理工作记录横幅
   checkDutyReminder();
 
-  // 侧栏底部显示版本号（/api/version 是公开接口）
-  loadAppVersion();
-
   // 加载电表配置（电价 / 倍率 / 水价）—— ELECTRICITY_PRICE 依赖它取后端值
   try { await loadMeterConfig(); } catch (e) { console.warn('loadMeterConfig 失败:', e); }
 
-  // 绑定报表下拉/按钮事件（重构后丢失，导致切换月份无反应）
-  bindReportEvents();
-
   // 预加载默认月份的报表（与旧版 DOMContentLoaded 行为一致）
   try { if (typeof loadMonthlyReport === 'function') await loadMonthlyReport(); } catch (e) { console.warn('默认月报加载失败:', e); }
+};
+
+// 启动时只做不依赖登录态的界面初始化
+(async () => {
+  // 侧栏底部显示版本号（/api/version 是公开接口）
+  loadAppVersion();
+
+  // 绑定报表下拉/按钮事件（重构后丢失，导致切换月份无反应）
+  bindReportEvents();
 
   // ⚠️ 必须显示默认页面：所有 .content-section 默认 display:none，
   // 不调用 switchSection 的话登录后主内容区是全空白。

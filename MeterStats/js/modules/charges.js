@@ -44,8 +44,8 @@ function deleteCharge(id) {
 function submitChargeAdd(source) {
     if (_submitting) return;
     var ids = source === 'sidebar'
-        ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private-room', ac: 'charge-ac', note: 'charge-note' }
-        : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private-room', ac: 'charge-add-ac', note: 'charge-add-note' };
+        ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private_room', ac: 'charge-ac', note: 'charge-note' }
+        : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac', note: 'charge-add-note' };
     var date = document.getElementById(ids.date).value;
     if (!date) { showAlert('请选择充值日期', 'error'); return; }
 
@@ -67,8 +67,8 @@ function submitChargeAdd(source) {
     Api.charges.create(charge).then(function() {
         showAlert('✓ ' + date + ' 充值记录已保存', 'success');
         var paths = source === 'sidebar'
-            ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private-room', ac: 'charge-ac', note: 'charge-note' }
-            : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private-room', ac: 'charge-add-ac', note: 'charge-add-note' };
+            ? { date: 'charge-date', hall: 'charge-hall', fire: 'charge-fire', private_room: 'charge-private_room', ac: 'charge-ac', note: 'charge-note' }
+            : { date: 'charge-add-date', hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac', note: 'charge-add-note' };
         ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(function(k) { document.getElementById(paths[k]).value = ''; });
         if (source === 'modal') closeChargeAddModal();
         refreshAndRender();

@@ -64,25 +64,56 @@ class TestMonthlyReport(unittest.TestCase):
         from report import invalidate_report_cache
         invalidate_report_cache()
 
-    def test_charge_on_reading_day_left_open_right_closed(self):
-        """充值日期 == 抄表日 Y 时,应划入下一段(X.date < c.date <= Y.date)。
-        例如 6/13 抄表且 6/13 充值 100 度,应算入 6/13→6/16 段。
+    def test_charge_on_reading_day_belongs_to_next_segment(self):
+        """充值日期 == 抄表日 Y 时,先看 Y 相对上一次是否**上升**。
+
+        预付费表表底上升才是"钱到账了"。6/5 抄表 80 比 6/1 的 100 更低,说明这笔
+        充值在 6/5 抄表之后才到账,所以它不属于 6/1→6/5 段;等 6/9 抄表看到表底从
+        80 跳到 275,才把它归属到 6/5→6/9 段。
+        旧口径 (X, Y] 无条件把 Y 当天的充值算进 X→Y 段,等于把刚充进去的余额当成
+        已经用掉的电,日均被顶高几十倍(实际事故:大厅 656 度/天被算成 34256 度/天)。
         """
-        # 构造最小场景: 6/1 抄表[hall=100], 6/5 抄表[hall=80], 6/5 充值[hall=10]
-        # (6/1, 6/5] = (100 - 80 + 10) × 160 = 4800,4 天均摊=1200
+        readings = [
+            {"date": "2026-06-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-05", "hall": 80.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-09", "hall": 275.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        charges = [
+            {"date": "2026-06-05", "hall": 200.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        r = calculate_monthly_report(readings, charges, "2026-06")
+        days = {d["date"]: d for d in r["days"]}
+        # 6/1→6/5 段不含充值:(100-80)×160 = 3200,4 天 → 800/天
+        self.assertEqual(days["2026-06-01"]["hall"], 800.0)
+        # 6/5→6/9 段含充值:(80-275+200)×160 = 800,4 天 → 200/天
+        self.assertEqual(days["2026-06-05"]["hall"], 200.0)
+
+    def test_charge_not_yet_credited_is_not_counted_as_usage(self):
+        """钱还没充进表(表底一直没跳升)时,不能被算成"本月已用电"。"""
         readings = [
             {"date": "2026-06-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
             {"date": "2026-06-05", "hall": 80.0, "fire": 0, "private_room": 0, "ac": 0},
         ]
-        # setUp 已清缓存,这里不需重复。
         charges = [
-            {"date": "2026-06-05", "hall": 10.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-05", "hall": 200.0, "fire": 0, "private_room": 0, "ac": 0},
         ]
         r = calculate_monthly_report(readings, charges, "2026-06")
+        # 只有 (100-80)×160 = 3200 度真实用电,充进去还没用的 200 表字不该混进来
+        self.assertEqual(r["summary"]["total_kwh"], 3200.0)
+
+    def test_charge_strictly_between_readings_always_counted(self):
+        """充值日期落在两条读数正中间(当天没抄表)→ 必然在该区间到账,照常计入。"""
+        readings = [
+            {"date": "2026-06-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-06-08", "hall": 50.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        charges = [
+            {"date": "2026-06-05", "hall": 5.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        r = calculate_monthly_report(readings, charges, "2026-06")
+        # (100-50+5)×160 = 8800,7 天 → 1257.1/天
         days = {d["date"]: d for d in r["days"]}
-        # 6/1 hall 应为 1200(总费用 4800/4 天的首天),验证半开半闭: 6/5 充值
-        # 属于 (6/1, 6/5] 段,被均摊到 6/1-6/4 这 4 天。
-        self.assertEqual(days["2026-06-01"]["hall"], 1200.0)
+        self.assertEqual(days["2026-06-01"]["hall"], 1257.1)
 
     def test_multi_meter_different_multipliers(self):
         """4 块表倍率不同(hall=160, fire=1, private_room=160, ac=160):
@@ -199,6 +230,87 @@ class TestMonthlyReport(unittest.TestCase):
         # 年度合计 >= 6 月单月(还有 7 月/8 月数据)
         self.assertGreaterEqual(y["year_total_kwh"], 71226.1)
         self.assertGreaterEqual(len(y["months"]), 2)
+
+
+class TestLandingDateAttribution(unittest.TestCase):
+    """充值归属以 confirmed_at(实际到账日)为准,不是申请日。
+
+    真实场景:11-02 提申请、11-03 财务打款到账。若按申请日 11-02 归区间,会把还没
+    进表的钱算成 11-01→11-02 的用电(实际事故:日均 656 被顶成 34256)。
+    """
+
+    def setUp(self):
+        from report import invalidate_report_cache
+        invalidate_report_cache()
+
+    @staticmethod
+    def _days(r):
+        return {d["date"]: d for d in r["days"]}
+
+    def test_confirmed_at_moves_credit_to_landing_interval(self):
+        """申请 11-02、到账 11-03;11-03 抄表表底跳升 → 归 11-02→11-03 段。"""
+        readings = [
+            {"date": "2026-11-01", "hall": 31.2, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-11-02", "hall": 27.1, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-11-03", "hall": 236.5, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        charges = [{
+            "date": "2026-11-02", "hall": 210.0, "fire": 0, "private_room": 0, "ac": 0,
+            "status": "confirmed", "confirmed_at": "2026-11-03T12:09:42.538541",
+        }]
+        days = self._days(calculate_monthly_report(readings, charges, "2026-11"))
+        # 11-01→11-02 段不该含充值:(31.2-27.1)×160 = 656
+        self.assertEqual(days["2026-11-01"]["hall"], 656.0)
+        # 11-02→11-03 段含充值:(27.1-236.5+210)×160 = 96
+        self.assertEqual(days["2026-11-02"]["hall"], 96.0)
+
+    def test_credit_consumed_same_day_still_counted(self):
+        """到账当天抄表但表底没上升(钱当天就被用光)→ 归下一个区间,不能整笔漏掉。"""
+        readings = [
+            {"date": "2026-11-01", "hall": 100.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-11-02", "hall": 95.0, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-11-05", "hall": 80.0, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        charges = [{
+            "date": "2026-11-01", "hall": 10.0, "fire": 0, "private_room": 0, "ac": 0,
+            "status": "confirmed", "confirmed_at": "2026-11-02T09:00:00",
+        }]
+        r = calculate_monthly_report(readings, charges, "2026-11")
+        # 11-02 抄到 95(比 100 低)说明这笔没体现在 11-02 读数里 → 归 11-02→11-05 段
+        #   11-01→11-02 段: (100-95)×160        = 800
+        #   11-02→11-05 段: (95-80+10)×160      = 4000
+        #   合计 = 4800
+        self.assertEqual(r["summary"]["total_kwh"], 4800.0)
+
+    def test_credit_after_last_reading_not_counted_yet(self):
+        """到账日之后还没抄表 → 钱还没进表底,不该算成任何一段的用电。"""
+        readings = [
+            {"date": "2026-11-01", "hall": 31.2, "fire": 0, "private_room": 0, "ac": 0},
+            {"date": "2026-11-02", "hall": 27.1, "fire": 0, "private_room": 0, "ac": 0},
+        ]
+        charges = [{
+            "date": "2026-11-02", "hall": 210.0, "fire": 0, "private_room": 0, "ac": 0,
+            "status": "confirmed", "confirmed_at": "2026-11-03T12:09:42",
+        }]
+        r = calculate_monthly_report(readings, charges, "2026-11")
+        self.assertEqual(r["summary"]["total_kwh"], 656.0)
+
+    def test_legacy_charge_without_confirmed_at_uses_record_date(self):
+        """历史记录 status/confirmed_at 为 null → 退回记录日期,保持 6 月 Excel 口径。"""
+        from report import _landing_date
+        self.assertEqual(_landing_date({"date": "2026-06-13"}), "2026-06-13")
+        self.assertEqual(_landing_date({"date": "2026-06-13", "status": None}), "2026-06-13")
+        self.assertEqual(
+            _landing_date({"date": "2026-11-02", "status": "confirmed",
+                           "confirmed_at": "2026-11-03T12:09:42"}),
+            "2026-11-03",
+        )
+        self.assertEqual(
+            _landing_date({"date": "2026-11-02", "status": "pending", "confirmed_at": None}),
+            "2026-11-02",
+        )
+        r = calculate_monthly_report(READINGS, CHARGES, "2026-06")
+        self.assertEqual(r["summary"]["total_kwh"], 71226.1)
 
 
 if __name__ == "__main__":
