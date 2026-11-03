@@ -21,6 +21,8 @@ from utils.api import _validate_zip_safely
 _BACKUP_EXCLUDED_SETTINGS_KEYS = frozenset({
     "backup_dir",              # 宿主机绝对路径
     "backup_retention_count",  # 保留天数
+    "nas_sync_user",           # 远端 NAS 账号(部署相关)
+    "nas_sync_pass",           # 远端 NAS 密码(绝不能进备份 ZIP)
 })
 
 

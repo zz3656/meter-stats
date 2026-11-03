@@ -611,6 +611,18 @@ function refreshAndRenderTables() {
         if (typeof refreshDayCopySelect === 'function') {
             refreshDayCopySelect(window.CURRENT_READINGS, window.CURRENT_CHARGES);
         }
+        // 余量预警卡必须在这里重绘:它只在 renderAll() 里被调用过,而录入/修改/删除
+        // 抄表走的都是 refreshAndRender()。不重绘 → 卡片停在上一个版本,表现为
+        //「已录入今日抄表,『含 N 度已到账未抄表』的绿色提示却不消失」(卡里还是旧余量)。
+        // 放在 CURRENT_* 同步之后,保证卡里用的是刚拉回来的新数据。
+        if (typeof renderChargeAlert === 'function') {
+            renderChargeAlert(State.get("readings"), State.get("charges"));
+        }
+        // 每月用电统计(「每月用电」页的 4 张卡)也只在 renderAll() 里被重绘过 ——
+        // 录入抄表后那一页会停留在旧数字,和余量预警卡是同一个毛病,一起补上。
+        if (typeof renderStats === 'function') {
+            renderStats(State.get("readings"), State.get("charges"));
+        }
 
         return Api.utilities.list();
     }).then(function(water) {
@@ -674,8 +686,18 @@ async function renderAll() {
 
     // 4. 触发饼图（如果可见）
     if (typeof triggerVisiblePie === 'function') triggerVisiblePie();
-    if (typeof renderMonthlyPie === 'function') renderMonthlyPie(State.get("readings"));
-    if (typeof renderDailyPie === 'function') renderDailyPie(State.get("readings"));
+    // 饼图要传「选中的月份 / 日期」,不是整个 readings 数组:
+    // renderMonthlyPie(monthKey) 内部用 r.date.startsWith(monthKey) 过滤,
+    // renderDailyPie(dateStr) 内部拿它跟抄表日期比较。传数组会算出空数据,
+    // 反而把刚刚渲染好的饼图又藏起来(显示 none)。
+    if (typeof renderMonthlyPie === 'function') {
+        var mSel = document.getElementById('report-month');
+        if (mSel && mSel.value) renderMonthlyPie(mSel.value);
+    }
+    if (typeof renderDailyPie === 'function') {
+        var dSel = document.getElementById('day-copy-date');
+        if (dSel && dSel.value) renderDailyPie(dSel.value);
+    }
 
     // 5. 更新状态栏
     updateStatusBar(State.get("readings"), State.get("charges"));

@@ -3,7 +3,74 @@
  *
  * 通过本地后端 /api/proxy/nas-data 代理请求 NAS，解决 WKWebView 跨域问题。
  * 拉取数据后通过 /api/admin/sync-from-nas 写入本地文件。
+ *
+ * ⚠️ 远端实例从 v0.4.1 起全局启用接口鉴权,拉数据必须带会话。
+ *    代理会用本机保存的远端账号密码(nas_sync_user / nas_sync_pass)登录换 token,
+ *    所以同步前必须先在「数据管理 → 从 NAS 同步」里保存凭据。
  */
+
+/** 读取已保存的 NAS 同步配置。密码不回传,只显示"是否已配置"。 */
+async function loadNasConfig() {
+  const userInput = document.getElementById('nas-sync-user-input');
+  const passInput = document.getElementById('nas-sync-pass-input');
+  const urlInput = document.getElementById('nas-sync-url-input');
+  const hint = document.getElementById('nas-config-hint');
+  if (!userInput && !passInput && !urlInput) return;
+
+  try {
+    const res = await Api.admin.nasConfig();
+    if (userInput) userInput.value = res.nas_user || '';
+    if (urlInput && res.nas_url) urlInput.value = res.nas_url;
+    if (passInput) {
+      passInput.value = '';
+      passInput.placeholder = res.nas_pass_set ? '已配置（留空表示不改动）' : '远端密码';
+    }
+    if (hint) {
+      hint.textContent = res.nas_pass_set
+        ? '✅ 已配置远端账号：' + (res.nas_user || '—') + '（密码已保存，留空即不改动）'
+        : '⚠️ 尚未配置远端账号密码 —— 远端 v0.4.1 起接口需要登录，填好账号密码才能同步。';
+    }
+  } catch (e) {
+    if (hint) hint.textContent = '读取 NAS 配置失败: ' + (e.message || e);
+  }
+}
+
+/** 保存远端 NAS 账号密码（密码留空 = 不改动已保存的值）。 */
+async function saveNasConfig() {
+  const btn = document.getElementById('save-nas-config-btn');
+  const userInput = document.getElementById('nas-sync-user-input');
+  const passInput = document.getElementById('nas-sync-pass-input');
+  const urlInput = document.getElementById('nas-sync-url-input');
+
+  const user = (userInput?.value || '').trim();
+  const pass = passInput?.value || '';
+  const url = (urlInput?.value || '').trim();
+
+  if (!user) {
+    showAlert('请填写远端账号', 'info');
+    userInput?.focus();
+    return;
+  }
+
+  const body = { nas_user: user, nas_url: url };
+  if (pass) body.nas_pass = pass;   // 留空表示"保持原密码"
+
+  const original = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '保存中…'; }
+  try {
+    const res = await Api.admin.saveNasConfig(body);
+    if (res && res.ok) {
+      showAlert('✅ NAS 凭据已保存', 'success');
+      await loadNasConfig();
+    } else {
+      showAlert('保存失败: ' + ((res && res.error) || '未知错误'), 'error');
+    }
+  } catch (e) {
+    showAlert('保存失败: ' + (e.message || e), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = original; }
+  }
+}
 
 // 从 NAS 同步按钮点击处理
 async function adminSyncFromNAS() {

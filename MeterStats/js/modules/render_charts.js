@@ -173,11 +173,42 @@ function copyTextWithFallback(text, successMsg) {
 // 每日用电折线图 — 4 块表各自折线 + 充电叠加
 function renderTrendChart(readings, charges) {
   readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
-  const ctx = document.getElementById('chart-trend').getContext('2d');
+  // ⚠ 这里曾经用 `ctx.canvas.parentElement.innerHTML = ...` 渲染空态，
+  // 那会把整个 <canvas id="chart-trend"> 从 DOM 里删掉。之后每次调用都在
+  // 下面 getContext 处抛 TypeError(null.getContext)，而调用方
+  // (readings.js renderAll / navigation.js _afterSectionShown) 都用 try/catch
+  // 静默吞掉异常 → 「每日趋势」页永远显示“录入抄表数据后查看每日用电”，
+  // 概况卡全空，录入抄表后也不刷新。
+  // 现在：canvas 与空态节点并存，只切换显隐；canvas 真的缺失时才重建。
+  const wrap = document.getElementById('trend-chart-wrap');
+  if (!wrap) return;
+  let canvas = document.getElementById('chart-trend');
+  let emptyEl = document.getElementById('trend-empty');
+  if (!canvas || !emptyEl) {
+    // 兜底:历史版本可能已把 canvas 删掉,这里重建(图表实例随后也会重建)
+    wrap.innerHTML = '';
+    canvas = document.createElement('canvas');
+    canvas.id = 'chart-trend';
+    wrap.appendChild(canvas);
+    emptyEl = document.createElement('div');
+    emptyEl.id = 'trend-empty';
+    emptyEl.className = 'empty';
+    emptyEl.textContent = '录入抄表数据后查看每日用电';
+    wrap.appendChild(emptyEl);
+  }
+  const ctx = canvas.getContext('2d');
+
   if (!readings || readings.length === 0) {
-    ctx.canvas.parentElement.innerHTML = '<div class="empty">录入抄表数据后查看每日用电</div>';
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    canvas.style.display = 'none';
+    if (emptyEl) emptyEl.style.display = 'block';
+    // 概况卡不能留着上一轮的数字
+    const emptyStat = document.getElementById('trend-stat-grid');
+    if (emptyStat) emptyStat.innerHTML = '';
     return;
   }
+  canvas.style.display = 'block';
+  if (emptyEl) emptyEl.style.display = 'none';
 
   // X 轴:从首次抄表日到最新抄表日,每天一个点
   const sorted = [...readings].sort((a, b) => a.date.localeCompare(b.date));

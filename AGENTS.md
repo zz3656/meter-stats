@@ -11,7 +11,7 @@
 | 重启服务 | `./run.sh restart` |
 | 查看日志 | `./run.sh logs` |
 | Docker 启动 | `docker compose up -d` (镜像 `zz3656/meter-stats`) |
-| 单元测试 | `python3 -m unittest discover -s tests -v` (88 tests, ~1s) |
+| 单元测试 | `python3 -m unittest discover -s tests -v` (147 tests, ~2s) |
 | 构建 macOS .app | `./build-app.sh release --install` (需要 Xcode) |
 | Ruff 检查 | `ruff check .` (line-length 100, ignore E501) |
 | MyPy 类型检查 | `mypy .` (strict mode, py39) |
@@ -59,10 +59,11 @@ MeterStats/
 - **存储**: JSON 文件 + 原子写入 (写 tmp 再 rename) + `threading.Lock` 行级锁。数据目录: Docker 用 `METER_DATA_DIR`(默认 `/data`), macOS `.app` 用 `~/Library/Application Support/com.meter.stats/`, 本地源码运行用 `MeterStats/.data/`。
 - **前端**: 纯 HTML/CSS/JS, 无构建步骤。Chart.js 通过 CDN 加载。JS 文件按功能拆到 `js/` 目录,在 `index.html` 中 `<script>` 引入。
 - **提交规范**: 约定式提交 (feat/fix/refactor/docs/style/scope)。`./run.sh` 首次运行自动设置 `.gitmessage` 为 commit template。
-- **版本号**: 唯一来源是 `MeterStats/VERSION`。**只在推送前确定一次**——开发过程中反复改动不要逐次递增版本号,等用户本地测试通过、准备提交推送时再统一敲定并合并 `CHANGELOG.md` 章节。递增规则:小幅更新末位 +1,破坏性更新中间位 +1;GitHub Release 与 Docker 镜像标签由 CI 依据此文件自动发布,不要新建其他 VERSION 文件。
+- **版本号**: 唯一来源是 `MeterStats/VERSION`。**只在推送前确定一次**——开发过程中反复改动不要逐次递增版本号,等用户本地测试通过、准备提交推送时再统一敲定并合并 `CHANGELOG.md` 章节。递增规则:小幅更新末位 +1,破坏性更新中间位 +1;GitHub Release 与 Docker 镜像标签由 CI 依据此文件自动发布,不要新建其他 VERSION 文件。`Dockerfile` 会把 `VERSION` 复制进镜像,`server.py` 启动时读取并经公开接口 `GET /api/version` 暴露;CI 同时推 `latest` 与 `0.4.x` 两个标签(同一 digest)。
+- **Docker 升级**: 必须显式 `docker compose pull && docker compose up -d`——Docker **从不会主动检查远端仓库**,本地已有镜像时 `up -d` 既不提示也不拉取(所以"没有新版本提示"是 Docker 的设计行为,不是故障);`docker compose down && up` 同样不会拉新镜像。仓库根脚本 `scripts/docker-update.sh` 封装了 pull + up + 打印更新前后版本号,兼容 Compose v1/v2。`docker/docker-compose.yml` 用 `zz3656/meter-stats:latest`(部署用),仓库根 `docker-compose.yml` 用 `meter-stats:local`(本地构建,`pull` 会失败)。`pull_policy: always` 仅 Compose v2 支持,写在注释里按需开启。
 - **接口鉴权 (v0.4.1 起)**: 统一在 `routing.py` 的 `_auth_gate()` 拦截,挂在 `_route()` 这个唯一入口上——**新增接口默认就带鉴权,不需要单独加**。白名单只有 `GET /api/health`(Docker HEALTHCHECK / run.sh 探测 / 登录页健康检查)、`GET /api/version`(登录页未登录也要显示版本号)、`POST /api/auth/login`(取 token 的入口);要新增公开接口必须显式加进 `PUBLIC_API_PATHS`,并同步确认 `tests/test_auth_enforcement.py` 的预期。角色分层:任何登录用户可读/录入,`DELETE` 需主管或管理员,`/api/admin/users` 仅管理员(否则任何登录用户能建管理员账号自我提权),审计/数据文件/目录列表/NAS 同步/备份删除/电价配置/图片目录等管理接口需主管及以上。token 由 `permissions_handler._get_token()` 依次尝试 Cookie → `?token=` → `Authorization: Bearer`,所以 `<img src>` / `<a href>` 这类拿不到请求头的访问必须把 token 拼进 query。前端**只能**通过 `admin.js` 的 `currentAuthToken()` 取 token——历史上有 `token` / `meter_admin_token` / `meter_token` 三套键名,后两个是死键(导致刷新掉登录、备份下载永远不带 token),不要再直接读 localStorage。`ENFORCE_AUTH` 只给单元测试关业务回归的鉴权用,生产不读环境变量。
 - **充值与用电口径**: 预付费表表底下降=用电、上升=刚到账。充值记录的 `date` 是**申请日**,真正到账时间看 `confirmed_at`(11-02 提申请、11-03 打款到账)。用电归属按 `report.py::_charge_attribution()`(前端 `meterConfig.js::chargeAttribution()`,两套规则必须保持一致)把每笔充值归到它实际到账的抄表区间:到账日当天抄表且表底上升→归上一段;当天没上升→归下一段;到账日落在两段中间→归该区间;之后没抄表→暂不归属。**不要**再用日期窗口 `(上次,本次]` 硬切——那会把刚充进表、一度还没用的余额当成已用电量,日均被顶高几十倍(实际事故:大厅 656 度/天被算成 34256 度/天)。归月统计一律走 `chargeEffectiveDate()`(已确认取 `confirmed_at`,否则取 `date`)。口径变更必须先用 2026 年 6 月 Excel 核对值 **71226.1 度** 回归验证。待确认(`status: pending`)的充值不计入任何统计。
-- **测试**: `tests/` 下 7 个测试文件, 119 个用例。运行: `python3 -m unittest discover -s tests -v`。业务回归在 `TestApiBase.setUp` 里显式关闭鉴权开关;鉴权与限速分别由 `test_auth_enforcement.py`、`test_login_rate_limit.py` 覆盖。
+- **测试**: `tests/` 下 10 个测试文件, 147 个用例。运行: `python3 -m unittest discover -s tests -v`。业务回归在 `TestApiBase.setUp` 里显式关闭鉴权开关;鉴权与限速分别由 `test_auth_enforcement.py`、`test_login_rate_limit.py` 覆盖。
 
 ## Pitfalls
 

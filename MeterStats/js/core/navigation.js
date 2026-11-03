@@ -171,6 +171,8 @@ function switchSettingsPage(page) {
     if (typeof loadImageDirConfig === 'function') loadImageDirConfig();
     if (typeof loadBackupDirConfig === 'function') loadBackupDirConfig();
     if (typeof loadBackupList === 'function') loadBackupList();
+    // NAS 同步凭据(远端 v0.4.1 起接口需要登录,面板要显示是否已配置)
+    if (typeof loadNasConfig === 'function') loadNasConfig();
   }
   if (page === 'roles' && typeof loadRolesInfo === 'function') loadRolesInfo();
 }

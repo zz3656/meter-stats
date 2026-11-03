@@ -422,11 +422,113 @@ def _friendly_net_error(exc: Exception, url: str) -> str:
     return f"无法连接 {url}：{msg}"
 
 
+# ============ 远端 NAS 认证 ============
+
+# NAS 前面通常挂了 Cloudflare/反向代理,默认的 "Python-urllib/3.x" UA 会被
+# WAF 直接拦成 403 Forbidden,所以所有对远端的请求都要伪装成浏览器。
+_BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+               "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+
+
+class NasAuthError(Exception):
+    """远端 NAS 认证失败。消息面向用户,直接展示。"""
+
+
+def _nas_login_token(nas_url: str) -> str:
+    """登录远端实例换取会话 token。失败抛 NasAuthError(消息面向用户)。
+
+    凭据存在本地 settings.json 的 nas_sync_user / nas_sync_pass,
+    由「数据管理 → 从 NAS 同步」面板填写。
+    """
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    settings = get_settings()
+    username = (settings.get("nas_sync_user") or "").strip()
+    password = settings.get("nas_sync_pass") or ""
+    if not username or not password:
+        raise NasAuthError(
+            "未配置 NAS 账号密码:请在「数据管理 → 从 NAS 同步」填入远端实例的账号密码后重试"
+        )
+
+    login_url = f"{nas_url}/api/auth/login"
+    payload = _json.dumps({"username": username, "password": password}).encode("utf-8")
+    req = urllib.request.Request(
+        login_url,
+        data=payload,
+        headers={"Content-Type": "application/json", "User-Agent": _BROWSER_UA},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=35) as resp:
+            body = _json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        raise NasAuthError(f"登录远端失败（HTTP {e.code}）：{login_url}") from e
+    except Exception as e:
+        raise NasAuthError(f"无法连接远端 {nas_url}：{e}") from e
+
+    # 远端登录失败也返回 HTTP 200,错误在 body.ok / body.error 里
+    if not body.get("ok") or not body.get("token"):
+        raise NasAuthError(f"远端登录被拒绝：{body.get('error') or '账号或密码不正确'}")
+
+    return str(body["token"])
+
+
+def handle_get_nas_config(handler):
+    """GET /api/admin/nas-config → { ok, nas_user, nas_pass_set, nas_url }
+
+    只回传"是否已配置密码",绝不把密码本身送回浏览器。
+    """
+    settings = get_settings()
+    send_json(handler, 200, {
+        "ok": True,
+        "nas_user": settings.get("nas_sync_user") or "",
+        "nas_pass_set": bool(settings.get("nas_sync_pass")),
+        "nas_url": settings.get("nas_sync_url") or "",
+    })
+
+
+def handle_put_nas_config(handler):
+    """PUT /api/admin/nas-config → 保存远端 NAS 的账号密码
+
+    body: { nas_user: str, nas_pass?: str, nas_url?: str }
+      - nas_pass 不传 → 保持原密码不变
+      - nas_pass 为 "" → 清除密码
+      - nas_pass 非空 → 覆盖密码
+    """
+    body = read_body(handler) or {}
+    settings = get_settings()
+
+    if "nas_user" in body:
+        settings["nas_sync_user"] = (body.get("nas_user") or "").strip()
+    if "nas_url" in body:
+        settings["nas_sync_url"] = (body.get("nas_url") or "").strip()
+    if "nas_pass" in body:
+        pwd = body.get("nas_pass") or ""
+        if pwd:
+            settings["nas_sync_pass"] = pwd
+        else:
+            settings.pop("nas_sync_pass", None)
+
+    save_settings(settings)
+    send_json(handler, 200, {
+        "ok": True,
+        "nas_user": settings.get("nas_sync_user") or "",
+        "nas_pass_set": bool(settings.get("nas_sync_pass")),
+        "nas_url": settings.get("nas_sync_url") or "",
+    })
+
+
 def handle_get_proxy_nas_data(handler):
     """GET/POST /api/proxy/nas-data — 代理从 NAS 拉取数据文件
 
     前端通过此接口获取 NAS 上的所有 JSON 数据文件内容。
     解决了 WKWebView 中跨域请求 NAS 被浏览器拒绝的问题。
+
+    ⚠️ 远端实例从 v0.4.1 起全局启用接口鉴权,/api/admin/data-files 没有会话
+       必返 401("未登录或会话已过期")。所以这里先用本地保存的远端账号密码
+       POST /api/auth/login 换 token,再带着 token 去拉数据。
 
     GET 参数: url=<nas_url>
     POST body: { nasUrl: "<nas_url>" }
@@ -458,6 +560,14 @@ def handle_get_proxy_nas_data(handler):
 
     api_url = f"{nas_url}/api/admin/data-files"
 
+    # 先登录远端换 token（远端接口需要会话）
+    try:
+        token = _nas_login_token(nas_url)
+    except NasAuthError as e:
+        log(f"[PROXY] NAS 认证失败: {e}")
+        send_json(handler, 200, {"ok": False, "error": str(e)})
+        return
+
     # 通过本地后端发起请求（不走浏览器，无 CORS 限制）
     try:
         import urllib.request
@@ -465,9 +575,10 @@ def handle_get_proxy_nas_data(handler):
         # ⚠️ 必须伪装成浏览器：NAS 前面通常挂了 Cloudflare/反向代理，
         # 默认的 "Python-urllib/3.x" UA 会被 WAF 直接拦成 403 Forbidden，
         # 前端看到的就是"同步失败: 无法连接 NAS: HTTP Error 403"。
-        req.add_header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36")
+        req.add_header("User-Agent", _BROWSER_UA)
         req.add_header("Accept", "application/json, text/plain, */*")
+        # 带远端会话 token —— 远端 v0.4.1 起该接口强制鉴权
+        req.add_header("Authorization", f"Bearer {token}")
         # 外网（走 Cloudflare 等）比内网慢，20s 容易在冷启动时超时
         with urllib.request.urlopen(req, timeout=35) as resp:
             import json
@@ -522,11 +633,45 @@ def handle_post_sync_from_nas(handler):
         target_file = target_dir / name
         if name in DATA_FILES.values() or name == "settings.json":
             try:
-                target_file.write_text(content, encoding="utf-8")
+                if name == "settings.json":
+                    # ⚠️ settings.json 必须"合并"而不是"覆盖" —— 远端实例并不知道
+                    # 本机的部署字段(nas_sync_user/nas_sync_pass/nas_sync_url/backup_dir)。
+                    # 直接覆盖会导致:同步一次 → 本机 NAS 凭据被清空 → 下次同步直接失败。
+                    # 与三条恢复路径保持一致,统一走 _merge_settings_after_restore。
+                    import json as _json
+                    try:
+                        src_settings = _json.loads(content)
+                    except ValueError as e:
+                        errors.append(f"跳过 settings.json: 不是合法 JSON ({e})")
+                        continue
+                    if not isinstance(src_settings, dict):
+                        errors.append("跳过 settings.json: 不是对象结构")
+                        continue
+                    _merge_settings_after_restore(target_dir, src_settings)
+                else:
+                    target_file.write_text(content, encoding="utf-8")
                 restored.append(name)
                 log(f"  同步写入 {name}")
             except Exception as e:
                 errors.append(f"{name}: {e}")
+
+    # 同步进来的文件是直接 write_text 写的,绕过了 storage.save_json,
+    # 所以这里必须手动失效两层缓存:
+    #   1) JSON 文件缓存(storage)—— 否则读到的是同步前的旧内容
+    #   2) 月报缓存(report)  —— 否则最长 5 分钟内报表还是旧值,
+    #      看起来像"同步没生效"(用户会以为同步失败又点一次)
+    try:
+        from storage import _cache_invalidate
+        for name in restored:
+            _cache_invalidate(str((target_dir / name).resolve()))
+    except Exception as e:
+        log(f"[SYNC] 失效文件缓存失败: {e}")
+    try:
+        from report import invalidate_report_cache
+        invalidate_report_cache()
+        log("[SYNC] 已失效月报缓存")
+    except Exception as e:
+        log(f"[SYNC] 失效月报缓存失败: {e}")
 
     send_json(handler, 200, {
         "ok": True,

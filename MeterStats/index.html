@@ -706,7 +706,12 @@
         <div id="trend-stat-grid" class="trend-stat-grid"></div>
 
         <!-- 每日用电构成（堆叠柱状：4 块表叠成当天总量） -->
-        <div class="chart-wrap"><canvas id="chart-trend"></canvas></div>
+        <!-- ⚠ canvas 与空态节点必须并存：renderTrendChart 只切换两者显隐，
+             绝不能用 innerHTML 覆盖容器把 canvas 删掉（删掉后就再也回不来了）。 -->
+        <div class="chart-wrap" id="trend-chart-wrap">
+          <canvas id="chart-trend"></canvas>
+          <div id="trend-empty" class="empty" style="display:none;">录入抄表数据后查看每日用电</div>
+        </div>
 
         <!-- 当日明细：左文字右饼图 -->
         <div id="daily-pie-wrap" style="margin-top:20px;display:none;">
@@ -945,8 +950,14 @@
           <input type="text" id="nas-sync-url-input" placeholder="外网 lin.icafe.top　内网 172.16.254.250:8765" class="field-control data-grow">
           <button class="btn btn-primary btn-xs" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
         </div>
+        <div class="data-actions" style="margin-top:8px;">
+          <input type="text" id="nas-sync-user-input" placeholder="远端账号（如 admin）" class="field-control" autocomplete="off">
+          <input type="password" id="nas-sync-pass-input" placeholder="远端密码" class="field-control" autocomplete="new-password">
+          <button class="btn btn-secondary btn-xs" onclick="saveNasConfig()" id="save-nas-config-btn">💾 保存凭据</button>
+        </div>
+        <div class="panel-desc data-hint" id="nas-config-hint">加载中...</div>
         <div class="panel-desc data-hint">
-          从远程实例拉取数据覆盖本地（同步前自动备份当前数据）。外网域名会走 https，内网 IP 走 http；<strong>内网环境建议优先填内网地址</strong>，比走公网快得多。
+          从远程实例拉取数据覆盖本地（同步前自动备份当前数据）。外网域名会走 https，内网 IP 走 http；<strong>内网环境建议优先填内网地址</strong>，比走公网快得多。远端实例从 v0.4.1 起接口需要登录，<strong>必须先保存远端账号密码</strong>；密码只存在本机 settings.json，不会写进备份 ZIP。
         </div>
       </div>
 

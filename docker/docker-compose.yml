@@ -6,11 +6,19 @@
 # 默认: admin / admin123
 # 启动: docker compose up -d
 # 停止: docker compose down
+#
+# 🔄 升级: docker compose pull && docker compose up -d
+#    ⚠️ Docker 从不主动检查远端仓库:本地已有镜像时 `up -d` 既不提示也不拉取,
+#       必须显式 pull。想省事可用仓库里的脚本:bash scripts/docker-update.sh
+#    (若你的环境是 Compose v2,还可以取消下面 pull_policy 的注释,
+#     以后 `up -d` 就会每次自动检查并更新;Compose v1 不支持该选项,
+#     打开会导致容器启动报 Unsupported config option)
 # ============================================================
 
 services:
   meter-stats:
     image: zz3656/meter-stats:latest
+    # pull_policy: always   # 需 Compose v2;打开后 `up -d` 会自动检查并拉取新镜像
     container_name: meter-stats
     restart: unless-stopped
     ports:

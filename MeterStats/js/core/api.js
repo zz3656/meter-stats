@@ -161,6 +161,9 @@ var Api = (() => {
         auditLog: function() { return _request('GET', '/api/admin/audit'); },
         sessions: function() { return _request('GET', '/api/admin/sessions'); },
         syncFromNAS: function(url) { return _request('POST', '/api/admin/sync-from-nas', { url: url }); },
+        // NAS 同步凭据(远端 v0.4.1 起接口需要登录,本机保存远端账号密码)
+        nasConfig: function() { return _request('GET', '/api/admin/nas-config'); },
+        saveNasConfig: function(data) { return _request('PUT', '/api/admin/nas-config', data); },
     };
 
     // 备份/恢复 API (2个端点) — 独立于 admin，数据管理页面用

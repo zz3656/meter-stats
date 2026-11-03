@@ -110,9 +110,10 @@ macOS 应用其实是把 Python runtime 打包进 `.app` bundle 里的同一份�
 
 ```bash
 # Docker 镜像升级
-docker pull zz3656/meter-stats:latest
-docker compose down && docker compose up -d
-# 数据通过 ./data 持久化,升级不会丢失
+# ⚠️ 必须显式 pull:本地已有镜像时 Docker 不会去查仓库,`up -d` 既不提示也不拉新镜像
+docker compose pull && docker compose up -d
+# 数据通过 ./data 持久化,升级不会丢失;升级后需重新登录一次
+# 一键脚本(含更新前后版本对比):bash scripts/docker-update.sh
 
 # macOS 应用升级
 # 从 GitHub Releases 下载新版 DMG 覆盖安装即可
@@ -185,7 +186,7 @@ docker compose down && docker compose up -d
 │   ├── docker-publish.yml       # push main → 自动构建并推送镜像
 │   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
-├── tests/                       # 单元测试(88 用例)
+├── tests/                       # 单元测试(147 用例)
 ├── docs/                        # 架构文档
 │   ├── ARCHITECTURE.md
 │   └── architecture-api-contract.md

@@ -53,6 +53,7 @@ from modules.backup.admin_handler import (
     handle_post_restore_upload,
     handle_post_sync_from_nas,
     handle_get_proxy_nas_data,
+    handle_get_nas_config, handle_put_nas_config,
 )
 from modules.system.admin_tools_handler import (
     handle_get_dir_listing, handle_get_audit_log,
@@ -93,6 +94,7 @@ MANAGER_ONLY_PREFIXES = (
     "/api/admin/auto-backup",
     "/api/admin/backup-retention",
     "/api/admin/backup-config",
+    "/api/admin/nas-config",
 )
 MANAGER_ROLES = frozenset({"admin", "supervisor"})
 
@@ -188,6 +190,7 @@ _PUT_PREFIX = {
     "/api/admin/auto-backup": handle_put_auto_backup,
     "/api/admin/backup-retention": handle_put_backup_retention,
     "/api/admin/backup-config": handle_put_backup_config,
+    "/api/admin/nas-config": handle_put_nas_config,
     "/api/duty": handle_put_duty,
 }
 
@@ -218,6 +221,7 @@ _GET_ADMIN = {
     "/api/admin/data-files": handle_get_data_files,
     "/api/admin/sessions": handle_get_sessions,
     "/api/admin/report-cache": handle_get_report_cache,
+    "/api/admin/nas-config": handle_get_nas_config,
 }
 
 def _match_prefix(paths, path_clean):

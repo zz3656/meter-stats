@@ -1,16 +1,27 @@
 # ============================================================
-# 工程部管理系统 — Docker Compose
+# 工程部管理系统 — Docker Compose(本地开发用)
 # ============================================================
-# 镜像: zz3656/meter-stats:latest
+# 镜像: meter-stats:local(本地构建标签,不在 Docker Hub 上)
+#       部署到 NAS / 服务器请用 docker/docker-compose.yml(zz3656/meter-stats:latest)
 # 访问: http://localhost:8765
 # 默认: admin / admin123
-# 启动: docker compose up -d
+# 启动: docker compose up -d --build
 # 停止: docker compose down
+#
+# ⚠️ 这个文件是**本地构建**用的,镜像只存在于本机:
+#    `docker compose pull` 会去 Docker Hub 找 meter-stats:local 并失败。
+#    要拉远端已发布镜像请改用 docker/docker-compose.yml,
+#    或直接 bash scripts/docker-update.sh
 # ============================================================
 
 services:
   meter-stats:
     image: meter-stats:local
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      args:
+        BUILD_ID: local
     container_name: meter-stats
     restart: unless-stopped
     ports:

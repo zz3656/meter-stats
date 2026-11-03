@@ -542,6 +542,16 @@ function refreshMonthSelectors() {
     fillSelect('stats-month', opts);
     fillSelect('record-month', allOpts, allMonths);
 
+    // ⚠ 三张表的月份过滤读的是 #record-month 的「当前值」，而下拉正是在这里
+    //   才被填上的。renderAll() 的顺序是「先渲染表格 → 后刷新选择器」，
+    //   首屏表格拿到的是空值（不过滤）→ 渲染出所有月份的记录，
+    //   下拉却显示 2026-11。填完下拉必须重绘三张表，两边才对得上。
+    if (typeof renderReadingTable === 'function') renderReadingTable(State.get('readings'));
+    if (typeof renderChargeTable === 'function') renderChargeTable(State.get('charges'));
+    // renderWaterTable() 只在 renderReadingTable() 有数据时才会被顺带调用，
+    // 这里显式调用一次：选中的月份没有抄表但有水电时，水电表也要跟着过滤。
+    if (typeof renderWaterTable === 'function') renderWaterTable();
+
     // 月度报告月份
     var reportSel = document.getElementById('report-month');
     if (reportSel) {
@@ -608,7 +618,7 @@ async function checkAndPromptMigration() {
     window.MIGRATION_CHECKED = true;
 
     try {
-        var status = await Api.adminTools.migrateWaterStatus();
+        var status = await Api.migrate.waterStatus();
         if (!status || !status.needs_migration) return;
 
         var waterDates = status.water_dates || [];
@@ -640,7 +650,7 @@ async function checkAndPromptMigration() {
 
         // 执行迁移
         try {
-            var result = await Api.adminTools.migrateWater();
+            var result = await Api.migrate.water();
             if (result.ok) {
                 showAlert('✅ 迁移完成！' + result.migrated_count + ' 条水电记录已分离。', 'success');
                 if (typeof refreshAndRender === 'function') refreshAndRender();

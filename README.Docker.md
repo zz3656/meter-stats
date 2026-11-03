@@ -84,7 +84,30 @@ docker run -d --name meter-stats -p 8765:8765 \
 ## 🔄 升级
 
 ```bash
-docker compose down && docker compose up -d
+docker compose pull && docker compose up -d
+```
+
+> **为什么不能只写 `docker compose up -d`？**
+> Docker **从不会主动检查远端仓库有没有新镜像**。只要本地已经存在 `zz3656/meter-stats:latest`
+> 这份镜像,`up -d` 就会直接拿本地这份用,既不提示、也不拉取——所以你看不到"有新版本"的提示。
+> 只有显式 `pull` 才会去比对仓库里的 digest 并下载新镜像,`up -d` 随后发现镜像 ID 变了会自动重建容器。
+> 过去常见的"先 `docker rmi` 删掉本地镜像再 `up`" 之所以有效,是因为删掉之后本地没有了,
+> `up` 才会被动去拉——但那不是必要步骤,直接 `pull` 就行。
+>
+> 数据存放在挂载卷里,升级不会丢失。升级后需重新登录一次(会话在服务端内存,重启即失效)。
+>
+> 想确认当前跑的是哪个版本:
+> ```bash
+> curl -s http://localhost:8765/api/version    # → {"version":"0.4.2"}
+> ```
+> 镜像同时推送了 `latest` 与 `0.4.x` 两个标签(同一 digest),需要锁定版本时把 compose 里的
+> `image:` 改成 `zz3656/meter-stats:0.4.2` 即可。
+
+一键升级(含更新前后版本对比,兼容 `docker compose` v2 与 `docker-compose` v1):
+
+```bash
+bash scripts/docker-update.sh          # 在仓库根目录执行
+bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文件
 ```
 
 ---
