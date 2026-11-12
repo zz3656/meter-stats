@@ -83,6 +83,188 @@ function chargeEffectiveDate(c) {
  */
 let _chargeAttrCache = null;
 
+/* ===== 充值与抄表的一致性校验 =====
+ *
+ * 预付费表的物理事实:表底下降 = 用电,表底上升 = 刚到账。一笔 X 表字的充值如果真的
+ * 到账了,它被归属的那个区间里表底必然"净升";否则该区间的用电量 =(表底差 + X) 会
+ * 离谱到不可能。
+ *
+ * 实测事故(2026-11-11):有人把当天抄表读数(205.7 / 1706.5 / 197.6 / 138.9)填进了
+ * 充值栏,系统照单全收。大厅凭空多出 205.7 × 160 = 32912 度,一天总用电被顶到
+ * 89588.8 度(真实 1130.3 度),月报被顶到 102700.7 度(真实 14242.2 度)。
+ *
+ * 规则必须与后端 report.find_charge_conflicts() 完全一致,两边都得改。
+ */
+const CHARGE_CONFLICT_FACTOR = 3;        // 允许"单区间用电"超出该表历史日均的倍数
+const CHARGE_CONFLICT_FLOOR_KWH = 300;   // 阈值下限(度),给小表兜底
+
+/** 两日之间隔了几天 */
+function _chargeDaysBetween(d1, d2) {
+  return Math.round((new Date(d2) - new Date(d1)) / 86400000);
+}
+
+/** 该表的历史"单日用电"上限(度/天)—— 原始表底差按区间天数摊平 */
+function _chargeDailyCapKwh(rows, key) {
+  const mult = MULTIPLIER(key);
+  let best = 0;
+  for (let i = 0; i < rows.length - 1; i++) {
+    const days = _chargeDaysBetween(rows[i].date, rows[i + 1].date);
+    if (days <= 0) continue;
+    const d = (rows[i][key] - rows[i + 1][key]) * mult;
+    if (d > 0 && d / days > best) best = d / days;
+  }
+  return best;
+}
+
+/** 这笔充值会被归属到哪个区间 —— 与 chargeAttribution() 用同一套分支 */
+function _chargeSegment(rows, key, cdate) {
+  const idx = rows.findIndex(r => r.date === cdate);
+  if (idx >= 0) {
+    const cur = rows[idx][key];
+    const prev = idx >= 1 ? rows[idx - 1][key] : null;
+    if (idx >= 1 && cur != null && prev != null && cur > prev) return [idx - 1, idx]; // 规则 1
+    if (idx + 1 < rows.length) return [idx, idx + 1];                                   // 规则 2
+    return null;                                                                       // 规则 4
+  }
+  let prevIdx = null;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].date > cdate) return prevIdx !== null ? [prevIdx, i] : null;           // 规则 3
+    prevIdx = i;
+  }
+  return null;
+}
+
+/** 从 fromIdx 起找第一个"表底上升"的读数区间 —— 充值真正进表的地方 */
+function _chargeLandingTransition(rows, key, fromIdx) {
+  for (let j = fromIdx; j < rows.length - 1; j++) {
+    const a = rows[j][key], b = rows[j + 1][key];
+    if (a == null || b == null) continue;
+    if (b > a) return [j, j + 1];
+  }
+  return null;
+}
+
+/** 这个区间"若这笔钱真的到账",用电量是否还算合理 */
+function _chargeSegmentPlausible(rows, key, seg, amt, mult, cap) {
+  const s = rows[seg[0]], e = rows[seg[1]];
+  if (s[key] == null || e[key] == null) return { implied: 0, threshold: 0, ok: true };
+  const days = _chargeDaysBetween(s.date, e.date);
+  if (days <= 0) return { implied: 0, threshold: 0, ok: true };
+  const implied = (s[key] + amt - e[key]) * mult;
+  const threshold = Math.max(cap * days * CHARGE_CONFLICT_FACTOR, CHARGE_CONFLICT_FLOOR_KWH);
+  return { implied: implied, threshold: threshold, ok: implied <= threshold };
+}
+
+/**
+ * 这笔充值最终归属哪个区间,以及它是否与抄表对不上。
+ * 与后端 report._resolve_charge() 同一套规则,两边都得改。
+ */
+function _resolveCharge(rows, key, cdate, amt, mult, cap) {
+  const seg = _chargeSegment(rows, key, cdate);
+  if (!seg) return { seg: null, conflict: null };
+  const s = rows[seg[0]], e = rows[seg[1]];
+  if (s[key] == null || e[key] == null) return { seg: seg, conflict: null };
+  if (e[key] > s[key]) return { seg: seg, conflict: null };   // 表底上升 → 钱进表了
+
+  const p = _chargeSegmentPlausible(rows, key, seg, amt, mult, cap);
+  if (p.ok) return { seg: seg, conflict: null };              // 用电量算得通 → 就是这个区间
+
+  // 这个区间的用电量离谱 —— 钱多半是更晚才进表的,往后找表底真正跳升的区间
+  const later = _chargeLandingTransition(rows, key, seg[1]);
+  if (later) {
+    const lp = _chargeSegmentPlausible(rows, key, later, amt, mult, cap);
+    if (lp.ok && lp.implied >= 0) return { seg: later, conflict: null };
+  }
+  return {
+    seg: null,
+    conflict: {
+      implied_kwh: Math.round(p.implied * 10) / 10,
+      threshold_kwh: Math.round(p.threshold * 10) / 10,
+      start_date: s.date, end_date: e.date,
+      start_val: s[key], end_val: e[key],
+    },
+  };
+}
+
+/** 单块表的矛盾充值列表(内部用) */
+function _chargeConflictsForMeter(rows, list, key) {
+  if (rows.length < 2) return [];
+  const meta = METER_META(key);
+  const mult = MULTIPLIER(key);
+  const cap = _chargeDailyCapKwh(rows, key);
+  const out = [];
+  for (const c of list) {
+    if (c.status === 'pending') continue;
+    const amt = Number(c[key] || 0);
+    if (!(amt > 0)) continue;
+    const d = chargeEffectiveDate(c);
+    const r = _resolveCharge(rows, key, d, amt, mult, cap);
+    if (!r.conflict) continue;
+    const implied = r.conflict.implied_kwh;
+    const threshold = r.conflict.threshold_kwh;
+    const landingRow = rows.find(r2 => r2.date === d);
+    const sameAsReading = landingRow && Math.abs(amt - Number(landingRow[key])) < 0.01;
+    const reason = sameAsReading
+      ? `${meta.label} ${d} 的充值额 ${amt} 和当天抄表读数一模一样 —— 是不是把抄表读数填进充值栏了?`
+        + `充值额应该是**新充进去的表字数**,不是当前表底。这笔记录已从所有用电统计中排除。`
+      : `${meta.label} ${d} 的充值额 ${amt} 表字与抄表对不上:表底 ${r.conflict.start_val} → ${r.conflict.end_val} 没有上升,`
+        + `若这笔钱真的到账,${r.conflict.start_date}→${r.conflict.end_date} 得用掉 ${Math.round(implied)} 度`
+        + `(历史日均 ${Math.round(cap)} 度/天),钱没有进表。这笔记录已从所有用电统计中排除。`;
+    out.push({
+      charge_id: c.id, date: d, meter: key, label: meta.label, amount: amt,
+      implied_kwh: implied, threshold_kwh: threshold, reason: reason,
+    });
+  }
+  return out;
+}
+
+/** 「充值额 = 当天抄表读数」的记录 —— 八成是把抄表读数填进了充值栏 */
+function findPastedReadingCharges(charges) {
+  const list = charges || [];
+  const out = [];
+  for (const m of CHARGE_METERS) {
+    const key = m.key;
+    const meta = METER_META(key);
+    const rows = (window.CURRENT_READINGS || [])
+      .filter(r => r && r.date && r[key] != null)
+      .slice().sort((a, b) => a.date.localeCompare(b.date));
+    for (const c of list) {
+      if (c.status === 'pending') continue;
+      const amt = Number(c[key] || 0);
+      if (!(amt > 0)) continue;
+      const d = chargeEffectiveDate(c);
+      const i = rows.findIndex(r => r.date === d);
+      if (i < 0) continue;
+      const cur = rows[i][key];
+      const prev = i >= 1 ? rows[i - 1][key] : null;
+      if (cur == null || prev == null) continue;
+      if (cur > prev) continue;               // 当天表底跳升 → 钱已进表,读数里已体现
+      if (Math.abs(amt - Number(cur)) >= 0.01) continue;
+      out.push({
+        charge_id: c.id, date: d, meter: key, label: meta.label,
+        amount: amt, reading: Number(cur),
+        reason: `${meta.label} ${d} 的充值额 ${amt} 和当天抄表读数一模一样 —— `
+          + `是不是把抄表读数填进充值栏了?充值额应该是**新充进去的表字数**,`
+          + `不是当前表底(充完表底会翻倍)。`,
+      });
+    }
+  }
+  return out;
+}
+
+/** 与抄表对不上的充值(全表)—— 界面用来提示"有条充值记录填错了" */
+function findChargeConflicts(charges) {
+  const list = charges || [];
+  const out = [];
+  for (const m of CHARGE_METERS) {
+    const rows = (window.CURRENT_READINGS || [])
+      .filter(r => r && r.date && r[m.key] != null)
+      .slice().sort((a, b) => a.date.localeCompare(b.date));
+    out.push.apply(out, _chargeConflictsForMeter(rows, list, m.key));
+  }
+  return out;
+}
+
 function _chargeAttrSignature(rows, charges, key) {
   let s = key + '|' + rows.length + '|' + charges.length;
   for (let i = 0; i < charges.length; i++) s += '|' + chargeEffectiveDate(charges[i]) + ':' + (charges[i][key] || 0);
@@ -99,9 +281,8 @@ function chargeAttribution(charges, key) {
   const sig = _chargeAttrSignature(rows, list, key);
   if (_chargeAttrCache && _chargeAttrCache.sig === sig) return _chargeAttrCache.map;
 
-  const idx = new Map();
-  rows.forEach((r, i) => { if (!idx.has(r.date)) idx.set(r.date, i); });
   const map = [];  // [{start, end, meterVal}]
+  const cap = _chargeDailyCapKwh(rows, key);
 
   const add = (start, end, amt) => {
     const hit = map.find(m => m.start === start && m.end === end);
@@ -114,24 +295,11 @@ function chargeAttribution(charges, key) {
     if (!amt) continue;
     const d = chargeEffectiveDate(c);       // 实际到账日，不是申请日
 
-    if (idx.has(d)) {
-      const i = idx.get(d);
-      const cur = rows[i][key];
-      const prev = i >= 1 ? rows[i - 1][key] : null;
-      if (i >= 1 && cur != null && prev != null && cur > prev) {
-        add(rows[i - 1].date, d, amt);              // 规则 1：当天抄表已体现这笔充值
-      } else if (i + 1 < rows.length) {
-        add(d, rows[i + 1].date, amt);              // 规则 2：归到下一个区间
-      }
-      // 规则 4：到账日之后还没有抄表 → 暂不归属
-      continue;
-    }
-
-    let prevRow = null;
-    for (const r of rows) {
-      if (r.date > d) { if (prevRow) add(prevRow.date, r.date, amt); break; }
-      prevRow = r;
-    }
+    // _resolveCharge 会把"钱晚点才进表"的充值改归属到表底真正跳升的那一段,
+    // 把与抄表对不上的记录剔掉(seg=null) —— 与后端 report._resolve_charge 同一套规则
+    const r = _resolveCharge(rows, key, d, amt, MULTIPLIER(key), cap);
+    if (!r.seg) continue;
+    add(rows[r.seg[0]].date, rows[r.seg[1]].date, amt);
   }
 
   _chargeAttrCache = { sig, map };
@@ -180,8 +348,11 @@ function unreflectedCreditMeterVal(charges, key) {
   const lastDate = rows[rows.length - 1].date;
 
   let candidate = 0;
+  // 与抄表对不上的充值(钱根本没进表)不能算进余量,否则建议充值金额会被顶飞
+  const skipIds = new Set(_chargeConflictsForMeter(rows, list, key).map(c => c.charge_id));
   for (const c of list) {
     if (c.status === 'pending') continue;          // 待确认的充值申请不计入任何统计
+    if (skipIds.has(c.id)) continue;               // 钱没进表,不算余量
     if (chargeEffectiveDate(c) >= lastDate) candidate += Number(c[key] || 0);
   }
 

@@ -63,6 +63,20 @@ function submitChargeAdd(source) {
     }
     if (allZero) { showAlert('至少填写一块表的充值度数', 'error'); return; }
 
+    // 录入前先自查:这笔充值和当天抄表对不上(多半是把抄表读数填进了充值栏)时
+    // 直接拦下,别等统计被顶飞才发现。后端 POST /api/charges 会再兜一道。
+    var conflict = findChargeConflictFor(charge);
+    if (conflict) {
+        showModal({
+            title: '这笔充值和抄表对不上', icon: '⚠️', iconKind: 'warn',
+            body: '<p style="margin:0 0 10px;line-height:1.6">' + escapeHtml(conflict.reason) + '</p>'
+                + '<p style="margin:0;opacity:0.75;line-height:1.6">充值额是<strong>新充进去的表字数</strong>'
+                + '(表底会往上跳的那部分),不是当前表底。确认无误可改用「待确认」提交。</p>',
+            confirmText: '知道了'
+        });
+        return;
+    }
+
     setSubmitting(true);
     Api.charges.create(charge).then(function() {
         showAlert('✓ ' + date + ' 充值记录已保存', 'success');
@@ -75,6 +89,26 @@ function submitChargeAdd(source) {
     }).catch(function(err) {
         showAlert('保存失败: ' + err.message, 'error');
     }).finally(function() { setSubmitting(false); });
+}
+
+/** 用当前抄表数据自查一笔待提交的充值,返回冲突说明或 null */
+function findChargeConflictFor(charge) {
+    if (typeof findPastedReadingCharges !== 'function') return null;
+    var probe = {
+        id: '__probe__', date: charge.date, status: 'confirmed',
+        hall: charge.hall, fire: charge.fire,
+        private_room: charge.private_room, ac: charge.ac,
+    };
+    var hits = findPastedReadingCharges([probe]);
+    for (var i = 0; i < hits.length; i++) {
+        if (hits[i].charge_id === '__probe__') return hits[i];
+    }
+    if (typeof findChargeConflicts !== 'function') return null;
+    hits = findChargeConflicts([probe]);
+    for (var j = 0; j < hits.length; j++) {
+        if (hits[j].charge_id === '__probe__') return hits[j];
+    }
+    return null;
 }
 
 // ==================== 弹窗管理 ====================

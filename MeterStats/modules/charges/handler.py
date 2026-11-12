@@ -9,10 +9,46 @@ _now = datetime.now
 from storage import log, load_json, save_json
 from modules._base import get_data_paths, get_lock
 from report import invalidate_report_cache as _invalidate_report_cache
+from report import find_charge_conflicts, find_pasted_reading_charges
 
 
 def _load_charges() -> list:
     return load_json(get_data_paths()["charges"], [])
+
+
+def _load_readings() -> list:
+    return load_json(get_data_paths()["readings"], [])
+
+
+def _conflict_for(readings: list, charges: list, charge_id: str):
+    """找出这条充值记录与抄表对不上的地方(没有则 None)。
+
+    物理事实:预付费表表底下降 = 用电,表底上升 = 刚到账。一笔充值真的到账了,它被
+    归属的那个区间里表底必然"净升";否则该区间需要的用电量会离谱 —— 2026-11-11
+    有人把当天抄表读数填进充值栏,大厅凭空多出 32912 度,一天总用电被顶到 89588.8 度。
+    详见 report.find_charge_conflicts()。
+    """
+    for c in find_charge_conflicts(readings, charges):
+        if c.get("charge_id") == charge_id:
+            return c
+    return None
+
+
+def _pasted_reading_for(readings: list, charges: list, charge_id: str):
+    """找出「充值额 = 当天抄表读数」的记录(把抄表读数填进充值栏)。"""
+    for c in find_pasted_reading_charges(readings, charges):
+        if c.get("charge_id") == charge_id:
+            return c
+    return None
+
+
+def _validate_charge(readings: list, charges: list, charge_id: str):
+    """录入充值前的校验,返回一条错误说明或 None。
+
+    先看最明确的信号(充值额和当天抄表读数一模一样),再看物理上对不上的那种。
+    """
+    return (_pasted_reading_for(readings, charges, charge_id)
+            or _conflict_for(readings, charges, charge_id))
 
 
 # ==================== GET ====================
@@ -47,6 +83,11 @@ def handle_post_charges(handler):
     if all(v is None or v == 0 for v in [new_charge["hall"], new_charge["fire"],
                                           new_charge["private_room"], new_charge["ac"]]):
         send_json(handler, 400, {"error": "四表至少填一个非 0 值"})
+        return
+    # 录入时就拦住"把抄表读数填进充值栏"的记录 —— 放进去会让所有用电统计被顶飞
+    conflict = _validate_charge(_load_readings(), [new_charge], new_charge["id"])
+    if conflict:
+        send_json(handler, 400, {"error": conflict["reason"], "conflict": conflict})
         return
     charges.append(new_charge)
     _save_charges(charges)
@@ -85,6 +126,11 @@ def handle_put_charges(handler, path_clean: str):
         send_json(handler, 400, {"error": "四表至少保留一个非 0 值"})
         return
     charges[idx] = charge
+    # 改完也要复核一次:改成"抄表读数"同样会把统计顶飞
+    conflict = _validate_charge(_load_readings(), charges, cid)
+    if conflict:
+        send_json(handler, 400, {"error": conflict["reason"], "conflict": conflict})
+        return
     _save_charges(charges)
     log(f"  OK 充值更新 {cid}")
     _invalidate_report_cache()
@@ -100,6 +146,11 @@ def _confirm_charge(handler, cid: str):
         return
     charges[idx]["status"] = "confirmed"
     charges[idx]["confirmed_at"] = _now().isoformat()
+    # 确认到账 = 开始计入统计,先复核这笔钱是否真能对上抄表
+    conflict = _validate_charge(_load_readings(), charges, cid)
+    if conflict:
+        send_json(handler, 400, {"error": conflict["reason"], "conflict": conflict})
+        return
     _save_charges(charges)
     log(f"  OK 充值确认 {cid}")
     _invalidate_report_cache()

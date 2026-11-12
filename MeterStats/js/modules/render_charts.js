@@ -126,6 +126,21 @@ function copyDayUsage() {
   lines.push(`— 合计: ${usage.totalKwh.toFixed(1)} 度,¥${usage.totalCost.toFixed(2)}${vsYTotal}${vsMTotal}`);
   const spanNote = usage.spanDays > 1 ? `(区间 ${usage.prevDate} → ${usage.nextDate} 共 ${usage.spanDays} 天均摊)` : `(区间 ${usage.prevDate} → ${usage.nextDate})`;
   lines.push(spanNote);
+  // 与抄表对不上的充值(多半是把抄表读数填进了充值栏)已被排除 —— 要提醒用户去改那条记录
+  if (typeof findChargeConflicts === 'function') {
+    const conflicts = findChargeConflicts(CURRENT_CHARGES || []);
+    if (conflicts.length) {
+      const byId = new Map();
+      for (const c of conflicts) {
+        if (!byId.has(c.charge_id)) byId.set(c.charge_id, { date: c.date, meters: [] });
+        byId.get(c.charge_id).meters.push(c.label);
+      }
+      lines.push(`⚠️ 已忽略 ${byId.size} 笔与抄表对不上的充值(不计入上面的用电量)`);
+      for (const info of byId.values()) {
+        lines.push(`   ${info.date} ${info.meters.join('、')} —— 疑似把抄表读数填进了充值栏,请到「用电记录 → 充值」核对删除`);
+      }
+    }
+  }
   const text = lines.join('\n');
   copyTextWithFallback(text, '✓ 单天用电已复制,可直接粘贴到群里');
 }
