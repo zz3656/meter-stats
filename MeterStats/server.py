@@ -39,10 +39,12 @@ API 端点:
 from __future__ import annotations
 
 import atexit
+import contextlib
 import json
 import os
 import signal
 import sys
+import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 
@@ -152,14 +154,21 @@ def main():
 
     # 注册优雅关闭
     def _shutdown(signum=None, frame=None):
+        """收到 SIGTERM / SIGINT → 让 serve_forever() 退出。
+
+        ⚠️ `server.shutdown()` **不能在主线程里直接调**:它要等 `serve_forever()`
+        返回,而 `serve_forever()` 占着主线程,这个信号处理器也跑在主线程 ——
+        两边互等 → **死锁**。
+
+        现象就是「`kill` 之后进程一直不退出,只能 `kill -9`」;
+        `docker stop` 每次都要等满 10 秒超时才被强杀(容器重启慢 10 秒,
+        而且是被 SIGKILL 打断的,不是优雅退出)。
+
+        所以丢到辅助线程去调:那之后 serve_forever() 正常返回,
+        main() 走到 finally 清理 PID 与端口,进程自然退出。
+        """
         log(f"  收到信号 {signum}, 准备退出...")
-        try:
-            server.shutdown()
-        except Exception:
-            pass
-        _remove_pid()
-        if signum is not None:
-            sys.exit(0)
+        threading.Thread(target=server.shutdown, daemon=True).start()
 
     atexit.register(_remove_pid)
     signal.signal(signal.SIGTERM, _shutdown)
@@ -218,6 +227,10 @@ def main():
         print("\n已停止")
         server.shutdown()
     finally:
+        # 先关监听套接字再清 PID:否则端口要等进程退出才释放,
+        # 紧跟着的重启会撞上「端口已被占用」。
+        with contextlib.suppress(Exception):
+            server.server_close()
         _remove_pid()
 
 
