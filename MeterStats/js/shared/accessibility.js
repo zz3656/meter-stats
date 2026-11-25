@@ -91,13 +91,27 @@ function cacheCharges(data) {
 async function api(method, path, body) {
   const opts = { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' } };
   if (body !== undefined) opts.body = JSON.stringify(body);
-  const token = (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) 
-    ? ADMIN_TOKEN 
-    : localStorage.getItem('token');
+  const token = (typeof currentAuthToken === 'function')
+    ? currentAuthToken()
+    : ((typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) ? ADMIN_TOKEN : (localStorage.getItem('token') || ''));
   if (token) opts.headers['Authorization'] = 'Bearer ' + token;
   if (token && path.indexOf('token=') === -1) {
     const separator = path.includes('?') ? '&' : '?';
     path = path + separator + 'token=' + encodeURIComponent(token);
+  }
+  // 拼当前门店 —— 与 js/core/api.js 的 _appendStore 同一套规则。
+  // 这里不复用 api.js 的私有函数(它在 IIFE 里,外部拿不到),
+  // 所以规则照抄一份;改一处就要改两处(测试会盯住)。
+  if (!path.startsWith('/api/auth/') && !path.startsWith('/api/stores')
+      && path.split('?')[0] !== '/api/health' && path.split('?')[0] !== '/api/version') {
+    let store = '';
+    try {
+      if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
+    } catch (e) { store = ''; }
+    if (store && /^[A-Za-z0-9_-]{1,32}$/.test(store) && !/[^A-Za-z0-9_-]/.test(store)) {
+      const separator = path.includes('?') ? '&' : '?';
+      if (!path.includes('store=')) path = path + separator + 'store=' + encodeURIComponent(store);
+    }
   }
   const res = await fetch(path, opts);
   if (!res.ok) { const txt = await res.text(); throw new Error(`HTTP ${res.status}: ${txt}`); }

@@ -5,17 +5,88 @@
  * 每个模块通过 Api.xxx.yyy() 调用后端，而不是直接写 fetch('/api/...')。
  */
 var Api = (() => {
+    // ===== 门店参数 =====
+
+    /**
+     * 这些端点**不带** store 参数。理由各不相同,别随手往里加:
+     *
+     * - /api/health /api/version —— 公开端点,与门店无关。
+     * - /api/auth/* —— 身份端点。带一个已失效的 store → 404 →
+     *   /api/auth/me 失败 → 前端判定「会话过期」→ 把用户踢出登录,
+     *   而真实原因只是当前门店被删了。
+     * - /api/stores* —— 引导端点。必须能在「当前店已失效」时照常返回,
+     *   否则用户锁死(连门店列表都拿不到 → 无从切店 → 永远出不来)。
+     */
+    function _isStoreFree(path) {
+        var p = String(path || '').split('?')[0];
+        if (p === '/api/health' || p === '/api/version') return true;
+        if (p.indexOf('/api/auth/') === 0) return true;
+        if (p === '/api/stores' || p.indexOf('/api/stores/') === 0) return true;
+        return false;
+    }
+
+    /** 当前门店 ID。拿不到 / 不合法 → 空串(不带参数,让后端按用户范围默认)。 */
+    function _currentStoreId() {
+        try {
+            if (typeof StoreContext === 'undefined' || !StoreContext) return '';
+            var id = StoreContext.getStoreId();
+            if (!id) return '';
+            // 后端 registry.is_valid_store_id: \A[A-Za-z0-9_-]{1,32}\Z
+            if (!/^[A-Za-z0-9_-]{1,32}$/.test(id)) return '';
+            if (/[^A-Za-z0-9_-]/.test(id)) return '';
+            return id;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /** query 里是不是已经有 store 参数了(避免重复拼)。 */
+    function _hasStoreParam(path) {
+        var q = String(path || '').split('?')[1];
+        if (!q) return false;
+        var parts = q.split('&');
+        for (var i = 0; i < parts.length; i++) {
+            var kv = parts[i].split('=');
+            var name = kv[0];
+            try { name = decodeURIComponent(name); } catch (e) { /* 原样比 */ }
+            if (name === 'store') return true;
+        }
+        return false;
+    }
+
+    /** 给请求路径拼上当前门店。 */
+    function _appendStore(path) {
+        if (_isStoreFree(path)) return path;
+        if (_hasStoreParam(path)) return path;
+        var store = _currentStoreId();
+        if (!store) return path;
+        var separator = path.indexOf('?') !== -1 ? '&' : '?';
+        return path + separator + 'store=' + encodeURIComponent(store);
+    }
+
+    /** 统一取 token —— 只走 admin.js 的 currentAuthToken()(AGENTS.md 的约定)。 */
+    function _authToken() {
+        try {
+            if (typeof currentAuthToken === 'function') {
+                var t = currentAuthToken();
+                if (t) return t;
+            }
+        } catch (e) { /* admin.js 还没加载 */ }
+        try {
+            if (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) return ADMIN_TOKEN;
+        } catch (e) { /* ignore */ }
+        try { return localStorage.getItem('token') || ''; } catch (e) { return ''; }
+    }
+
     function _request(method, path, body) {
         var opts = {
             method: method,
             headers: { 'Content-Type': 'application/json' }
         };
         if (body) opts.body = JSON.stringify(body);
-        
-        // 获取 token: 优先 ADMIN_TOKEN 全局变量，回退到 localStorage
-        var token = (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) 
-            ? ADMIN_TOKEN 
-            : localStorage.getItem('token');
+
+        // token:只走 admin.js 的 currentAuthToken()(AGENTS.md 约定)
+        var token = _authToken();
         if (token) opts.headers['Authorization'] = 'Bearer ' + token;
 
         // 后端 auth_handler.py 从 query param 提取 token
@@ -25,12 +96,25 @@ var Api = (() => {
             path = path + separator + 'token=' + encodeURIComponent(token);
         }
 
+        // 拼当前门店(store-free 端点除外)
+        path = _appendStore(path);
+
         // path 已包含 '/api' 前缀（如 '/api/readings'），不能再拼一次，
         // 否则会请求 /api/api/xxx —— 后端无此路由，直接断开连接，
         // WKWebView/浏览器里表现为 "TypeError: Load failed"。
         return fetch(path, opts).then(function(res) {
             return res.json().then(function(data) {
-                if (!res.ok) throw new Error(data.error || '请求失败');
+                if (!res.ok) {
+                    // 门店失效(被删 / 权限被收回)→ 交给门店上下文恢复。
+                    // 不在这里处理:恢复要重新引导 + 重拉数据,得由上层统一做。
+                    if (typeof StoreContext !== 'undefined' && StoreContext
+                        && typeof StoreContext.handleStoreError === 'function') {
+                        try {
+                            StoreContext.handleStoreError(res.status, data && data.error);
+                        } catch (e) { /* 恢复失败不掩盖原始错误 */ }
+                    }
+                    throw new Error(data.error || '请求失败');
+                }
                 return data;
             });
         });
@@ -99,8 +183,12 @@ var Api = (() => {
             var formData = new FormData();
             formData.append('image', file);
             var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/duty/' + id + '/image?' + (localStorage.getItem('token') ? 'token=' + encodeURIComponent(localStorage.getItem('token')) : ''), opts).then(function(res) { return res.json(); });
+            var token = _authToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            var path = _appendStore('/api/duty/' + id + '/image');
+            var sep = path.indexOf('?') !== -1 ? '&' : '?';
+            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };
 
@@ -123,18 +211,6 @@ var Api = (() => {
         me: function() { return _request('GET', '/api/auth/me'); },
     };
 
-    // 备份/恢复 API (2个端点) — 数据管理页面用
-    var backup = {
-        doBackup: function() { return _request('POST', '/api/backup'); },
-        doRestore: function(file) {
-            // 恢复需要 FormData，不走 _request
-            var formData = new FormData();
-            formData.append('file', file);
-            var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/restore?' + (localStorage.getItem('token') ? 'token=' + encodeURIComponent(localStorage.getItem('token')) : ''), opts).then(function(res) { return res.json(); });
-        },
-    };
     var admin = {
         // 用户管理 (4个)
         users: function() { return _request('GET', '/api/admin/users'); },
@@ -170,18 +246,30 @@ var Api = (() => {
         saveNasConfig: function(data) { return _request('PUT', '/api/admin/nas-config', data); },
     };
 
-    // 备份/恢复 API (2个端点) — 独立于 admin，数据管理页面用
+    // 备份/恢复 API —— 独立于 admin，数据管理页面用。
+    //
+    // ⚠️ 这里原来声明过两次 var backup,后者覆盖前者 → Api.backup.doRestore 是
+    // undefined,js/modules/backup.js 的 doRestore() 一调就抛 TypeError。
+    //   合并成一份,两个方法名都留着(doRestore / restore 是同一件事)。
     var backup = {
         doBackup: function() { return _request('POST', '/api/backup'); },
-        restore: function(file) {
-            // 恢复需要 FormData，不走 _request
-            var formData = new FormData();
-            formData.append('file', file);
-            var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/restore', opts).then(function(res) { return res.json(); });
-        },
+        doRestore: function(file) { return restoreUpload(file); },
+        restore: function(file) { return restoreUpload(file); },
     };
+
+    // 恢复要 FormData,不走 _request(那里只发 JSON)。
+    // store 参数照样要带:恢复是「按门店写数据」的操作,后端门店闸靠它定作用域。
+    function restoreUpload(file) {
+        var formData = new FormData();
+        formData.append('file', file);
+        var opts = { method: 'POST', headers: {} };
+        var token = _authToken();
+        if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+        var path = _appendStore('/api/restore');
+        var sep = path.indexOf('?') !== -1 ? '&' : '?';
+        if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+        return fetch(path, opts).then(function(res) { return res.json(); });
+    }
 
     // 导入/导出 API (3个端点)
     var dataimport = {
@@ -190,8 +278,12 @@ var Api = (() => {
             formData.append('model', model);
             formData.append('file', file);
             var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/import', opts).then(function(res) { return res.json(); });
+            var token = _authToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            var path = _appendStore('/api/import');
+            var sep = path.indexOf('?') !== -1 ? '&' : '?';
+            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            return fetch(path, opts).then(function(res) { return res.json(); });
         },
         importTemplate: function(model) { return _request('GET', '/api/import/template?model=' + model); },
         export: function(params) { return _request('GET', '/api/export?' + new URLSearchParams(params).toString()); },
@@ -204,8 +296,12 @@ var Api = (() => {
             formData.append('file', file);
             if (category) formData.append('category', category);
             var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/upload', opts).then(function(res) { return res.json(); });
+            var token = _authToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            var path = _appendStore('/api/upload');
+            var sep = path.indexOf('?') !== -1 ? '&' : '?';
+            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };
 
@@ -215,8 +311,12 @@ var Api = (() => {
             var formData = new FormData();
             formData.append('zip_file', file);
             var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/admin/restore-upload?' + (localStorage.getItem('token') ? 'token=' + encodeURIComponent(localStorage.getItem('token')) : ''), opts).then(function(res) { return res.json(); });
+            var token = _authToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            var path = _appendStore('/api/admin/restore-upload');
+            var sep = path.indexOf('?') !== -1 ? '&' : '?';
+            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };
 
@@ -227,8 +327,12 @@ var Api = (() => {
             formData.append('model', model);
             formData.append('file', file);
             var opts = { method: 'POST', headers: {} };
-            if (localStorage.getItem('token')) opts.headers['Authorization'] = 'Bearer ' + localStorage.getItem('token');
-            return fetch('/api/import?' + (localStorage.getItem('token') ? 'token=' + encodeURIComponent(localStorage.getItem('token')) : ''), opts).then(function(res) { return res.json(); });
+            var token = _authToken();
+            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+            var path = _appendStore('/api/import');
+            var sep = path.indexOf('?') !== -1 ? '&' : '?';
+            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };
 

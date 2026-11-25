@@ -143,6 +143,33 @@ class TestStoresFrontendWiring(unittest.TestCase):
         self.assertNotIn("/api/admin/users/' +", line)
         self.assertNotIn("/api/admin/users/\" +", line)
 
+    def test_api_js_appends_store_parameter(self) -> None:
+        """api.js 必须给请求拼上当前门店,且引导端点除外。"""
+        src = API_JS.read_text(encoding="utf-8")
+        self.assertIn("_appendStore", src)
+        self.assertIn("StoreContext.getStoreId()", src)
+        # store-free 白名单:这三类端点不能带 store(否则会锁死 / 误踢登录)
+        self.assertIn("/api/stores", src)
+        self.assertIn("/api/auth/", src)
+
+    def test_store_free_endpoints_are_not_given_store(self) -> None:
+        """引导端点带 store 会锁死用户 —— 白名单必须真的生效。"""
+        src = API_JS.read_text(encoding="utf-8")
+        fn = re.search(r"function _isStoreFree\(path\)\s*\{[\s\S]*?\n    \}", src)
+        self.assertIsNotNone(fn, "api.js 里找不到 _isStoreFree")
+        # mypy strict:assertIsNotNone 不做类型收窄 → 取值处显式兜底
+        body = fn.group(0) if fn else ""
+        for guard in ("/api/health", "/api/version", "/api/auth/", "/api/stores"):
+            self.assertIn(guard, body, f"_isStoreFree 少了 {guard}")
+
+    def test_duty_image_url_carries_store(self) -> None:
+        """图片按门店分目录 —— <img src> 必须带 store,否则串店。"""
+        src = UTILS_JS.read_text(encoding="utf-8")
+        fn = re.search(r"window\.getDutyImageUrl[\s\S]*?\n\};", src)
+        self.assertIsNotNone(fn)
+        # mypy strict:assertIsNotNone 不做类型收窄 → 取值处显式兜底
+        self.assertIn("store=", fn.group(0) if fn else "")
+
 
 # ============ 行为验证(需要 node) ============
 

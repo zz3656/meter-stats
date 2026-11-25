@@ -114,7 +114,18 @@ window.copyTextWithFallback = function copyTextWithFallback(text, successMsg) {
 window.getDutyImageUrl = function getDutyImageUrl(filename) {
   var base = `/api/duty/image/${filename}`;
   var t = (typeof currentAuthToken === 'function') ? currentAuthToken() : '';
-  return t ? (base + '?token=' + encodeURIComponent(t)) : base;
+  // ⚠️ store 参数必须带:图片目录是按门店分的
+  // (stores/<store_id>/images/),不带就落到后端默认店 —— 总部账号切到分店后
+  // 会看到总店的图,或者 404。
+  var store = '';
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
+  } catch (e) { store = ''; }
+  var ok = store && /^[A-Za-z0-9_-]{1,32}$/.test(store) && !/[^A-Za-z0-9_-]/.test(store);
+  var url = base;
+  if (t) url += '?token=' + encodeURIComponent(t);
+  if (ok) url += (url.indexOf('?') !== -1 ? '&' : '?') + 'store=' + encodeURIComponent(store);
+  return url;
 };
 
 /**
@@ -162,6 +173,15 @@ window.uploadImages = function uploadImages(files, maxCount, scope, skipCompress
   var token = (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) ||
     localStorage.getItem('token') || '';
   var suffix = token ? '?token=' + encodeURIComponent(token) : '';
+  // 上传也是按门店落盘(stores/<store_id>/images/),必须带 store
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) {
+      var st = StoreContext.getStoreId() || '';
+      if (st && /^[A-Za-z0-9_-]{1,32}$/.test(st) && !/[^A-Za-z0-9_-]/.test(st)) {
+        suffix += (suffix ? '&' : '?') + 'store=' + encodeURIComponent(st);
+      }
+    }
+  } catch (e) { /* ignore */ }
   return Promise.all(list.map(function (f) {
     var prep = skipCompress ? Promise.resolve(f) : window.compressImage(f, 1600, 0.82);
     return prep.then(function (blob) {

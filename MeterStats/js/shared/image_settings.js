@@ -1,6 +1,18 @@
 // ===== 图片目录管理（统一保存模式）=====
 const IMAGE_API = '/api/admin/images';
 
+/** 给图片目录接口的 URL 拼上当前门店(与 api.js 同一套规则)。 */
+function imageApiUrl() {
+  const base = IMAGE_API + getAuthParam();
+  let store = '';
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
+  } catch (e) { store = ''; }
+  if (!store) return base;
+  if (!/^[A-Za-z0-9_-]{1,32}$/.test(store) || /[^A-Za-z0-9_-]/.test(store)) return base;
+  return base + (base.includes('?') ? '&' : '?') + 'store=' + encodeURIComponent(store);
+}
+
 // 加载图片目录配置（仅用于显示，不再单独保存）
 function loadImageDirConfig() {
   const dirEl = document.getElementById('image-dir-display');
@@ -9,7 +21,7 @@ function loadImageDirConfig() {
   if (!dirEl) return;
 
   const doLoad = () => {
-    fetch(IMAGE_API + getAuthParam())
+    fetch(imageApiUrl())
       .then(r => r.json()).then(res => {
         if (!res.ok) return;
         dirEl.textContent = res.image_dir ? ('📁 ' + res.image_dir) : '📁 默认: ' + (res.data_dir || '') + '/images';
@@ -80,7 +92,7 @@ async function saveImageDirInput() {
     return;
   }
   try {
-    const res = await fetch(IMAGE_API + getAuthParam(), {
+    const res = await fetch(imageApiUrl(), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ image_dir: path }),
