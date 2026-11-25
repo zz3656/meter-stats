@@ -10,6 +10,12 @@
     DATA_PATHS 永远指向**顶层**数据目录,迁移后也不改变 —— 否则 stores_root()
     会被算成 stores/main/stores/,路径全错。
 
+路径解析绝不回退到 storage.get_data_dir():
+    get_data_dir() 不是纯查询 —— 它会 mkdir、可能把老目录的数据迁移到
+    ~/Library/Application Support/ 并 copytree 备份、还往 stdout 打日志。
+    路径解析一旦回退到它,在 DATA_PATHS 尚未初始化时就会**静默落到真实用户
+    数据目录**(用户表、密码哈希、NAS 凭据、备份目录)。宁可抛 RuntimeError。
+
 单店兼容:
     未启用 stores/ 布局时,current_store_paths() 原样返回 DATA_PATHS,
     行为与分店改造前完全一致。
@@ -17,8 +23,8 @@
 from __future__ import annotations
 
 import threading
+import types
 from pathlib import Path
-from typing import Any, Dict
 
 # 默认店(总店)的 ID。历史数据迁移后落到这个名字下。
 DEFAULT_STORE_ID = "main"
@@ -41,24 +47,34 @@ def clear_current_store() -> None:
     _ctx.store_id = None
 
 
-def base_data_dir() -> Path:
-    """顶层数据目录 —— settings.json 所在处,全局唯一。
-
-    取 app_handler.DATA_PATHS["readings"] 的父目录;DATA_PATHS 为空时回退
-    storage.get_data_dir()(服务尚未启动完时的兜底)。
-    """
-    paths = getattr(app_handler_module(), "DATA_PATHS", None) or {}
-    ref = paths.get("readings")
-    if ref:
-        return Path(ref).parent
-    from storage import get_data_dir
-    return Path(get_data_dir())
-
-
-def app_handler_module() -> Any:
+def app_handler_module() -> types.ModuleType:
     """延迟 import app_handler —— 避免模块级循环依赖。"""
     import app_handler as _h
     return _h
+
+
+def _data_paths() -> dict[str, Path]:
+    """当前的 app_handler.DATA_PATHS(永远指向顶层数据目录,不随门店改变)。"""
+    paths: dict[str, Path] = getattr(app_handler_module(), "DATA_PATHS", None) or {}
+    return paths
+
+
+def base_data_dir() -> Path:
+    """顶层数据目录 —— settings.json 所在处,全局唯一。
+
+    取 app_handler.DATA_PATHS["readings"] 的父目录。
+
+    DATA_PATHS 尚未初始化时抛 RuntimeError —— **不做任何猜测式回退**。
+    回退到 storage.get_data_dir() 会静默解析到真实用户数据目录,那里放着
+    用户表、密码哈希、NAS 凭据和备份目录;静默读到/写错地方,比直接报错危险得多。
+    """
+    ref = _data_paths().get("readings")
+    if not ref:
+        raise RuntimeError(
+            "数据目录未初始化:app_handler.DATA_PATHS['readings'] 为空 —— "
+            "请先调用 storage.init_data_files() 并把结果写入 app_handler.DATA_PATHS"
+        )
+    return Path(ref).parent
 
 
 def stores_root() -> Path:
@@ -79,34 +95,42 @@ def multi_store_layout() -> bool:
     return stores_root().is_dir()
 
 
-def resolve_store_path(model: str, store_id: str, filename: str) -> Path:
+def resolve_store_path(model: str, store_id: str) -> Path:
     """解析某门店某模型的数据文件路径。
 
-    - 单店布局 → 顶层目录(与改造前一致)
-    - 多店布局 → stores/<store_id>/<filename>
+    文件名由 storage.DATA_FILES[model] 推导 —— 「模型 → 文件名」只有一个真相来源。
+    单店分支直接取 app_handler.DATA_PATHS[model],与 current_store_paths() 同一来源。
+
+    - 单店布局 → DATA_PATHS[model](与改造前一致)
+    - 多店布局 → stores/<store_id>/<DATA_FILES[model]>
     - 默认店 main 且该文件不存在、顶层旧文件存在 → 回退顶层旧文件
       (迁移前 / 迁移失败时的「读双写单」)
     - 分店**不回退**顶层:否则分店会读到总店数据
     """
-    base = base_data_dir()
+    from storage import DATA_FILES
+    filename = DATA_FILES[model]
     if not multi_store_layout():
-        return base / filename
+        ref = _data_paths().get(model)
+        if ref:
+            return Path(ref)
+        # DATA_PATHS 里没有这个模型 → 用 DATA_FILES 的文件名拼顶层目录
+        return base_data_dir() / filename
     target = store_dir(store_id) / filename
     if not target.exists() and store_id == DEFAULT_STORE_ID:
-        legacy = base / filename
+        legacy = base_data_dir() / filename
         if legacy.exists():
             return legacy
     return target
 
 
-def current_store_paths() -> Dict[str, Path]:
+def current_store_paths() -> dict[str, Path]:
     """当前门店的 {model: Path} 映射。
 
     单店布局 → 原样返回 app_handler.DATA_PATHS;
     多店布局 → 按当前门店解析。
     """
     if not multi_store_layout():
-        return dict(getattr(app_handler_module(), "DATA_PATHS", None) or {})
+        return dict(_data_paths())
     from storage import DATA_FILES
     store_id = get_current_store()
-    return {m: resolve_store_path(m, store_id, fn) for m, fn in DATA_FILES.items()}
+    return {m: resolve_store_path(m, store_id) for m in DATA_FILES}

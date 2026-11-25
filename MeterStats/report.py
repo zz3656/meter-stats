@@ -379,8 +379,9 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
 
     带内存缓存（5 分钟 TTL）：相同月份和数据的请求直接返回缓存。
     """
-    # 尝试缓存
-    cached = _get_cached_report(month)
+    # 尝试缓存(键带门店维度 —— 不同门店互不命中)
+    cache_key = _report_cache_key(month)
+    cached = _get_cached_report(cache_key)
     if cached is not None:
         return cached
     # 解析月份
@@ -510,7 +511,7 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
         # 与抄表对不上的充值(界面用来提示"有一条充值记录填错了")
         "conflicts": conflicts,
     }
-    _cache_report(month, result)
+    _cache_report(cache_key, result)
     return result
 
 
@@ -519,7 +520,7 @@ def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
 
     带内存缓存（5 分钟 TTL）。
     """
-    cache_key = f"yearly:{year}"
+    cache_key = _report_cache_key(f"yearly:{year}")
     cached = _get_cached_report(cache_key)
     if cached is not None:
         return cached
@@ -554,10 +555,25 @@ def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
 
 # ============ 月报缓存 ============
 
-# { month_str: (cache_time, report_data) }
+# { cache_key: (cache_time, report_data) },cache_key = f"{store_id}:{month}"
 _report_cache: dict = {}
 _report_cache_lock = RLock()
 _REPORT_CACHE_TTL = 5 * 60  # 5 分钟
+
+
+def _report_cache_key(key: str) -> str:
+    """报表缓存键加门店维度。
+
+    缓存原本只按月份做键 —— 多门店上线后,总店先请求的月报会被分店同月份
+    的请求直接命中,拿到**总店的用电数字**(跨店数据泄漏)。
+    键改成 f"{store_id}:{key}",不同门店互不干扰。
+
+    延迟 import:report.py 已被 modules/reports/handler.py 引入,
+    不在模块级引入 modules.stores 以免循环依赖。
+    """
+    from modules.stores.context import get_current_store
+    return f"{get_current_store()}:{key}"
+
 
 def _cache_report(month: str, report: dict) -> None:
     """将月报结果写入缓存。"""
@@ -589,9 +605,12 @@ def _get_report_cache_stats() -> dict:
     with _report_cache_lock:
         now = _local_now().timestamp()
         entries = []
-        for month, (cache_time, data) in _report_cache.items():
+        for cache_key, (cache_time, data) in _report_cache.items():
             age = now - cache_time
+            # 键是 f"{store_id}:{month}" —— 拆开,month 字段保持原样
+            store_id, _, month = cache_key.partition(":")
             entries.append({
+                "store": store_id,
                 "month": month,
                 "age_seconds": round(age, 0),
                 "ttl_minutes": _REPORT_CACHE_TTL // 60,

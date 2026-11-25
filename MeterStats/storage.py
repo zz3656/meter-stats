@@ -398,30 +398,55 @@ def log(msg: str) -> None:
     print(f"[{ts}] {msg}", flush=True)
 
 
+def _backup_roots(path: Path) -> list[Path]:
+    """备份查找顺序:文件同级的 backup/ → 顶层数据目录的 backup/。
+
+    门店数据的路径是 stores/<id>/readings.json,它同级的 backup/ 从不存在;
+    真正的备份在**顶层**数据目录的 backup/ 里 —— 不回退就等于「崩溃后从
+    backup/ 自动恢复」对门店数据静默失效。
+
+    DATA_PATHS 尚未初始化时拿不到顶层目录,只用同级的 backup/。
+    """
+    roots = [path.parent / "backup"]
+    top: Path | None = None
+    try:
+        from modules.stores.context import base_data_dir
+        top = base_data_dir() / "backup"
+    except (ImportError, RuntimeError):
+        top = None
+    if top is not None and top not in roots:
+        roots.append(top)
+    return roots
+
+
 def _try_restore_from_backup(path: Path):
-    """从 data_dir/backup/ 最新日期目录恢复文件。
+    """从 backup/ 最新日期目录恢复文件。
+
+    依次查找:文件同级的 backup/、顶层数据目录的 backup/(门店数据的备份在顶层);
+    每个目录内部按日期目录名(YYYYMMDD)倒序取最新的。
 
     返回恢复后的数据(成功时),否则返回 None。
     """
-    backup_root = path.parent / "backup"
-    if not backup_root.exists():
-        return None
-    # 按日期目录名(YYYYMMDD)倒序,取最新的
-    date_dirs = sorted(
-        (d for d in backup_root.iterdir() if d.is_dir() and d.name.isdigit()),
-        reverse=True,
-    )
-    for d in date_dirs:
-        src = d / path.name
-        if src.exists():
-            try:
-                with src.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                save_json(path, data)  # 恢复文件到原位置
-                log(f"[RECOVER] 已从备份 {d.name} 恢复 {path.name}")
-                return data
-            except (json.JSONDecodeError, OSError):
-                continue
+    for backup_root in _backup_roots(path):
+        if not backup_root.exists():
+            continue
+        # 按日期目录名(YYYYMMDD)倒序,取最新的
+        date_dirs = sorted(
+            (d for d in backup_root.iterdir() if d.is_dir() and d.name.isdigit()),
+            reverse=True,
+        )
+        for d in date_dirs:
+            src = d / path.name
+            if src.exists():
+                try:
+                    with src.open("r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    save_json(path, data)  # 恢复文件到原位置
+                    log(f"[RECOVER] 已从备份 {d.name} 恢复 {path.name}")
+                    return data
+                except (json.JSONDecodeError, OSError):
+                    continue
     return None
 
 
