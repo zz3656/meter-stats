@@ -83,6 +83,18 @@ function chargeEffectiveDate(c) {
  */
 let _chargeAttrCache = null;
 
+/**
+ * 清空充值归属缓存(切门店时调用)。
+ *
+ * 缓存里是上一家店的表底序列与充值记录算出来的归属区间。
+ * 它的签名(sig)带数据内容,理论上换店自然失配 —— 但那是「碰巧对」,
+ * 不该依赖:显式清掉,换店就不再有任何跨店残留。
+ */
+function resetChargeAttrCache() {
+    _chargeAttrCache = null;
+}
+window.resetChargeAttrCache = resetChargeAttrCache;
+
 /* ===== 充值与抄表的一致性校验 =====
  *
  * 预付费表的物理事实:表底下降 = 用电,表底上升 = 刚到账。一笔 X 表字的充值如果真的

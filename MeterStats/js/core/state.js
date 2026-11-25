@@ -58,10 +58,30 @@ const State = (() => {
 
         /** 初始化所有数据为 [] */
         init: function() {
-            var keys = ["readings", "charges", "items", "purchases", "duty", "settings"];
+            // "water" 必须在列表里:renderAll() 会 State.set("water", …),
+            // 漏了它 → State.get("water") 初始是 undefined,
+            // 渲染水电表时 .sort() 直接抛 TypeError。
+            var keys = ["readings", "charges", "water", "items", "purchases", "duty", "settings"];
             for (var i = 0; i < keys.length; i++) {
                 if (data[keys[i]] === undefined) data[keys[i]] = [];
             }
+        },
+
+        /**
+         * 清空所有数据(切门店时调用)。
+         *
+         * 必须连报表缓存一起清:_currentReport / _currentYearly / _currentUtilities
+         * 存的是上一个门店的月报/年报/水电报表,不清 → 切店后「复制表格」复制的是
+         * 上一家店的数字。
+         */
+        reset: function() {
+            data = {};
+            // ⚠️ 不能写 init():仓库里没有全局 init 函数,那是 ReferenceError。
+            // State.init() 是同一个闭包里的方法,等价于重新初始化所有键。
+            State.init();
+            _currentReport = null;
+            _currentYearly = null;
+            _currentUtilities = null;
         },
 
         /** 获取所有数据 */
