@@ -110,6 +110,20 @@ def get_store_meters() -> list[dict[str, Any]]:
     return copy.deepcopy(DEFAULT_METERS)
 
 
+def get_report_tables() -> list[dict[str, Any]]:
+    """当前门店的表定义 → `report.py` 要的形状 `{key,label,mult}`。
+
+    两套字段名必须在这里**只转换一次**:`store.json` 用 `multiplier`,
+    `report.py` 用 `mult`(9 处 `t["mult"]`,改名只会扩大改动面)。
+    谁要喂 `report.py` 的 `tables` 参数就只有这一个入口 —— 散落各处的转换
+    迟早漏一个,漏的那个会在 `KeyError: 'mult'` 上炸掉整个请求。
+    """
+    return [
+        {"key": m["key"], "label": m["label"], "mult": m["multiplier"]}
+        for m in get_store_meters()
+    ]
+
+
 def get_store_prices() -> dict[str, Any]:
     """当前门店的价格/倍率配置(缺失项用默认值补齐)。返回深拷贝。
 

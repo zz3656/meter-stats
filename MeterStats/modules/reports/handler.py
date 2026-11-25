@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 from report import calculate_monthly_report, calculate_yearly_report
 from constants import ELECTRICITY_PRICE as ELECTRICITY_PRICE_CONST, WATER_PRICE, MAIN_METER_MULT, SUB_METER_MULT
@@ -15,14 +16,36 @@ def _load(model: str) -> list:
     return load_json(get_data_paths().get(model), [])
 
 
-def _util_mults() -> tuple[int, int]:
-    """读取水电表倍率（总表/分表），可在「电表设置」里改；缺失时回退常量默认值。"""
+def _store_prices() -> dict[str, Any]:
+    """当前门店的价格/倍率配置(P2:按店)。缺失项由 config.py 用默认值补齐。"""
     try:
-        from modules.system.settings_handler import get_settings
-
-        cfg = (get_settings() or {}).get("config", {}) or {}
-        return int(cfg.get("main_mult", MAIN_METER_MULT)), int(cfg.get("sub_mult", SUB_METER_MULT))
+        from modules.stores.config import get_store_prices
+        return get_store_prices()
     except Exception:
+        # 门店上下文不可用时的兜底 —— 与 constants 的默认值一致
+        return {
+            "electricity_price": ELECTRICITY_PRICE_CONST,
+            "water_price": WATER_PRICE,
+            "main_mult": MAIN_METER_MULT,
+            "sub_mult": SUB_METER_MULT,
+        }
+
+
+def _report_tables() -> list[dict[str, Any]]:
+    """当前门店的表定义(report.py 形状)—— 转换逻辑统一在 config.get_report_tables。"""
+    from modules.stores.config import get_report_tables
+    return get_report_tables()
+
+
+def _util_mults() -> tuple[int, int]:
+    """读取水电表倍率（总表/分表），可在「电表设置」里改；缺失时回退常量默认值。
+
+    P2 起按**当前门店**取(store.json 的 config)。
+    """
+    cfg = _store_prices()
+    try:
+        return int(cfg.get("main_mult", MAIN_METER_MULT)), int(cfg.get("sub_mult", SUB_METER_MULT))
+    except (TypeError, ValueError):
         return MAIN_METER_MULT, SUB_METER_MULT
 
 
@@ -118,7 +141,9 @@ def handle_get_monthly_report(handler):
         return
     readings = _load("readings")
     charges = _load("charges")
-    report = calculate_monthly_report(readings, charges, month)
+    report = calculate_monthly_report(readings, charges, month,
+                                      tables=_report_tables(),
+                                      price=_store_prices()["electricity_price"])
     send_json(handler, 200, report)
 
 
@@ -153,9 +178,10 @@ def calc_month_utilities(month: str, water_data: list) -> dict:
     main_kwh = round(main_raw * main_mult, 1) if main_raw is not None else None
     sub_kwh = round(sub_raw * sub_mult, 1) if sub_raw is not None else None
     kitchen_kwh = round(main_kwh - sub_kwh, 1) if main_kwh is not None and sub_kwh is not None else None
-    kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE_CONST, 2) if kitchen_kwh is not None else None
+    _prices = _store_prices()
+    kitchen_cost = round(kitchen_kwh * _prices["electricity_price"], 2) if kitchen_kwh is not None else None
     water_usage = _diff(cur.get("water"), prev.get("water") if prev else None)
-    water_cost = round(water_usage * WATER_PRICE, 2) if water_usage is not None else None
+    water_cost = round(water_usage * _prices["water_price"], 2) if water_usage is not None else None
 
     return {
         "month": month,
@@ -176,8 +202,8 @@ def calc_month_utilities(month: str, water_data: list) -> dict:
         "kitchen_cost": kitchen_cost,
         "water_usage": water_usage,
         "water_cost": water_cost,
-        "price_electricity": ELECTRICITY_PRICE_CONST,
-        "price_water": WATER_PRICE,
+        "price_electricity": _prices["electricity_price"],
+        "price_water": _prices["water_price"],
         "mult_main": main_mult,
         "mult_sub": sub_mult,
     }
@@ -197,7 +223,9 @@ def handle_get_yearly_report(handler):
         return
     readings = _load("readings")
     charges = _load("charges")
-    report = calculate_yearly_report(readings, charges, year)
+    report = calculate_yearly_report(readings, charges, year,
+                                     tables=_report_tables(),
+                                     price=_store_prices()["electricity_price"])
 
     # 附加每个月的月度水电（前端年度表格要展示总表/分表/厨房/水表）
     water_data = _load("readings_water")
@@ -274,9 +302,10 @@ def handle_get_monthly_utilities(handler):
     main_kwh = round(main_raw * main_mult, 1) if main_raw is not None else None
     sub_kwh = round(sub_raw * sub_mult, 1) if sub_raw is not None else None
     kitchen_kwh = round(main_kwh - sub_kwh, 1) if main_kwh is not None and sub_kwh is not None else None
-    kitchen_cost = round(kitchen_kwh * ELECTRICITY_PRICE_CONST, 2) if kitchen_kwh is not None else None
+    _prices = _store_prices()
+    kitchen_cost = round(kitchen_kwh * _prices["electricity_price"], 2) if kitchen_kwh is not None else None
     water_usage = _diff(cur.get("water"), prev.get("water") if prev else None)
-    water_cost = round(water_usage * WATER_PRICE, 2) if water_usage is not None else None
+    water_cost = round(water_usage * _prices["water_price"], 2) if water_usage is not None else None
 
     send_json(handler, 200, {
         "month": month,
@@ -297,8 +326,8 @@ def handle_get_monthly_utilities(handler):
         "kitchen_cost": kitchen_cost,
         "water_usage": water_usage,
         "water_cost": water_cost,
-        "price_electricity": ELECTRICITY_PRICE_CONST,
-        "price_water": WATER_PRICE,
+        "price_electricity": _prices["electricity_price"],
+        "price_water": _prices["water_price"],
         "mult_main": main_mult,
         "mult_sub": sub_mult,
     })

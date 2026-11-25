@@ -207,40 +207,95 @@ def _public_user(user: Dict[str, Any]) -> Dict[str, Any]:
     return {k: v for k, v in user.items() if k != "password"}
 
 
-# ============ 电表设置 ============
+# ============ 电表设置(P2:按店) ============
+#
+# P2 之前这三处读写的是**全局** settings["meter"] —— 多店下一家店改表名,
+# 全部门店跟着变。现在一律按**当前门店**读写 stores/<id>/store.json。
+#
+# 三个端点必须一起改:只改 PUT 不改 GET 会「保存成功但刷新变回去」;
+# 只改一个 GET 会让电表设置页与抄表表单显示不同的表。
+
+def _meters_payload() -> Dict[str, Any]:
+    """当前门店的表定义与价格/倍率 —— 两个读接口共用的唯一响应构造。
+
+    形状:`meters` 是**有序字典** {key: {label, icon, multiplier, color}}。
+    刻意不用数组:前端 `meterConfig.js` 是 `Object.entries(data.meters)` 按字典
+    遍历的,换成数组会让 key 变成 "0"/"1"。JSON 对象本身保序(键是非数字字符串),
+    表定义顺序不需要数组来承载。
+    """
+    from modules.stores.config import get_store_meters, get_store_prices
+    meters = get_store_meters()
+    as_dict: Dict[str, Any] = {m["key"]: m for m in meters}
+    return {
+        "meters": as_dict,
+        # 旧字段名一并带上(电表设置页历史上读的是 res.meter),同一份值
+        "meter": as_dict,
+        "config": get_store_prices(),
+    }
+
 
 def handle_get_meter_settings(handler: Any) -> None:
-    """GET /api/admin/meter → {meter, config}"""
-    settings = get_settings()
-    send_json(handler, 200, {
-        "meter": settings.get("meter", {}),
-        "config": settings.get("config", {}),
-    })
+    """GET /api/admin/meter → {meters, meter, config}(当前门店)"""
+    send_json(handler, 200, _meters_payload())
 
 
 def handle_get_meters_public(handler: Any) -> None:
-    """GET /api/meters → {meters, config} (非管理员也可访问)"""
-    settings = get_settings()
-    send_json(handler, 200, {
-        "meters": settings.get("meter", {}),
-        "config": settings.get("config", {}),
-    })
+    """GET /api/meters → {meters, meter, config}(当前门店;非管理员也可访问)"""
+    send_json(handler, 200, _meters_payload())
+
+
+def _meters_as_list(raw: Any) -> list[Dict[str, Any]]:
+    """把写接口收到的表定义统一成列表。
+
+    兼容三种入参:数组(新)、有序字典 {key: {...}}(旧前端)、None。
+    """
+    if isinstance(raw, list):
+        return raw
+    if isinstance(raw, dict):
+        out = []
+        for key, val in raw.items():
+            item = dict(val) if isinstance(val, dict) else {}
+            item.setdefault("key", key)
+            out.append(item)
+        return out
+    return []
 
 
 def handle_put_meter_settings(handler: Any) -> None:
-    """PUT /api/admin/meter → {meter, config}"""
+    """PUT /api/admin/meter → {ok, meters, meter, config}(写当前门店)"""
+    from modules.stores.config import read_store_config, write_store_config
+    from modules.stores.context import get_current_store
+    from modules.stores.meters import normalize_tables, validate_tables_payload
+
     body = read_body(handler)
     if not body:
         send_json(handler, 200, {"ok": False, "error": "参数不能为空"})
         return
 
-    settings = get_settings()
-    if "meter" in body:
-        settings["meter"] = body["meter"]
+    meters_raw = body.get("meters", body.get("meter"))
+    meters: list[Dict[str, Any]] = []
+    if meters_raw is not None:
+        meters = _meters_as_list(meters_raw)
+        err = validate_tables_payload(meters)
+        if err:
+            send_json(handler, 400, {"error": err})
+            return
+
+    store_id = get_current_store()
+    cfg = read_store_config(store_id)
+    if meters_raw is not None:
+        cfg["meters"] = normalize_tables(meters)
     if "config" in body:
-        settings["config"] = body["config"]
-    save_settings(settings)
-    send_json(handler, 200, {"ok": True, "meter": settings["meter"], "config": settings["config"]})
+        cfg["config"] = body["config"]
+    write_store_config(store_id, cfg)
+
+    # 表数/倍率/电价变了,月报缓存必须失效 —— 否则改完看到的还是旧数字
+    from report import invalidate_report_cache
+    invalidate_report_cache()
+
+    payload = {"ok": True}
+    payload.update(_meters_payload())
+    send_json(handler, 200, payload)
 
 
 # ============ 权限管理 ============

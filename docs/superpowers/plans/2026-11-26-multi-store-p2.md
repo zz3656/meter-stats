@@ -47,7 +47,7 @@
 | D8 | **报表缓存键 = `f"{store_id}:{month}:{表集合签名}"`**（在 P0 的 `f"{store_id}:{month}"` 上加了签名段）；**配置变更时必须主动失效报表缓存** | 门店维度 P0 已有。但 P2 把表定义变成了**函数参数** —— 同店同月换表集合算出来的 `by_meter` 形状与数字都不同，只按 store+month 做键会让第二次调用直接拿第一次的结果（2 表门店看到 4 表的数字）。签名用 `key_倍率` 连起来（不含冒号，缓存统计才能按冒号拆字段）。<br>⚠️ **这是实施中发现、原计划没覆盖的一条**：原计划写「缓存键本期不动」，实测必须先加签名才正确。 |
 | D9 | **自定义表不参与水电总表计算** | 总表 / 分表 / 水表是另一套（`readings_water.json`），有独立的倍率与口径，与用电表无关。 |
 | D10 | **默认 4 表 = 现状**（`DEFAULT_METERS`），缺配置的门店自动拿默认 | 老店升级后行为零变化；`read_store_config()` 在文件缺失时已经回落 `DEFAULT_METERS`。 |
-| D11 | **三个配置端点同批改完**：`GET /api/meters`、`GET /api/admin/meter`、`PUT /api/admin/meter`，响应统一「`meters` 数组 + 兼容的 `meter` 字典」 | 现在三个都读写**全局** settings，且字段名一个叫 `meter` 一个叫 `meters`。只改其中一两个 → 「写进本店、读的是全局」= 保存成功但刷新变回去；或者设置页与别的页面显示不同的表。过渡期两种形状都返回，前端可分批改。 |
+| D11 | **三个配置端点同批改完**：`GET /api/meters`、`GET /api/admin/meter`、`PUT /api/admin/meter`；响应里 **`meters` 保持「有序字典」形状**（`{key: {...}}`），不改成数组 | 现在三个都读写**全局** settings，且字段名一个叫 `meter` 一个叫 `meters`。只改其中一两个 → 「写进本店、读的是全局」= 保存成功但刷新变回去。<br>**为什么不改数组**：现有 `meterConfig.js::loadMeterConfig()` 是 `Object.entries(data.meters)` 按字典遍历的，改成数组会立刻把前端打断（key 变成 `"0"`/`"1"`）；而 JSON 对象本身保序（非数字字符串键），**顺序信息不需要靠数组承载**。保持字典 = 零中间破坏状态，Task 2 可以单独提交且可上线。 |
 
 ### 锁死链路（Task 1 / Task 2 / Task 4 的核心约束）
 
@@ -249,6 +249,13 @@ git commit -m "refactor(report): 表定义改为参数,tables/price 由调用方
 
 ### Task 2: 后端 —— 配置与数据接口按店
 
+> **状态:已完成**(2026-11-26),但 **Step 6(导入接口)未做** —— 见文末说明。
+> 新增 `tests/test_meter_config_api.py` 19 项;全量 **590** 项全绿;
+> ruff 269 / mypy 793,**零新增**(比基线还少 4 条 ruff)。
+> 实施中发现:`report.py` 要 `mult` 而 `store.json` 用 `multiplier` —— 形状转换已收到
+> `config.get_report_tables()` 唯一入口(散落各处漏一个就 `KeyError: 'mult'` 整个请求 500);
+> 另发现**充值**的 PUT 也有「空值清空」语义,原实现同样会静默失效,已一并修并补测试。
+
 **Files:**
 - Modify: `MeterStats/modules/system/users_handler.py`
 - Modify: `MeterStats/modules/readings/handler.py`
@@ -257,7 +264,7 @@ git commit -m "refactor(report): 表定义改为参数,tables/price 由调用方
 - Modify: `MeterStats/modules/dataimport/handler.py`
 - Create: `tests/test_meter_config_api.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 新建 `tests/test_meter_config_api.py`（沿用 `tests/test_stores.py:39` 的 `StoreTestBase` 范式 —— 它已经处理了 `routing.ENFORCE_AUTH` 的开关与临时数据目录）。
 
@@ -280,11 +287,11 @@ git commit -m "refactor(report): 表定义改为参数,tables/price 由调用方
 8. `POST /api/readings`（`?store=s002`）能写入 `meters: {"m1": 5}`，且 `GET` 能读回。
 9. 充值一致性校验用当前店的表：2 表门店下，`find_charge_conflicts` 不因「没有 hall」误判。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Expected: FAIL。
 
-- [ ] **Step 3: 三个表计配置端点全部改按店**
+- [x] **Step 3: 三个表计配置端点全部改按店**
 
 **先看清现状 —— 这里是三个端点，不是两个，而且字段名不一致：**
 
@@ -298,19 +305,22 @@ Expected: FAIL。
 「改完倍率保存成功，刷新后又变回原值」，而且另一家店反而被改了。
 三个必须同批改完，同批上线。
 
-⚠️ **字段名 `meter` vs `meters` 的不一致要一并收口**：统一成 **`meters`**（数组）。
-为了不把老前端打断，两个 `GET` 在过渡期**同时**返回两种形状：
+⚠️ **字段名 `meter` vs `meters` 的不一致要一并收口**：统一成 **`meters`**，
+形状保持**有序字典** `{key: {label, icon, multiplier, color}}`（见 D11）。
+两个 `GET` 都返回同一种形状，且为兼容旧前端，`GET /api/admin/meter` 同时带上
+旧字段名 `meter`（同一份值）：
 
 ```python
 def _meters_payload() -> dict:
     from modules.stores.config import get_store_meters, get_store_prices
-    meters = get_store_meters()                    # [{key,label,icon,multiplier,color}]
-    return {
-        "meters": meters,                          # 新:数组
-        "meter": {m["key"]: m for m in meters},    # 旧:字典(兼容过渡)
-        "config": get_store_prices(),
-    }
+    meters = get_store_meters()                       # [{key,label,icon,multiplier,color}]
+    as_dict = {m["key"]: m for m in meters}           # 有序:dict 保持表定义顺序
+    return {"meters": as_dict, "meter": as_dict, "config": get_store_prices()}
 ```
+
+> **为什么不返回数组**：`meterConfig.js` 现在是 `Object.entries(data.meters)` 按字典
+> 遍历的；返回数组会让 key 变成 `"0"`/`"1"`，前端当场坏掉。JSON 对象保序（键是非数字
+> 字符串），顺序信息不需要数组来承载。这样 Task 2 可以单独提交、单独可上线。
 
 `handle_get_meters_public` 与 `handle_get_meter_settings` 都改成
 `send_json(handler, 200, _meters_payload())`。
@@ -321,23 +331,23 @@ def _meters_payload() -> dict:
 def handle_put_meter_settings(handler: Any) -> None:
     body = read_body(handler)
     ...
-    meters = body.get("meters", body.get("meter"))   # 兼容旧字段名(旧的是字典,要转数组)
-    if isinstance(meters, dict):
-        meters = [{"key": k, **v} for k, v in meters.items()]
-    if meters is not None:
-        err = validate_meters_payload(meters)         # 至少 1 块 / 倍率为正整数 / key 合法且不与旧 4 表重名
+    # 兼容三种入参:meters 是数组 / meters 是字典 / 旧字段名 meter 的字典
+    raw = body.get("meters", body.get("meter"))
+    if raw is not None:
+        meters = _as_list(raw)
+        err = validate_tables_payload(meters)   # 至少 1 块 / 倍率正整数 / key 合法且不与旧 4 表重名
         if err:
             send_json(handler, 400, {"error": err})
             return
     cfg = read_store_config(current_store)
-    if meters is not None: cfg["meters"] = normalize_tables(meters)
-    if "config" in body:   cfg["config"] = body["config"]
+    if raw is not None: cfg["meters"] = normalize_tables(meters)
+    if "config" in body: cfg["config"] = body["config"]
     write_store_config(current_store, cfg)
     invalidate_report_cache()      # D8:改表/倍率/电价必须失效月报缓存
     send_json(handler, 200, {"ok": True, **_meters_payload()})
 ```
 
-- [ ] **Step 4: 抄表 / 充值接口接受 `meters` 字典**
+- [x] **Step 4: 抄表 / 充值接口接受 `meters` 字典**
 
 `readings/handler.py:36-46` 现在是四个具名变量 + 「四表至少填一个」。改为：
 
@@ -361,7 +371,7 @@ if all(v is None for v in vals.values()):
 `charges/handler.py` 同理；并把它调用的
 `find_charge_conflicts(readings, charges)` 改为 `find_charge_conflicts(readings, charges, tables=get_store_meters())`。
 
-- [ ] **Step 5: 报表接口传 `tables` 与 `price`**
+- [x] **Step 5: 报表接口传 `tables` 与 `price`**
 
 `modules/reports/handler.py`：
 
@@ -381,18 +391,18 @@ report = calculate_monthly_report(readings, charges, month,
 
 同文件里 4 处 `ELECTRICITY_PRICE_CONST` / `WATER_PRICE`（约 156/158/179/180 与 277/279/300/301）改为从 `get_store_prices()` 取，常量只作缺失兜底。
 
-- [ ] **Step 6: 导入接口按当前店表集合校验**
+- [x] **Step 6: 导入接口按当前店表集合校验**
 
 `modules/dataimport/handler.py` 的 5 处列名校验改为按 `get_store_meters()` 生成允许列；自定义表列来自记录的 `meters` 字典（导入格式若不含自定义表，先只校验旧 4 表并**明确报错**提示「导入暂不支持自定义表」，不要静默丢列）。
 
-- [ ] **Step 7: 运行测试**
+- [x] **Step 7: 运行测试**
 
 ```bash
 python3 -m unittest tests.test_meter_config_api -v
 python3 -m unittest discover -s tests 2>&1 | tail -3
 ```
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add MeterStats/modules/system/users_handler.py MeterStats/modules/readings/handler.py \
@@ -713,7 +723,9 @@ git commit -m "docs: 0.5.0 补 P2 表计自定义更新日志"
 
 ## 不在本期范围
 
-- **自定义表的导入/导出**：`dataimport` 先只支持旧 4 表，遇到自定义表列明确报错
+- **自定义表的导入/导出（Task 2 Step 6 未做）**：`dataimport` 目前仍按旧 4 表列名校验。
+  默认 4 表的门店导入行为完全不变；自定义表门店导入时，自定义表那几列**不会进库**
+  （现有行为是静默忽略，还没改成明确报错）。列 P2 收尾或单独一期。
 - **表定义变更后的数据迁移工具**（改 key / 删表后清理孤儿数据）→ 后续单列
 - **水电表（总表 / 分表 / 水表）自定义**：它们走 `readings_water.json`，是另一套口径（D9）
 - **表计排序拖拽**：本期用上下移动按钮，不做拖拽
