@@ -25,6 +25,8 @@ REPO = Path(__file__).resolve().parent.parent
 METERSTATS = REPO / "MeterStats"
 INDEX_HTML = METERSTATS / "index.html"
 API_JS = METERSTATS / "js" / "core" / "api.js"
+STORE_CONTEXT_JS = METERSTATS / "js" / "core" / "storeContext.js"
+ACCESSIBILITY_JS = METERSTATS / "js" / "shared" / "accessibility.js"
 STORES_JS = METERSTATS / "js" / "modules" / "stores.js"
 UTILS_JS = METERSTATS / "js" / "helpers" / "utils.js"
 NAV_JS = METERSTATS / "js" / "core" / "navigation.js"
@@ -153,14 +155,27 @@ class TestStoresFrontendWiring(unittest.TestCase):
         self.assertIn("/api/auth/", src)
 
     def test_store_free_endpoints_are_not_given_store(self) -> None:
-        """引导端点带 store 会锁死用户 —— 白名单必须真的生效。"""
-        src = API_JS.read_text(encoding="utf-8")
-        fn = re.search(r"function _isStoreFree\(path\)\s*\{[\s\S]*?\n    \}", src)
-        self.assertIsNotNone(fn, "api.js 里找不到 _isStoreFree")
-        # mypy strict:assertIsNotNone 不做类型收窄 → 取值处显式兜底
+        """引导端点带 store 会锁死用户 —— 白名单必须真的生效。
+
+        规则的唯一真相源是 js/core/storeContext.js::isStoreFreePath,
+        api.js / accessibility.js 都调它 —— 谁再抄一份规则,谁就是下一个走样的地方。
+        (这条断言不能删:它是「引导端点不带 store」这层保护的一部分。)
+        """
+        src = STORE_CONTEXT_JS.read_text(encoding="utf-8")
+        fn = re.search(r"function isStoreFreePath\(path\)\s*\{[\s\S]*?\n  \}", src)
+        self.assertIsNotNone(fn, "storeContext.js 里找不到 isStoreFreePath")
         body = fn.group(0) if fn else ""
         for guard in ("/api/health", "/api/version", "/api/auth/", "/api/stores"):
-            self.assertIn(guard, body, f"_isStoreFree 少了 {guard}")
+            self.assertIn(guard, body, f"isStoreFreePath 少了 {guard}")
+        # 调用方必须真的调它,而不是各自留一份规则
+        self.assertIn(
+            "StoreContext.isStoreFreePath", API_JS.read_text(encoding="utf-8"),
+            "api.js 没调 StoreContext.isStoreFreePath",
+        )
+        self.assertIn(
+            "StoreContext.isStoreFreePath", ACCESSIBILITY_JS.read_text(encoding="utf-8"),
+            "accessibility.js 没调 StoreContext.isStoreFreePath",
+        )
 
     def test_duty_image_url_carries_store(self) -> None:
         """图片按门店分目录 —— <img src> 必须带 store,否则串店。"""
@@ -179,19 +194,25 @@ class TestStoresFrontendWiring(unittest.TestCase):
 # 也就是说:如果 _appendStore() 对普通端点是个彻底的 no-op,整个测试套件照样全绿。
 # 这张网专门补上那个方向。
 #
-# 关键设计:沙箱里门店 ID 的**两个来源给不同的值** ——
-#   StoreContext.getStoreId() → 's002'(正确来源)
-#   localStorage['meter_current_store'] → 's999'(错误来源)
-# 断言 store 参数等于 's002',就同时约束了「带 store」和「ID 从哪来」。
+# 关键设计:
+# 1) 沙箱里门店 ID 的**两个来源给不同的值** ——
+#    StoreContext.getStoreId() → 's002'(正确来源)
+#    localStorage['meter_current_store'] → 's999'(错误来源)
+#    断言 store 参数等于 's002',就同时约束了「带 store」和「ID 从哪来」。
+# 2) 加载**真实的** js/core/storeContext.js(不是替身)——
+#    白名单规则 isStoreFreePath 就住在那里,用替身就测不到规则本身。
+# 3) 引导完之后**再打一次**引导端点:那时 storeId 已经是 's002',
+#    白名单要是失效,这两个请求就会带上 store=s002(→ 删店后用户永久锁死)。
 _API_STORE_HARNESS = r"""
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = process.env.MS_ROOT;
-// api.js 的路径可被 MS_API_JS 覆盖 —— 变异验证时用副本,绝不碰仓库里的真文件
+// 路径可被环境变量覆盖 —— 变异验证时用副本,绝不碰仓库里的真文件
 const API_FILE = process.env.MS_API_JS || path.join(ROOT, 'js/core/api.js');
+const STORE_CONTEXT_FILE = process.env.MS_STORE_CONTEXT_JS || path.join(ROOT, 'js/core/storeContext.js');
 
 const fetched = [];
 
-// 假 FormData:只记 append 过的字段,够断言「body 挂上没」用
+// 假 FormData:记下 append 过的字段名 —— 字段名就是后端契约,写反了照样得绿
 class FakeFormData {
   constructor() { this.fields = []; }
   append(name, value) { this.fields.push([name, value]); }
@@ -200,7 +221,7 @@ class FakeFormData {
 const sandbox = {
   console, setTimeout, clearTimeout, JSON, Date, Number, String, Array, Object,
   Promise, RegExp, Error, isNaN, parseInt, parseFloat, URLSearchParams,
-  FormData: FakeFormData,
+  Map, Set, FormData: FakeFormData,
   localStorage: (function () {
     const map = {};
     return {
@@ -214,8 +235,9 @@ const sandbox = {
 };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
-// 门店 ID 的两个来源给**不同的值**:只有问 StoreContext 才会拿到 s002
-sandbox.StoreContext = { getStoreId: () => 's002' };
+// 门店 ID 的错误来源:localStorage 里放一个**不同**的值。
+// 真正的门店上下文(下面加载)会把它当成「记住的店」校验 ——
+// s999 不在可见门店列表里 → 被拒 → 改用后端给的 s002。
 sandbox.localStorage.setItem('meter_current_store', 's999');
 sandbox.fetch = function (url, opts) {
   fetched.push({
@@ -223,14 +245,26 @@ sandbox.fetch = function (url, opts) {
     path: String(url).split('?')[0],
     method: (opts && opts.method) || 'GET',
     hasBody: !!(opts && opts.body !== undefined && opts.body !== null),
+    fields: (opts && opts.body && opts.body.fields) ? opts.body.fields.map((f) => f[0]) : [],
   });
+  const p = String(url).split('?')[0];
+  if (p === '/api/stores') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      ok: true, stores: [{ id: 's002', name: '国贸店' }], all_stores: true }) });
+  }
+  if (p === '/api/stores/current') {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({
+      ok: true, store_id: 's002', all_stores: true }) });
+  }
   return Promise.resolve({
     ok: true,
     json: () => Promise.resolve({ ok: true, stores: [], items: [], charges: [], readings: [] }),
   });
 };
 vm.createContext(sandbox);
+// 真实加载顺序:api.js → storeContext.js(两个都只定义,不执行请求)
 vm.runInContext(fs.readFileSync(API_FILE, 'utf8'), sandbox, { filename: 'api.js' });
+vm.runInContext(fs.readFileSync(STORE_CONTEXT_FILE, 'utf8'), sandbox, { filename: 'storeContext.js' });
 
 function storeParam(url) {
   const query = String(url).split('?')[1] || '';
@@ -242,15 +276,21 @@ function storeParam(url) {
 }
 
 (async () => {
-  // 普通端点(必须带 store)
+  // ① 先引导真实的门店上下文(它自己会打 /api/stores 与 /api/stores/current)
+  await sandbox.StoreContext.init();
+  // ② 引导完之后**再打一次**引导端点 —— 此时 storeId 已经是 's002',
+  //    白名单要是失效,这两个请求就会带上 store=s002(→ 用户永久锁死)。
+  await sandbox.Api.stores.list();
+  await sandbox.Api.stores.current();
+  // ③ localStorage 里再塞一个**不同**的门店 ID:
+  //    「门店 ID 只能问 StoreContext」这条规则靠它守住
+  //    (真实 init() 刚把 localStorage 写成了 s002,这里改回 s999)
+  sandbox.localStorage.setItem('meter_current_store', 's999');
+  // ④ 普通端点(必须带 store)
   await sandbox.Api.readings.list();
   await sandbox.Api.charges.list();
   await sandbox.Api.items.list();
-  // 引导端点(必须不带 store)
-  await sandbox.Api.stores.list();
-  await sandbox.Api.stores.current();
-  // 上传类端点(必须带 store **且** 真的把 FormData 挂到请求体上)
-  await sandbox.Api.duty.imageUpload(7, { name: 'a.png' });
+  // ⑤ 上传类端点(必须带 store **且** 真的把 FormData 挂到请求体上)
   await sandbox.Api.upload.doUpload({ name: 'b.zip' });
   await sandbox.Api.adminRestore.upload({ name: 'c.zip' });
   await sandbox.Api.dataimport.import('readings', { name: 'd.csv' });
@@ -260,9 +300,11 @@ function storeParam(url) {
   await sandbox.Api.backup.doRestore({ name: 'g.zip' });
 
   console.log(JSON.stringify({
+    storeId: sandbox.StoreContext.getStoreId(),
+    localStore: sandbox.localStorage.getItem('meter_current_store'),
     fetched: fetched.map((c) => ({
       url: c.url, path: c.path, method: c.method,
-      hasBody: c.hasBody, store: storeParam(c.url),
+      hasBody: c.hasBody, store: storeParam(c.url), fields: c.fields,
     })),
   }));
 })();
@@ -283,9 +325,12 @@ class TestApiStoreWiring(unittest.TestCase):
         hp.write_text(_API_STORE_HARNESS, encoding="utf-8")
         env = dict(**os.environ)
         env.update(MS_ROOT=str(METERSTATS))
-        override = os.environ.get("MS_API_JS")
-        if override:
-            env["MS_API_JS"] = override
+        for var, value in (
+            ("MS_API_JS", os.environ.get("MS_API_JS")),
+            ("MS_STORE_CONTEXT_JS", os.environ.get("MS_STORE_CONTEXT_JS")),
+        ):
+            if value:
+                env[var] = value
         proc = subprocess.run(
             ["node", str(hp)], capture_output=True, text=True, env=env, timeout=60,
         )
@@ -303,6 +348,9 @@ class TestApiStoreWiring(unittest.TestCase):
         引导端点恰好是 store-free 的,全绿也证明不了「普通端点带了 store」。
         """
         out = self._run()
+        # 前提:两个来源给的是**不同的**值 —— 否则断言区分不出实现取自哪边
+        self.assertEqual(out["storeId"], "s002", "门店上下文没引导出 s002")
+        self.assertEqual(out["localStore"], "s999", "localStorage 的门店 ID 没种上")
         for path in ("/api/readings", "/api/charges", "/api/items"):
             calls = self._calls(out, path)
             self.assertTrue(calls, "%s 没发请求" % path)
@@ -325,20 +373,27 @@ class TestApiStoreWiring(unittest.TestCase):
                 )
 
     def test_formdata_uploads_send_body_and_store(self) -> None:
-        """上传类请求:带 store **且** 真的把 FormData 挂到请求体上。
+        """上传类请求:带 store **且** 真的把 FormData 挂到请求体上,**且字段名对**。
 
         body 没挂 = 请求发出去不带任何数据 = 上传功能整个是坏的
         (历史上 6 处 FormData 全都只 new + append,没有一处 opts.body = formData)。
+        字段名也是契约的一部分 —— 写反了后端照样认不出来:
+          - /api/admin/restore-upload → zip_file(后端按 filename="*.zip" 提取)
+          - /api/import              → model + file
+          - /api/upload              → file
         """
         out = self._run()
-        upload_paths = (
-            "/api/duty/7/image", "/api/upload",
-            "/api/admin/restore-upload", "/api/import",
-        )
-        seen = False
-        for path in upload_paths:
-            for call in self._calls(out, path):
-                seen = True
+        # 逐路径断言:每条上传路径各自断言「确实发过 + 带 store + body 有 + 字段名对」。
+        # (不能用全局 seen 标志 —— 少一条路径也未必红。)
+        expected = {
+            "/api/upload": ["file"],
+            "/api/admin/restore-upload": ["zip_file"],
+            "/api/import": ["model", "file"],
+        }
+        for path, fields in expected.items():
+            calls = self._calls(out, path)
+            self.assertTrue(calls, "%s 没发请求(上传路径被删/改错了)" % path)
+            for call in calls:
                 self.assertEqual(
                     call["store"], "s002",
                     "%s 的 store 参数是 %r,期望 's002'" % (path, call["store"]),
@@ -348,7 +403,10 @@ class TestApiStoreWiring(unittest.TestCase):
                     "%s 没把 FormData 挂到请求体上(请求发出去不带任何数据): %s"
                     % (path, call["url"]),
                 )
-        self.assertTrue(seen, "一个上传类请求都没发出去")
+                self.assertEqual(
+                    sorted(call["fields"]), sorted(fields),
+                    "%s 的 multipart 字段名不对: %r(后端要 %r)" % (path, call["fields"], fields),
+                )
 
     def test_backup_restore_uses_the_upload_endpoint(self) -> None:
         """浏览器手里的 File 只能走 /api/admin/restore-upload。
@@ -363,6 +421,109 @@ class TestApiStoreWiring(unittest.TestCase):
             "/api/restore", paths,
             "备份恢复还在打 /api/restore(JSON zip_path —— 浏览器走不通)",
         )
+
+
+# accessibility.js 的 api() 是**活路径**(readings.js / toast.js / nas_sync.js 都在调),
+# 门店失效时必须像 api.js::_request 一样把错误转交 StoreContext.handleStoreError ——
+# 否则 state.storeId 不清、缓存不清、不重新引导 → UI 停在失效门店上。
+_ACCESSIBILITY_HARNESS = r"""
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = process.env.MS_ROOT;
+// 可被 MS_ACCESSIBILITY_JS 覆盖 —— 变异验证时用副本,绝不碰仓库里的真文件
+const ACCESSIBILITY_FILE = process.env.MS_ACCESSIBILITY_JS || path.join(ROOT, 'js/shared/accessibility.js');
+
+const handled = [];
+const fetched = [];
+
+const sandbox = {
+  console, setTimeout, clearTimeout, JSON, Date, Number, String, Array, Object,
+  Promise, RegExp, Error, isNaN, parseInt, parseFloat, URLSearchParams,
+  localStorage: (function () {
+    const map = {};
+    return {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+      setItem: (k, v) => { map[k] = String(v); },
+      removeItem: (k) => { delete map[k]; },
+    };
+  })(),
+  document: {
+    readyState: 'loading',                 // 跳过 applyAccessibility 的立即执行
+    documentElement: { setAttribute() {} },
+    addEventListener() {}, removeEventListener() {}, getElementById: () => null,
+  },
+  window: null,
+};
+sandbox.window = sandbox;
+sandbox.globalThis = sandbox;
+sandbox.matchMedia = () => ({ addEventListener() {} });
+sandbox.StoreContext = {
+  getStoreId: () => 's002',
+  handleStoreError: (status, text) => { handled.push({ status: status, text: String(text) }); },
+};
+sandbox.fetch = function (url) {
+  fetched.push({ url: String(url) });
+  return Promise.resolve({
+    ok: false,
+    status: 404,
+    text: () => Promise.resolve(JSON.stringify({ error: '门店不存在: s002' })),
+  });
+};
+vm.createContext(sandbox);
+
+// utils.js 先加载(它提供共享的 isValidStoreId),再加载 accessibility.js
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/helpers/utils.js'), 'utf8'),
+                sandbox, { filename: 'utils.js' });
+vm.runInContext(fs.readFileSync(ACCESSIBILITY_FILE, 'utf8'),
+                sandbox, { filename: 'accessibility.js' });
+
+(async () => {
+  let err = '';
+  try { await sandbox.api('GET', '/api/readings'); } catch (e) { err = String(e && e.message); }
+  console.log(JSON.stringify({ handled: handled, err: err, fetched: fetched }));
+})();
+"""
+
+
+class TestAccessibilityStoreError(unittest.TestCase):
+    """accessibility.js::api() 失败时必须转交 StoreContext.handleStoreError。"""
+
+    def setUp(self) -> None:
+        if not shutil.which("node"):
+            self.skipTest("未安装 node,跳过前端行为验证")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _run(self) -> dict[str, Any]:
+        hp = Path(self.tmp.name) / "harness.js"
+        hp.write_text(_ACCESSIBILITY_HARNESS, encoding="utf-8")
+        env = dict(**os.environ)
+        env.update(MS_ROOT=str(METERSTATS))
+        override = os.environ.get("MS_ACCESSIBILITY_JS")
+        if override:
+            env["MS_ACCESSIBILITY_JS"] = override
+        proc = subprocess.run(
+            ["node", str(hp)], capture_output=True, text=True, env=env, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, msg="node 执行失败:\n%s" % proc.stderr)
+        out: dict[str, Any] = json.loads(proc.stdout.strip().splitlines()[-1])
+        return out
+
+    def test_failure_is_forwarded_to_store_context(self) -> None:
+        """门店失效(404)必须转交 handleStoreError —— 否则 UI 停在失效门店上。"""
+        out = self._run()
+        self.assertTrue(
+            out["handled"], "失败没转交 StoreContext.handleStoreError(门店失效无人恢复)",
+        )
+        self.assertEqual(out["handled"][0]["status"], 404)
+        self.assertIn("门店不存在", out["handled"][0]["text"])
+        # 原始错误仍要抛出去 —— 转交不能掩盖它
+        self.assertIn("HTTP 404", out["err"])
+
+    def test_accessibility_api_also_carries_store(self) -> None:
+        """accessibility.js 的 api() 也要带 store —— 它同样是活路径。"""
+        out = self._run()
+        self.assertTrue(out["fetched"], "accessibility.js 的 api() 没发请求")
+        self.assertIn("store=s002", out["fetched"][0]["url"])
 
 
 # ============ 行为验证(需要 node) ============

@@ -99,24 +99,72 @@ async function api(method, path, body) {
     const separator = path.includes('?') ? '&' : '?';
     path = path + separator + 'token=' + encodeURIComponent(token);
   }
-  // 拼当前门店 —— 与 js/core/api.js 的 _appendStore 同一套规则。
+  // 拼当前门店 —— 规则在 StoreContext.isStoreFreePath()
+  // (js/core/storeContext.js,门店参数规则的唯一真相源)。
   // 这里不复用 api.js 的私有函数(它在 IIFE 里,外部拿不到),
-  // 所以规则照抄一份;改一处就要改两处(测试会盯住)。
-  if (!path.startsWith('/api/auth/') && !path.startsWith('/api/stores')
-      && path.split('?')[0] !== '/api/health' && path.split('?')[0] !== '/api/version') {
+  // 但**规则**只有一份 —— 改一处就够(测试会盯住)。
+  if (!isStoreFreePath(path) && !hasStoreParam(path)) {
     let store = '';
     try {
       if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
     } catch (e) { store = ''; }
-    if (store && /^[A-Za-z0-9_-]{1,32}$/.test(store) && !/[^A-Za-z0-9_-]/.test(store)) {
+    if (isValidStoreId(store)) {   // 口径见 js/helpers/utils.js::isValidStoreId
       const separator = path.includes('?') ? '&' : '?';
-      if (!path.includes('store=')) path = path + separator + 'store=' + encodeURIComponent(store);
+      path = path + separator + 'store=' + encodeURIComponent(store);
     }
   }
   const res = await fetch(path, opts);
-  if (!res.ok) { const txt = await res.text(); throw new Error(`HTTP ${res.status}: ${txt}`); }
+  if (!res.ok) {
+    const txt = await res.text();
+    // 门店失效(被删 / 权限被收回)→ 交给门店上下文恢复,与 api.js::_request 同一套口径。
+    // 不处理的话:state.storeId 不清、缓存不清、不重新引导 → UI 停在失效门店上。
+    if (typeof StoreContext !== 'undefined' && StoreContext
+        && typeof StoreContext.handleStoreError === 'function') {
+      try {
+        let msg = txt;
+        try {
+          const parsed = JSON.parse(txt);
+          if (parsed && parsed.error) msg = parsed.error;
+        } catch (e) { /* 不是 JSON —— 原样传 */ }
+        StoreContext.handleStoreError(res.status, msg);
+      } catch (e) { /* 恢复失败不掩盖原始错误 */ }
+    }
+    throw new Error(`HTTP ${res.status}: ${txt}`);
+  }
   return res.json();
 }
+
+/**
+ * 这个路径带不带门店参数 —— 转发给 StoreContext.isStoreFreePath()
+ * (js/core/storeContext.js,规则的唯一真相源)。
+ * 兜底只守住「绝不能带 store」的两类(引导端点 + 身份端点):
+ * 多带一个失效的 store 到引导端点 → 404 → 用户永久锁死。
+ */
+function isStoreFreePath(path) {
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext
+        && typeof StoreContext.isStoreFreePath === 'function') {
+      return !!StoreContext.isStoreFreePath(path);
+    }
+  } catch (e) { /* StoreContext 没加载 */ }
+  const p = String(path || '').split('?')[0];
+  if (p.indexOf('/api/auth/') === 0) return true;
+  if (p === '/api/stores' || p.indexOf('/api/stores/') === 0) return true;
+  return false;
+}
+
+/** query 里是不是已经有 store 参数了(别用 includes('store=') —— 会把 ?x=store=1 误判)。 */
+function hasStoreParam(path) {
+  const q = String(path || '').split('?')[1];
+  if (!q) return false;
+  for (const kv of q.split('&')) {
+    let name = kv.split('=')[0];
+    try { name = decodeURIComponent(name); } catch (e) { /* 原样比 */ }
+    if (name === 'store') return true;
+  }
+  return false;
+}
+
 
 // 这些函数通过 Api.* 调用后端,失败时回退到 LocalStorage 缓存
 // (保持全局函数名以兼容其他模块)

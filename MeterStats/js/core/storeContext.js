@@ -74,6 +74,30 @@
     return true;
   }
 
+  /**
+   * 这个路径**不带** store 参数吗 —— 门店参数规则的唯一真相源。
+   *
+   * 为什么规则住在门店上下文里:门店是「请求级上下文」,而这个模块是
+   * 「门店的唯一状态源」——「哪些端点与门店无关」属于同一件事。
+   * api.js 与 accessibility.js 都调这里,别再各自抄一份(抄一份就多一份会走样)。
+   *
+   * 与后端 routing._store_gate 的作用范围对齐:
+   * - /api/health /api/version —— 公开端点,与门店无关。
+   * - /api/auth/*            —— 身份端点。带一个已失效的 store → 404 →
+   *                            /api/auth/me 失败 → 前端判定「会话过期」→
+   *                            把用户踢出登录,而真实原因只是当前门店被删了。
+   * - /api/stores*           —— 引导端点。必须能在「当前店已失效」时照常返回,
+   *                            否则用户锁死(连门店列表都拿不到 → 无从切店 →
+   *                            永远出不来)。
+   */
+  function isStoreFreePath(path) {
+    var p = String(path || '').split('?')[0];
+    if (p === '/api/health' || p === '/api/version') return true;
+    if (p.indexOf('/api/auth/') === 0) return true;
+    if (p === '/api/stores' || p.indexOf('/api/stores/') === 0) return true;
+    return false;
+  }
+
   function _localStorage() {
     try { return window.localStorage; } catch (e) { return null; }
   }
@@ -205,6 +229,12 @@
 
     /** 门店 ID 合法性(与后端同一套口径) */
     isValidStoreId: isValidStoreId,
+
+    /**
+     * 这个路径要不要带门店参数(门店参数规则的唯一真相源)。
+     * api.js / accessibility.js 都调它。
+     */
+    isStoreFreePath: isStoreFreePath,
 
     /** 订阅变更。返回退订函数。cb(state, reason) */
     onChange: function (cb) {

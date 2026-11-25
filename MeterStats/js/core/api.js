@@ -8,21 +8,43 @@ var Api = (() => {
     // ===== 门店参数 =====
 
     /**
-     * 这些端点**不带** store 参数。理由各不相同,别随手往里加:
+     * 这些端点**不带** store 参数。规则在 StoreContext.isStoreFreePath()
+     * (js/core/storeContext.js —— 门店参数规则的唯一真相源),
+     * 这里只做转发 + 兜底,别再抄一份规则。
      *
-     * - /api/health /api/version —— 公开端点,与门店无关。
-     * - /api/auth/* —— 身份端点。带一个已失效的 store → 404 →
-     *   /api/auth/me 失败 → 前端判定「会话过期」→ 把用户踢出登录,
-     *   而真实原因只是当前门店被删了。
-     * - /api/stores* —— 引导端点。必须能在「当前店已失效」时照常返回,
-     *   否则用户锁死(连门店列表都拿不到 → 无从切店 → 永远出不来)。
+     * 兜底只守住「绝不能带 store」的两类(引导端点 + 身份端点):
+     * 多带一个失效的 store 到引导端点 → 404 → 用户永久锁死。
+     * (/api/health 与 /api/version 带不带 store 都无害 —— 后端对公开端点
+     *  跳过门店闸,多余的 query 参数没人读。)
      */
     function _isStoreFree(path) {
+        try {
+            if (typeof StoreContext !== 'undefined' && StoreContext
+                && typeof StoreContext.isStoreFreePath === 'function') {
+                return !!StoreContext.isStoreFreePath(path);
+            }
+        } catch (e) { /* StoreContext 没加载 */ }
         var p = String(path || '').split('?')[0];
-        if (p === '/api/health' || p === '/api/version') return true;
         if (p.indexOf('/api/auth/') === 0) return true;
         if (p === '/api/stores' || p.indexOf('/api/stores/') === 0) return true;
         return false;
+    }
+
+    /**
+     * 门店 ID 合法性 —— 口径只有一处:StoreContext.isValidStoreId()
+     * (与后端 registry.is_valid_store_id 等价)。
+     * StoreContext 没加载时退回本地判断(等价于后端的 \A[A-Za-z0-9_-]{1,32}\Z:
+     * 长度 1-32 + 逐字符白名单 —— 不能用 /^...$/,JS 的 $ 会放行尾随换行)。
+     */
+    function _isValidStoreId(id) {
+        var s = String(id == null ? '' : id);
+        try {
+            if (typeof StoreContext !== 'undefined' && StoreContext
+                && typeof StoreContext.isValidStoreId === 'function') {
+                return !!StoreContext.isValidStoreId(s);
+            }
+        } catch (e) { /* StoreContext 没加载 */ }
+        return s.length >= 1 && s.length <= 32 && !/[^A-Za-z0-9_-]/.test(s);
     }
 
     /** 当前门店 ID。拿不到 / 不合法 → 空串(不带参数,让后端按用户范围默认)。 */
@@ -31,10 +53,7 @@ var Api = (() => {
             if (typeof StoreContext === 'undefined' || !StoreContext) return '';
             var id = StoreContext.getStoreId();
             if (!id) return '';
-            // 后端 registry.is_valid_store_id: \A[A-Za-z0-9_-]{1,32}\Z
-            if (!/^[A-Za-z0-9_-]{1,32}$/.test(id)) return '';
-            if (/[^A-Za-z0-9_-]/.test(id)) return '';
-            return id;
+            return _isValidStoreId(id) ? String(id) : '';
         } catch (e) {
             return '';
         }
@@ -171,28 +190,22 @@ var Api = (() => {
         delete: function(id) { return _request('DELETE', '/api/purchases/' + id); },
     };
 
-    // 值班模块 API (7个端点)
+    // 值班模块 API (5个端点)
     var duty = {
         list: function() { return _request('GET', '/api/duty'); },
         create: function(data) { return _request('POST', '/api/duty', data); },
         update: function(id, data) { return _request('PUT', '/api/duty/' + id, data); },
         delete: function(id) { return _request('DELETE', '/api/duty/' + id); },
         handle: function(id, data) { return _request('POST', '/api/duty/' + id + '/handle', data); },
-        image: function(id, fileData) { return _request('POST', '/api/duty/' + id + '/image', fileData); },
-        imageUpload: function(id, file) {
-            var formData = new FormData();
-            formData.append('image', file);
-            var opts = { method: 'POST', headers: {} };
-            // ⚠️ body 必须挂上:只 new + append 的话请求发出去不带任何数据
-            //   (历史上 6 处 FormData 全都漏了这一行 → 上传功能整个是坏的)
-            opts.body = formData;
-            var token = _authToken();
-            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-            var path = _appendStore('/api/duty/' + id + '/image');
-            var sep = path.indexOf('?') !== -1 ? '&' : '?';
-            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
-            return fetch(path, opts).then(function(res) { return res.json(); });
-        },
+        // ⚠️ 这里原来还有 image(id, fileData) 与 imageUpload(id, file) —— 已删(2026-11-25):
+        //   1) 它们打的 /api/duty/<id>/image 在后端**不存在** ——
+        //      routing.py 只特判精确的 /api/duty/image,/api/duty/7/image
+        //      会落到 _POST_PREFIX['/api/duty'] → handle_post_duty(建值班记录,吃 JSON)。
+        //   2) 后端没有「按 id 存图」的语义,那个 id 参数本来就没意义 ——
+        //      留着就是个骗人的 API。
+        //   3) 零调用点(grep 过 MeterStats/ 全目录)。
+        //   真正要传图片走 js/helpers/utils.js::uploadImages() → POST /api/duty/image
+        //   (字段 image + scope)—— 那是后端唯一存在的 multipart 图片端点。
     };
 
     // 报表模块 API (8个端点)
@@ -254,6 +267,11 @@ var Api = (() => {
     // ⚠️ 这里原来声明过两次 var backup,后者覆盖前者 → Api.backup.doRestore 是
     // undefined,js/modules/backup.js 的 doRestore() 一调就抛 TypeError。
     //   合并成一份,两个方法名都留着(doRestore / restore 是同一件事)。
+    //
+    // ⚠️ doBackup() 走 _request → 会带上 ?store=。
+    //   那只是「访问权校验」(门店闸要知道你在哪家店、有没有权限),
+    //   **不代表备份是按门店做的** —— 后端写的是 base_data_dir(),整包数据。
+    //   (admin.js 的备份下载/删除刻意不带 store,那是另一码事。)
     var backup = {
         doBackup: function() { return _request('POST', '/api/backup'); },
         doRestore: function(file) { return restoreUpload(file); },
@@ -267,7 +285,8 @@ var Api = (() => {
     //
     // ⚠️ multipart 的文件名必须以 .zip 结尾:后端按 filename="([^"]+\.zip)" 提取。
     // ⚠️ body 必须挂上:只 new + append 的话请求发出去不带任何数据。
-    // store 参数照样要带:恢复会写门店数据,门店闸靠 ?store= 定作用域。
+    // ⚠️ ?store= 只是访问权校验,恢复写的仍是 base_data_dir() 整包数据 ——
+    //    别让后人以为「恢复是按门店做的」。
     function restoreUpload(file) {
         var formData = new FormData();
         formData.append('zip_file', file);
@@ -275,9 +294,10 @@ var Api = (() => {
         opts.body = formData;
         var token = _authToken();
         if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-        var path = _appendStore('/api/admin/restore-upload');
+        var path = '/api/admin/restore-upload';
         var sep = path.indexOf('?') !== -1 ? '&' : '?';
         if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+        path = _appendStore(path);
         return fetch(path, opts).then(function(res) { return res.json(); });
     }
 
@@ -291,9 +311,10 @@ var Api = (() => {
             opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-            var path = _appendStore('/api/import');
+            var path = '/api/import';
             var sep = path.indexOf('?') !== -1 ? '&' : '?';
             if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            path = _appendStore(path);
             return fetch(path, opts).then(function(res) { return res.json(); });
         },
         importTemplate: function(model) { return _request('GET', '/api/import/template?model=' + model); },
@@ -310,9 +331,10 @@ var Api = (() => {
             opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-            var path = _appendStore('/api/upload');
+            var path = '/api/upload';
             var sep = path.indexOf('?') !== -1 ? '&' : '?';
             if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            path = _appendStore(path);
             return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };
@@ -333,9 +355,10 @@ var Api = (() => {
             opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-            var path = _appendStore('/api/import');
+            var path = '/api/import';
             var sep = path.indexOf('?') !== -1 ? '&' : '?';
             if (token) path = path + sep + 'token=' + encodeURIComponent(token);
+            path = _appendStore(path);
             return fetch(path, opts).then(function(res) { return res.json(); });
         },
     };

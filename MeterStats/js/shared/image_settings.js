@@ -8,8 +8,7 @@ function imageApiUrl() {
   try {
     if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
   } catch (e) { store = ''; }
-  if (!store) return base;
-  if (!/^[A-Za-z0-9_-]{1,32}$/.test(store) || /[^A-Za-z0-9_-]/.test(store)) return base;
+  if (!isValidStoreId(store)) return base;   // 口径见 js/helpers/utils.js::isValidStoreId
   return base + (base.includes('?') ? '&' : '?') + 'store=' + encodeURIComponent(store);
 }
 

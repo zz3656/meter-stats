@@ -121,12 +121,31 @@ window.getDutyImageUrl = function getDutyImageUrl(filename) {
   try {
     if (typeof StoreContext !== 'undefined' && StoreContext) store = StoreContext.getStoreId() || '';
   } catch (e) { store = ''; }
-  var ok = store && /^[A-Za-z0-9_-]{1,32}$/.test(store) && !/[^A-Za-z0-9_-]/.test(store);
   var url = base;
   if (t) url += '?token=' + encodeURIComponent(t);
-  if (ok) url += (url.indexOf('?') !== -1 ? '&' : '?') + 'store=' + encodeURIComponent(store);
+  if (isValidStoreId(store)) url += (url.indexOf('?') !== -1 ? '&' : '?') + 'store=' + encodeURIComponent(store);
   return url;
 };
+
+/**
+ * 门店 ID 合法性 —— 口径只有一处:StoreContext.isValidStoreId()
+ * (与后端 registry.is_valid_store_id 等价)。
+ * StoreContext 没加载时退回本地判断(等价于后端的 \A[A-Za-z0-9_-]{1,32}\Z:
+ * 长度 1-32 + 逐字符白名单 —— 不能用 /^...$/,JS 的 $ 会放行尾随换行)。
+ *
+ * ⚠️ 本文件在 index.html 里**最先加载**(早于 storeContext.js),
+ *    但这些调用都发生在**运行时** —— 不存在加载期 TDZ 问题。
+ */
+function isValidStoreId(id) {
+  var s = String(id == null ? '' : id);
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext
+        && typeof StoreContext.isValidStoreId === 'function') {
+      return !!StoreContext.isValidStoreId(s);
+    }
+  } catch (e) { /* StoreContext 没加载 */ }
+  return s.length >= 1 && s.length <= 32 && !/[^A-Za-z0-9_-]/.test(s);
+}
 
 /**
  * 上传图片到服务器，返回文件名数组。
@@ -170,14 +189,15 @@ window.compressImage = function compressImage(file, maxSide, quality) {
  */
 window.uploadImages = function uploadImages(files, maxCount, scope, skipCompress) {
   var list = Array.prototype.slice.call(files || []).slice(0, maxCount || 3);
-  var token = (typeof ADMIN_TOKEN !== 'undefined' && ADMIN_TOKEN) ||
-    localStorage.getItem('token') || '';
+  // token 只走 admin.js 的 currentAuthToken()(AGENTS.md 约定 ——
+  // localStorage 里有三套历史键名,后两个是死键)
+  var token = (typeof currentAuthToken === 'function') ? currentAuthToken() : '';
   var suffix = token ? '?token=' + encodeURIComponent(token) : '';
   // 上传也是按门店落盘(stores/<store_id>/images/),必须带 store
   try {
     if (typeof StoreContext !== 'undefined' && StoreContext) {
       var st = StoreContext.getStoreId() || '';
-      if (st && /^[A-Za-z0-9_-]{1,32}$/.test(st) && !/[^A-Za-z0-9_-]/.test(st)) {
+      if (isValidStoreId(st)) {
         suffix += (suffix ? '&' : '?') + 'store=' + encodeURIComponent(st);
       }
     }
