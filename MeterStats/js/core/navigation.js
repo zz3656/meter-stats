@@ -175,6 +175,8 @@ function switchSettingsPage(page) {
     if (typeof loadNasConfig === 'function') loadNasConfig();
   }
   if (page === 'roles' && typeof loadRolesInfo === 'function') loadRolesInfo();
+  // 门店管理:拉一次门店列表再渲染
+  if (page === 'stores' && typeof loadStores === 'function') loadStores();
 }
 
 /** 折叠/展开侧栏分组 */

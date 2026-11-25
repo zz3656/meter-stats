@@ -139,7 +139,9 @@ var Api = (() => {
         // 用户管理 (4个)
         users: function() { return _request('GET', '/api/admin/users'); },
         createUser: function(data) { return _request('POST', '/api/admin/users', data); },
-        updateUser: function(username, data) { return _request('PUT', '/api/admin/users/' + username, data); },
+        // 用户 ID 走 query —— 后端 handle_put_users 从 query 取 id(?id=),
+        // 路径形式(/api/admin/users/3)会被判「无效的用户ID」。
+        updateUser: function(uid, data) { return _request('PUT', '/api/admin/users?id=' + encodeURIComponent(uid), data); },
         deleteUser: function(username) { return _request('DELETE', '/api/admin/users/' + username); },
         // 角色管理 (1个)
         roles: function() { return _request('GET', '/api/admin/roles'); },
@@ -239,6 +241,15 @@ var Api = (() => {
         saveConfig: function(data) { return _request('PUT', '/api/admin/images', data); },
     };
 
+    // 分店模块 API (5个端点) — 门店管理页用
+    var stores = {
+        list: function() { return _request('GET', '/api/stores'); },
+        current: function() { return _request('GET', '/api/stores/current'); },
+        create: function(data) { return _request('POST', '/api/stores', data); },
+        update: function(id, data) { return _request('PUT', '/api/stores/' + encodeURIComponent(id), data); },
+        remove: function(id) { return _request('DELETE', '/api/stores/' + encodeURIComponent(id)); },
+    };
+
     // 水电迁移 API (2个端点)
     var migrate = {
         water: function() { return _request('POST', '/api/admin/migrate-water'); },
@@ -251,6 +262,7 @@ var Api = (() => {
         reports: reports, system: system,
         admin: admin, backup: backup, dataimport: dataimport,
         upload: upload, proxy: proxy, images: images, migrate: migrate,
-        adminRestore: adminRestore, adminImport: adminImport
+        adminRestore: adminRestore, adminImport: adminImport,
+        stores: stores
     };
 })();

@@ -154,10 +154,88 @@ function switchAdminPage(page) {
 }
 
 // ===== 用户管理 =====
+
+/**
+ * 拉门店列表并缓存到 window.STORE_LIST(用户表格要显示门店名)。
+ * 与 js/modules/stores.js 共用同一份缓存 —— 那边的 STORE_LIST 就是 window.STORE_LIST。
+ *
+ * 请求本身也缓存一份:并发调用共享同一个 Promise,回调按注册顺序执行 ——
+ * 「渲染勾选框」的回调先注册,「读取勾选框」的回调后注册,后者才读得到勾好的值。
+ */
+var _storeListPromise = null;
+function ensureStoreList() {
+  if (window.STORE_LIST && window.STORE_LIST.length) return Promise.resolve(window.STORE_LIST);
+  if (!_storeListPromise) {
+    _storeListPromise = Api.stores.list().then(function(res) {
+      _storeListPromise = null;
+      if (res && res.ok === false) {
+        window.STORE_LIST = [];
+        return window.STORE_LIST;
+      }
+      window.STORE_LIST = (res && res.stores) || [];
+      return window.STORE_LIST;
+    }).catch(function() {
+      _storeListPromise = null;
+      window.STORE_LIST = [];
+      return window.STORE_LIST;
+    });
+  }
+  return _storeListPromise;
+}
+
+/** 用户的门店范围摘要(表格「门店」列)。门店名走全局 escapeHtml(元素内容位置,够用)。 */
+function userStoreScopeText(u) {
+  if (!u) return '';
+  if (u.all_stores) return '<span class="role-badge role-admin">全部门店</span>';
+  var ids = Array.isArray(u.store_ids) ? u.store_ids : [];
+  if (!ids.length) return '<span style="color:var(--text-muted);">未分配</span>';
+  return ids.map(function(id) {
+    var s = (window.STORE_LIST || []).find(function(x) { return String(x.id) === String(id); });
+    return '<span class="role-badge">' + escapeHtml(s ? (s.name || s.id) : id) + '</span>';
+  }).join(' ');
+}
+
+/** 渲染用户表格(「门店」列靠 window.STORE_LIST 里的门店名)。 */
+function renderUsersTable(usersList) {
+  const tbody = document.getElementById('users-table-body');
+  if (!tbody) return;
+  tbody.innerHTML = usersList.map(u => `
+        <tr>
+          <td>${u.username}</td>
+          <td>${u.name}</td>
+          <td><span class="role-badge role-${u.role}">${ROLE_NAMES[u.role] || u.role}</span></td>
+          <td>${u.enabled
+              ? '<span class="status-dot on"></span>启用'
+              : '<span class="status-dot off"></span>禁用'}</td>
+          <td>${userStoreScopeText(u)}</td>
+          <td class="ta-right">
+            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
+            ${ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role) ? `<button class="btn btn-secondary btn-xs" onclick="editUserStores(${u.id})">门店</button>` : ''}
+            ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
+          </td>
+        </tr>
+      `).join('');
+}
+
+/** 渲染「新增用户」的门店勾选框。门店 ID 进属性值 → 必须走 escapeAttr(全局 escapeHtml 是弱版)。 */
+function renderNewUserStoreBoxes(stores) {
+  const box = document.getElementById('new-store-ids-box');
+  if (!box) return;
+  const list = stores || [];
+  if (!list.length) {
+    box.innerHTML = '<span style="color:var(--text-muted);">暂无门店</span>';
+    return;
+  }
+  box.innerHTML = list.map(function(s) {
+    const sid = String(s.id == null ? '' : s.id);
+    return '<label style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">' +
+      '<input type="checkbox" name="new-store-ids" value="' + escapeAttr(sid) + '" />' +
+      escapeHtml(s.name || sid) + '</label>';
+  }).join('');
+}
+
 function loadAdminUsers() {
   Api.admin.users().then(function(users) {
-    const tbody = document.getElementById('users-table-body');
-    if (!tbody) return;
     const usersList = users || [];
 
     // ---- 概览卡 ----
@@ -176,21 +254,57 @@ function loadAdminUsers() {
         card('员工', byRole.employee, '', '仅录入');
     }
 
-    tbody.innerHTML = usersList.map(u => `
-        <tr>
-          <td>${u.username}</td>
-          <td>${u.name}</td>
-          <td><span class="role-badge role-${u.role}">${ROLE_NAMES[u.role] || u.role}</span></td>
-          <td>${u.enabled
-              ? '<span class="status-dot on"></span>启用'
-              : '<span class="status-dot off"></span>禁用'}</td>
-          <td class="ta-right">
-            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
-            ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
-          </td>
-        </tr>
-      `).join('');
-    }).catch(e => showAlert('加载用户失败: ' + e.message, 'error'));
+    renderUsersTable(usersList);
+
+    // 门店列表拉到后:渲染「新增用户」的勾选框,并把表格「门店」列补成门店名
+    ensureStoreList().then(function(stores) {
+      renderNewUserStoreBoxes(stores);
+      renderUsersTable(usersList);
+    });
+  }).catch(e => showAlert('加载用户失败: ' + e.message, 'error'));
+}
+
+/** 编辑某个用户的门店权限(弹窗多选)。仅管理员可用 —— 与 /api/admin/users 同一道闸。 */
+function editUserStores(uid) {
+  if (!ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role)) { showAlert('只有管理员可以分配门店', 'error'); return; }
+  Promise.all([Api.admin.users(), ensureStoreList()]).then(function(results) {
+    var users = results[0] || [];
+    var stores = results[1] || [];
+    var u = users.find(function(x) { return String(x.id) === String(uid); });
+    if (!u) { showAlert('用户不存在', 'error'); return; }
+
+    var boxes = stores.map(function(s) {
+      var sid = String(s.id == null ? '' : s.id);
+      var ids = Array.isArray(u.store_ids) ? u.store_ids : [];
+      var checked = ids.indexOf(sid) >= 0 ? ' checked' : '';
+      return '<label style="display:inline-flex;align-items:center;gap:6px;margin:4px 12px 4px 0;">' +
+        '<input type="checkbox" name="edit-store-ids" value="' + escapeAttr(sid) + '"' + checked + ' />' +
+        escapeHtml(s.name || sid) + '</label>';
+    }).join('') || '<div style="color:var(--text-muted);">还没有门店,请先到「门店管理」创建</div>';
+
+    var allChecked = u.all_stores ? ' checked' : '';
+    showModal({
+      title: '门店权限: ' + (u.name || u.username),
+      icon: '🏪', iconKind: 'info',
+      body: '<div style="margin-bottom:10px;">' +
+              '<label style="display:inline-flex;align-items:center;gap:6px;">' +
+                '<input type="checkbox" id="edit-all-stores"' + allChecked + ' /> 全部门店(总部账号)</label>' +
+            '</div>' +
+            '<div>' + boxes + '</div>',
+      confirmText: '保存', confirmKind: 'primary'
+    }).then(function(ok) {
+      if (!ok) return;
+      var picked = Array.prototype.slice.call(
+        document.querySelectorAll('input[name="edit-store-ids"]:checked')
+      ).map(function(el) { return el.value; });
+      var all = (document.getElementById('edit-all-stores') || {}).checked || false;
+      Api.admin.updateUser(uid, { store_ids: picked, all_stores: all }).then(function(res2) {
+        if (!res2 || res2.ok === false) { showAlert('保存失败: ' + ((res2 && res2.error) || '未知错误'), 'error'); return; }
+        showAlert('门店权限已更新', 'success');
+        loadAdminUsers();
+      }).catch(function(e) { showAlert('网络错误: ' + e.message, 'error'); });
+    });
+  }).catch(function(e) { showAlert('加载失败: ' + e.message, 'error'); });
 }
 
 function addAdminUser() {
@@ -202,14 +316,25 @@ function addAdminUser() {
   if (!username || !password) { showAlert('用户名和密码不能为空', 'error'); return; }
   if (!ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role)) { showAlert('只有管理员可以添加用户', 'error'); return; }
 
-  Api.admin.createUser({ username: username, password: password, name: name, role: role }).then(function(res) {
-    if (!res.ok) { showAlert('添加失败: ' + (res.error || '未知错误'), 'error'); return; }
-    showAlert('用户已添加: ' + username, 'success');
-    document.getElementById('new-username').value = '';
-    document.getElementById('new-password').value = '';
-    document.getElementById('new-name').value = '';
-    loadAdminUsers();
-  }).catch(e => showAlert('网络错误: ' + e.message, 'error'));
+  ensureStoreList().then(function() {
+    var storeIds = Array.prototype.slice.call(
+      document.querySelectorAll('input[name="new-store-ids"]:checked')
+    ).map(function(el) { return el.value; });
+    var allStores = (document.getElementById('new-all-stores') || {}).checked || false;
+    Api.admin.createUser({
+      username: username, password: password, name: name, role: role,
+      store_ids: storeIds, all_stores: allStores
+    }).then(function(res) {
+      if (!res || res.ok === false) { showAlert('添加失败: ' + ((res && res.error) || '未知错误'), 'error'); return; }
+      showAlert('用户已添加: ' + username, 'success');
+      document.getElementById('new-username').value = '';
+      document.getElementById('new-password').value = '';
+      document.getElementById('new-name').value = '';
+      const allBox = document.getElementById('new-all-stores');
+      if (allBox) allBox.checked = false;
+      loadAdminUsers();
+    }).catch(e => showAlert('网络错误: ' + e.message, 'error'));
+  }).catch(e => showAlert('加载门店列表失败: ' + e.message, 'error'));
 }
 
 function editAdminUser(uid, oldUsername) {

@@ -114,6 +114,7 @@
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
           <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
         </div>
+        <button class="sidebar-item" data-section="settings-stores" onclick="switchSettingsPage('stores')"><span class="item-icon">🏪</span><span class="item-label">门店管理</span></button>
         <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
         <button class="sidebar-item" data-section="settings-meter" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
         <button class="sidebar-item" data-section="settings-data" onclick="switchSettingsPage('data')"><span class="item-icon">📂</span><span class="item-label">数据管理</span></button>
@@ -796,6 +797,11 @@
       </div>
     </section>
 
+  <!-- ===== 门店管理（独立页面） ===== -->
+  <section id="section-settings-stores" class="content-section" style="display:none;">
+    <div id="stores-page" style="display:flex;flex-direction:column;gap:20px;"></div>
+  </section>
+
   <!-- ===== 用户管理（独立页面） ===== -->
   <section id="section-settings-users" class="content-section" style="display:none;">
     <div class="card">
@@ -812,6 +818,10 @@
           <option value="supervisor">主管</option>
           <option value="admin">管理员</option>
         </select>
+        <label style="display:inline-flex;align-items:center;gap:4px;white-space:nowrap;">
+          <input type="checkbox" id="new-all-stores"> 全部门店
+        </label>
+        <span id="new-store-ids-box" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
         <button class="btn btn-primary btn-sm" onclick="addAdminUser()">➕ 添加</button>
       </div>
       <div style="overflow-x:auto;">
@@ -822,6 +832,7 @@
               <th>显示名</th>
               <th>角色</th>
               <th>状态</th>
+              <th>门店</th>
               <th class="ta-right">操作</th>
             </tr>
           </thead>
@@ -1565,6 +1576,7 @@
   <script src="js/modules/render_weekly_trend.js"></script>
   <script src="js/modules/render_weekly.js"></script>
   <script src="js/modules/backup.js"></script>
+  <script src="js/modules/stores.js"></script>
   <script src="js/nas_sync.js"></script>
   <script src="admin.js?v=<TIMESTAMP>"></script>
   <script src="js/core/init.js"></script>
