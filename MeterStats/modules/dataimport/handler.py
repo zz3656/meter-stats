@@ -13,6 +13,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from utils import send_json, send_csv, opt_float, read_body
+from modules.stores.meters import row_values
 from storage import log, get_lock, load_json, save_json
 from modules._base import get_data_paths
 
@@ -35,6 +36,43 @@ MODEL_EXAMPLES: Dict[str, List[str]] = {
     "items":      ["", "扫把", "5", "把", "示例物品备注", ""],
     "purchases":  ["", "2026-01-15", "扫把", "5", "把", "10.5", "示例供应商", "ordered", "示例备注"],
 }
+
+
+# 抄表导入里除「电表」以外的固定列(水电表底与备注)
+_READING_EXTRA_FIELDS = ("main_meter", "sub_meter", "water")
+
+# 旧 4 表:值固定写记录**顶层字段**(与 modules/stores/meters.py 同一份口径)
+_LEGACY_METER_KEYS = ("hall", "fire", "private_room", "ac")
+
+
+def _store_meter_keys() -> List[str]:
+    """当前门店的电表 key —— 导入的列校验与模板都跟着门店走(P2)。
+
+    取不到门店配置时回落到旧 4 表(与改造前行为一致)。
+    """
+    try:
+        from modules.stores.config import get_store_meters
+        keys = [m["key"] for m in get_store_meters()]
+        return keys or list(_LEGACY_METER_KEYS)
+    except Exception:
+        return list(_LEGACY_METER_KEYS)
+
+
+def _unknown_columns(rows: List[Dict[str, str]], allowed: List[str]) -> str:
+    """CSV 里出现了本店没有的列 → 返回错误文案,否则空串。
+
+    为什么要报错而不是忽略:门店换成 2 块表后,导入一份 4 表的老 CSV,
+    多出来的两列会被**静默丢掉**,用户看到「导入成功 20 条」却少了一半数据,
+    而且永远查不出是哪一步丢的。
+    """
+    if not rows:
+        return ""
+    cols = [c for c in (rows[0].keys() or []) if c]
+    unknown = [c for c in cols if c not in allowed]
+    if not unknown:
+        return ""
+    return ("CSV 里有本店不存在的列: %s。本店可用的列: %s"
+            % ("、".join(unknown), "、".join(allowed)))
 
 
 def _parse_number(value: str) -> Optional[float]:
@@ -82,26 +120,47 @@ def _import_readings(rows: List[Dict[str, str]]) -> tuple:
     """导入 readings 数据。返回 (成功数, 错误数, 错误列表)。"""
     errors = []
     count = 0
+
+    keys = _store_meter_keys()
+    allowed = ["date"] + keys + list(_READING_EXTRA_FIELDS) + ["note"]
+    bad_cols = _unknown_columns(rows, allowed)
+    if bad_cols:
+        # 整个文件拒收:静默丢列比导入失败更糟
+        return 0, len(rows), [bad_cols]
+
     readings = load_json(get_data_paths()["readings"], [])
     lock = get_lock("readings")
 
     with lock:
-        existing_dates = {r.get("date") for r in readings}
         for i, row in enumerate(rows):
             date = row.get("date", "").strip()
             if not date or not _validate_date(date):
                 errors.append(f"行 {i+1}: 日期格式无效 '{date}', 需要 YYYY-MM-DD")
                 continue
 
-            # 构建新行
+            # 构建新行:旧 4 表写顶层字段,自定义表写 meters 字典(P2)
             new_row: Dict[str, Any] = {"date": date}
-            for field in ("hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water"):
+            meters: Dict[str, Any] = {}
+            for k in keys:
+                val = _parse_number(row.get(k, ""))
+                if k in _LEGACY_METER_KEYS:
+                    new_row[k] = val
+                elif val is not None:
+                    meters[k] = val
+            for field in _READING_EXTRA_FIELDS:
                 new_row[field] = _parse_number(row.get(field, ""))
-
+            if meters:
+                new_row["meters"] = dict(meters)
             new_row["note"] = row.get("note", "").strip() or None
-            # 至少填一个表
-            vals = [v for v in new_row.values() if v is not None and v != date]
-            if not vals:
+
+            # 至少填一个表(水电表底也算 —— 与改造前一致)
+            # ⚠️ 自定义表的值在 meters 字典里,不在 new_row 顶层,必须单独算上
+            has_any = bool(meters)
+            has_any = has_any or any(
+                new_row.get(k) is not None for k in _LEGACY_METER_KEYS
+            )
+            has_any = has_any or any(new_row.get(f) is not None for f in _READING_EXTRA_FIELDS)
+            if not has_any:
                 errors.append(f"行 {i+1}: 至少需要填写一个表的读数")
                 continue
 
@@ -110,9 +169,19 @@ def _import_readings(rows: List[Dict[str, str]]) -> tuple:
             if idx is not None:
                 # 更新：合并旧值（类似 POST /api/readings 的覆盖逻辑）
                 old = readings[idx]
-                for k in ("hall", "fire", "private_room", "ac", "main_meter", "sub_meter", "water"):
-                    if new_row[k] is None:
-                        new_row[k] = old.get(k)
+                for k in keys:
+                    if k in _LEGACY_METER_KEYS:
+                        if new_row.get(k) is None:
+                            new_row[k] = old.get(k)
+                    elif k not in meters:
+                        old_val = row_values(old, k)
+                        if old_val is not None:
+                            meters[k] = old_val
+                for field in _READING_EXTRA_FIELDS:
+                    if new_row.get(field) is None:
+                        new_row[field] = old.get(field)
+                if meters:
+                    new_row["meters"] = meters
                 readings[idx] = new_row
             else:
                 readings.append(new_row)
@@ -126,6 +195,13 @@ def _import_charges(rows: List[Dict[str, str]]) -> tuple:
     """导入 charges 数据。返回 (成功数, 错误数, 错误列表)。"""
     errors = []
     count = 0
+
+    keys = _store_meter_keys()
+    allowed = ["id", "date"] + keys + ["note"]
+    bad_cols = _unknown_columns(rows, allowed)
+    if bad_cols:
+        return 0, len(rows), [bad_cols]
+
     charges = load_json(get_data_paths()["charges"], [])
     lock = get_lock("charges")
 
@@ -137,13 +213,22 @@ def _import_charges(rows: List[Dict[str, str]]) -> tuple:
                 continue
 
             new_charge: Dict[str, Any] = {"date": date}
-            for field in ("hall", "fire", "private_room", "ac"):
-                new_charge[field] = _parse_number(row.get(field, ""))
+            meters: Dict[str, Any] = {}
+            for k in keys:
+                val = _parse_number(row.get(k, ""))
+                if k in _LEGACY_METER_KEYS:
+                    new_charge[k] = val
+                elif val is not None:
+                    meters[k] = val
+            if meters:
+                new_charge["meters"] = meters
 
             new_charge["note"] = row.get("note", "").strip() or None
-            # 至少一个表有充值
-            vals = [v for v in new_charge.values() if v is not None and v != date]
-            if not any(isinstance(v, (int, float)) for v in vals):
+            # 至少一个表有充值(自定义表的值在 meters 字典里,必须单独算上)
+            has_any = bool(meters) or any(
+                new_charge.get(k) is not None for k in _LEGACY_METER_KEYS
+            )
+            if not has_any:
                 errors.append(f"行 {i+1}: 至少需要填写一个表的充值")
                 continue
 
@@ -341,8 +426,18 @@ def handle_get_import_template(handler, path_clean: str):
         })
         return
 
-    headers = MODEL_FIELDS[model]
-    rows = [MODEL_EXAMPLES[model]]
+    # 电表列跟着当前门店走(P2)—— 模板里给出别的店的列,用户照着填必然导不进去
+    if model == "readings":
+        keys = _store_meter_keys()
+        headers = ["date"] + keys + list(_READING_EXTRA_FIELDS) + ["note"]
+        rows = [["2026-01-15"] + ["1234.5"] * len(keys) + ["", "", "", "示例:各表读数"]]
+    elif model == "charges":
+        keys = _store_meter_keys()
+        headers = ["id", "date"] + keys + ["note"]
+        rows = [["", "2026-01-15"] + ["100"] * len(keys) + ["示例:充值记录"]]
+    else:
+        headers = MODEL_FIELDS[model]
+        rows = [MODEL_EXAMPLES[model]]
     filename = f"import-template-{model}.csv"
     send_csv(handler, filename, headers, rows)
 
