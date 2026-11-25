@@ -60,6 +60,10 @@ from modules.system.admin_tools_handler import (
     handle_get_dir_listing, handle_get_audit_log,
     handle_get_migrate_status, handle_post_migrate_water,
 )
+from modules.stores.handler import (
+    handle_get_stores, handle_get_current_store,
+    handle_post_store, handle_put_store, handle_delete_store,
+)
 
 # 注：admin 模块已拆分,本表保留为兼容层。新代码推荐直接从子模块导入:
 #   - modules.system.auth_handler         — 登录/会话
@@ -288,6 +292,10 @@ _GET_ROUTES = {
     "/api/meters": handle_get_meters_public,
     "/api/duty": handle_get_duty,
     "/api/proxy/nas-data": handle_get_proxy_nas_data,
+    # 门店管理。/api/stores/current 必须精确登记在前面 ——
+    # 前缀匹配(/api/stores/xxx 命中 /api/stores)会把它当成门店列表。
+    "/api/stores/current": handle_get_current_store,
+    "/api/stores": handle_get_stores,
 }
 
 _POST_PREFIX = {
@@ -309,6 +317,9 @@ _POST_PREFIX = {
     "/api/purchases": handle_post_purchases,
     "/api/duty": handle_post_duty,
     "/api/import": handle_post_import,
+    # 门店管理:权限在 handler 内部判(增删改仅 admin)——
+    # 放进 ADMIN_ONLY_PREFIXES 会把 GET /api/stores 一起拦掉。
+    "/api/stores": handle_post_store,
 }
 
 _PUT_PREFIX = {
@@ -324,6 +335,7 @@ _PUT_PREFIX = {
     "/api/admin/backup-config": handle_put_backup_config,
     "/api/admin/nas-config": handle_put_nas_config,
     "/api/duty": handle_put_duty,
+    "/api/stores": handle_put_store,
 }
 
 _DELETE_PREFIX = {
@@ -334,6 +346,7 @@ _DELETE_PREFIX = {
     "/api/purchases": handle_delete_purchases,
     "/api/admin/users": handle_delete_users,
     "/api/duty": handle_delete_duty,
+    "/api/stores": handle_delete_store,
 }
 
 # Admin 路由（精确匹配）
@@ -399,6 +412,11 @@ def _route(method: str, handler, path: str) -> bool:
     sess = _auth_gate(method, path_clean, handler)
     if sess is None:
         return True  # 已经发了 401/403,不再往下分发
+
+    # 把「这次请求是谁」交给下游 handler —— handler 不再自己取一次 token。
+    # 两次独立取 token 之间会话可能刚好过期,会让「鉴权通过」与
+    # 「业务看到的身份」不一致(门店管理 API 就会因此漏判/误判权限)。
+    handler._auth_session = sess
 
     # 门店闸:解析并校验当前门店。挂在 _route() 这个唯一入口上 →
     # 新增接口默认就带门店隔离,不用逐个接口改。
