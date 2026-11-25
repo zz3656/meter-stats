@@ -49,6 +49,12 @@
   // init() 重入保护:引导期间再调 init() 复用同一次 Promise,
   // 不重复打后端、也不让两次引导的选店结果互相覆盖。
   var initPromise = null;
+  // 在途引导的广播原因:可被后来的调用「升级」(不降级)。
+  // 典型场景:引导在途时 handleStoreError 触发恢复 —— 恢复要广播 'recovered',
+  // 但后端只该被打一次(重入保护),所以把 reason 升上去,而不是再起一次 init。
+  var pendingReason = '';
+  // 最后一次广播的原因 —— handleStoreError 用它判断要不要补广播 'recovered'。
+  var lastNotifiedReason = '';
 
   // ===== 基础工具 =====
 
@@ -118,6 +124,7 @@
   }
 
   function _notify(reason) {
+    lastNotifiedReason = reason || 'init';
     var snapshot = {
       storeId: state.storeId,
       stores: state.stores.slice(),
@@ -220,9 +227,15 @@
      *   4. 都没有 → 当前店为空(账号未分配门店)
      */
     init: function (reason) {
-      // 已在引导中 → 复用同一次,不重复打后端
-      if (initPromise) return initPromise;
-      var p = (async function () {
+      var r = reason || 'init';
+      // 已在引导中 → 复用同一次(不重复打后端),但把广播原因升上去。
+      // 「升级」= 只升不降:'recovered' 不能被后来的 'init' 盖掉。
+      if (initPromise) {
+        if (r !== 'init') pendingReason = r;
+        return initPromise;
+      }
+      pendingReason = r;
+      var work = (async function () {
         var listRes = null, curRes = null, listErr = null, curErr = null;
         try { listRes = await Api.stores.list(); } catch (e) { listErr = e; }
         try { curRes = await Api.stores.current(); } catch (e) { curErr = e; }
@@ -236,8 +249,7 @@
           state.storeId = '';
           _persist('');
           state.ready = true;
-          _notify(state.noStore ? 'no-store' : (reason || 'init'));
-          return '';
+          return { picked: '', notifyReason: state.noStore ? 'no-store' : '' };
         }
 
         state.stores = listRes.stores || [];
@@ -261,9 +273,14 @@
         state.storeId = picked;
         _persist(picked);
         state.ready = true;
-        _notify(reason || 'init');
-        return picked;
+        return { picked: picked, notifyReason: '' };
       })();
+      // 广播放在 work 之后:此刻 pendingReason 可能已被升级成更高优先级的 reason
+      // (引导在途时触发的恢复)。广播完再 resolve,调用方 await 到的一定是已通知的。
+      var p = work.then(function (res) {
+        _notify(res.notifyReason || pendingReason || 'init');
+        return res.picked;
+      });
       initPromise = p;
       var done = function () { if (initPromise === p) initPromise = null; };
       p.then(done, done);
@@ -306,6 +323,10 @@
       state.allStores = false;
       state.ready = false;
       state.noStore = false;
+      // ⚠️ recovering 必须复位:在途恢复中登出时,它要等 init promise settle 才回 false;
+      // 那个 promise 若永不 settle,后续所有门店错误都会被 recovering 守卫吞掉
+      // → 恢复功能永久失效。
+      state.recovering = false;
       _persist('');
       // 先通知再退订:让还挂着的订阅者知道「登出了」,然后把订阅清空 ——
       // 登出再登入时 UI 会重新订阅 onChange,不退订会重复注册 → 同一次切店刷两遍数据。
@@ -354,6 +375,9 @@
       // 用闭包里的 StoreContext 而不是 this —— 被解构调用时 this 会是 undefined。
       StoreContext.init('recovered').then(function () {
         state.recovering = false;
+        // init 复用在途引导时,广播的可能是别的 reason(重入保护的副作用)→
+        // 这里保证 'recovered' 一定被广播一次(UI 按 reason==='recovered' 触发重拉)。
+        if (lastNotifiedReason !== 'recovered') _notify('recovered');
       }, function () {
         state.recovering = false;
       });

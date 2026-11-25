@@ -245,7 +245,14 @@ function makeSandbox(opts) {
   sandbox.__apiCalls = apiCalls;
   sandbox.Api = {
     stores: {
-      list: async () => { apiCalls.list++; return { ok: true, stores, all_stores: true }; },
+      list: async () => {
+        apiCalls.list++;
+        // hangAfter: 第 N 次之后的 list() 永不 settle(模拟卡住的在途请求)
+        if (opts.hangAfter && apiCalls.list > opts.hangAfter) {
+          return new Promise(function () {});
+        }
+        return { ok: true, stores, all_stores: true };
+      },
       current: async () => {
         apiCalls.current++;
         if (opts.currentThrows) throw new Error('引导接口挂了');
@@ -390,6 +397,26 @@ function waitForReason(sandbox, reason, ms) {
   await Promise.all([s6.StoreContext.init(), s6.StoreContext.init()]);
   out.concurrentInit = { listCalls: s6.__apiCalls.list, currentCalls: s6.__apiCalls.current };
 
+  // ⑦ 引导在途时触发恢复 → 必须广播 'recovered',且后端只打一次
+  const s7 = makeSandbox();
+  const reasons7 = [];
+  s7.StoreContext.onChange((_s, r) => { reasons7.push(r); });
+  const booting = s7.StoreContext.init();                 // 引导在途(第一个 await 处挂起)
+  s7.StoreContext.handleStoreError(404, '门店不存在: s002'); // 恢复撞上一次在途引导
+  await booting;
+  out.inflightRecovery = { reasons: reasons7, listCalls: s7.__apiCalls.list };
+
+  // ⑧ 恢复在途中登出 → recovering 必须复位,否则恢复功能永久失效
+  const s8 = makeSandbox({ hangAfter: 1 });
+  await s8.StoreContext.init();
+  await s8.StoreContext.switchTo('s002');
+  s8.StoreContext.handleStoreError(404, '门店不存在: s002'); // 这次 init 永不 settle
+  s8.StoreContext.reset();                                  // 登出
+  // 重新铺脏数据:recovering 若没复位,第二次 handleStoreError 会被守卫吞掉 → 数据不清
+  vm.runInContext("State.set('readings', [{date:'2026-01-01'}]);", s8);
+  s8.StoreContext.handleStoreError(404, '门店不存在: s002');
+  out.recoveringReset = { readings: probe(s8).readings, listCalls: s8.__apiCalls.list };
+
   console.log(JSON.stringify(out));
 })();
 """
@@ -427,8 +454,15 @@ sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
 // 当前门店故意设成一个真实门店 ID —— Task 3 若把 store= 自动拼上去,这里就会露馅
 sandbox.StoreContext = { getStoreId: () => 's002' };
+// localStorage 里也种一个门店 ID:Task 3 若从 localStorage['meter_current_store']
+// 取店 id(而不是问 StoreContext),这个种子同样会让请求带上 store= 被抓住
+sandbox.localStorage.setItem('meter_current_store', 's002');
 sandbox.fetch = function (url, opts) {
-  fetched.push({ url: String(url), method: (opts && opts.method) || 'GET' });
+  fetched.push({
+    url: String(url),
+    path: String(url).split('?')[0],
+    method: (opts && opts.method) || 'GET',
+  });
   return Promise.resolve({
     ok: true,
     json: () => Promise.resolve({ ok: true, store_id: 'main', all_stores: true, stores: [] }),
@@ -447,7 +481,9 @@ function hasStoreParam(url) {
   await sandbox.Api.stores.list();
   await sandbox.Api.stores.current();
   console.log(JSON.stringify({
-    fetched: fetched.map((c) => ({ url: c.url, method: c.method, hasStore: hasStoreParam(c.url) })),
+    fetched: fetched.map((c) => ({
+      url: c.url, path: c.path, method: c.method, hasStore: hasStoreParam(c.url),
+    })),
   }));
 })();
 """
@@ -624,6 +660,32 @@ class TestStoreContextBehaviour(unittest.TestCase):
             "并发 init() 重复打了 /api/stores/current",
         )
 
+    def test_recovery_broadcasts_recovered_while_init_in_flight(self) -> None:
+        """引导在途时触发恢复 → 必须广播 'recovered'(且后端只打一次)。
+
+        引导在途时 handleStoreError 复用那一次 init(重入保护),若广播的仍是 'init',
+        UI 按 reason==='recovered' 触发的重拉就不会发生 → 恢复后页面空着。
+        """
+        out = self._run_harness(_PROD_HARNESS)
+        reasons = out["inflightRecovery"]["reasons"]
+        self.assertIn("recovered", reasons, "恢复没有广播 'recovered': %r" % reasons)
+        self.assertEqual(
+            out["inflightRecovery"]["listCalls"], 1,
+            "恢复撞上在途引导时重复打了后端(重入保护被破坏)",
+        )
+
+    def test_logout_resets_recovering_flag(self) -> None:
+        """恢复在途中登出 → recovering 必须复位。
+
+        否则那个在途 promise 永不 settle 时,后续所有门店错误都会被
+        handleStoreError 的 recovering 守卫吞掉 → 恢复功能永久失效。
+        """
+        out = self._run_harness(_PROD_HARNESS)
+        self.assertEqual(
+            out["recoveringReset"]["readings"], [],
+            "登出后 recovering 没复位 —— 恢复功能被守卫永久吞掉",
+        )
+
     # ---------- 真实 api.js:引导端点不带 store ----------
 
     def test_real_api_bootstrap_endpoints_do_not_carry_store(self) -> None:
@@ -631,15 +693,17 @@ class TestStoreContextBehaviour(unittest.TestCase):
 
         这是给 Task 3 兜底的网:只要给 /api/stores、/api/stores/current 拼上
         store=,这条就会红(管理员删店后 → 404 → 连门店列表都拿不到 → 永久卡死)。
+        沙箱里同时从 StoreContext 和 localStorage 两处放了门店 ID:
+        任何一种「自己去取店 id」的错误实现都会被抓住。
         """
         extra: dict[str, str] = {}
         override = os.environ.get("MS_API_JS")
         if override:
             extra["MS_API_JS"] = override
         out = self._run_harness(_API_HARNESS, extra or None)
-        urls = [call["url"] for call in out["fetched"]]
-        self.assertTrue(urls, "没有捕获到任何请求")
-        self.assertTrue(any("/api/stores/current" in u for u in urls), "没打到 /api/stores/current")
+        paths = [call["path"] for call in out["fetched"]]
+        self.assertIn("/api/stores", paths, "list 端点没发请求")
+        self.assertIn("/api/stores/current", paths, "current 端点没发请求")
         for call in out["fetched"]:
             self.assertFalse(
                 call["hasStore"], "引导请求带了 store 参数: %s" % call["url"],
