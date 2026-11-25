@@ -2226,6 +2226,15 @@ Expected: FAIL —— `ImportError: cannot import name '_safe_rel_target'`
 
 > 注意:`.tmp` 是原子写的临时文件,正常不会残留,但保留复制以防万一;`.tmp` 文件在恢复时会被路径白名单挡掉(见 Step 4)。
 
+> ⚠️ **Task 7 专属约束(来自 Task 1 修复轮 2 的复核结论)**:
+> 本 Task 把备份内容改成**路径保持**结构(`backup/<日期>/stores/<id>/readings.json`),
+> 那么 `storage.py` 里 `_try_restore_from_backup()` 的查找**必须同步改成按相对路径匹配** ——
+> 否则备份里文件在 `stores/main/readings.json`,查找却用 `backup/<日期>/readings.json`,
+> 门店数据反而恢复不出来。查找顺序应为:
+> 1. `<backup根>/<日期>/<相对 base 的路径>` —— 新格式(路径保持)
+> 2. `<backup根>/<日期>/<文件名>` —— 旧格式(迁移前遗留),**仅限总店/顶层文件**
+> 3. 顶层 `backup/` 根**只对总店生效**(Task 1 修复轮 2 已确立的规则,不要放宽)
+
 同时**必须改 ZIP 打包那一段** —— 现有代码只遍历 `backup_dir.iterdir()`,
 拿到的是**顶层条目**,`stores/` 是目录会被跳过,备份包里就不会有门店数据。
 把 `MeterStats/storage.py` 里的
