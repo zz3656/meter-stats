@@ -84,12 +84,22 @@ function makeSandbox(opts) {
   sandbox.globalThis = sandbox;
   vm.createContext(sandbox);
 
+  // ⚠️ escapeHtml / escapeAttr 必须给**不同的实现**:
+  //    生产里全局 escapeHtml 是 admin.js 的弱版本(只转义 & < >,不转义引号),
+  //    escapeAttr 才是 js/helpers/utils.js 的强版本(引号也转义)。
+  //    沙箱里若两者同源,「门店 ID 误用弱 escapeHtml」这条变异就抓不住 ——
+  //    弱版不转义 '"' → value="a"b" → 属性被打断。
   sandbox.escapeHtml = function (s) {
+    // 弱版本(与 admin.js:1082 一致):只转义 & < >
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  };
+  sandbox.escapeAttr = function (s) {
+    // 强版本(与 js/helpers/utils.js 一致):连引号一起转义
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
     });
   };
-  sandbox.escapeAttr = sandbox.escapeHtml;
   sandbox.showAlert = function (msg, type) {
     alerts.push({ msg: String(msg), type: String(type) });
   };
@@ -182,7 +192,19 @@ function notify(sandbox, listeners, state, reason) {
   e.sandbox.initStoreSwitcher();
   const e2 = makeSandbox({ stores: [{ id: 'main', name: '总店' }], allStores: true });
   e2.sandbox.initStoreSwitcher();
-  out.visibility = { single: e.wrap.style.display, headquarters: e2.wrap.style.display };
+  out.visibility = {
+    single: e.wrap.style.display,
+    headquarters: e2.wrap.style.display,
+    singleOptions: e.sel.innerHTML,
+  };
+
+  // ⑥b 先渲染出门店(总部账号),再变成不可见 → 下拉内容必须清空
+  //    (隐藏时残留上一位用户的门店名 = 跨用户信息泄露)
+  const e3 = makeSandbox({ allStores: true });
+  e3.sandbox.initStoreSwitcher();
+  const beforeHidden = e3.sel.innerHTML;
+  e3.sandbox.renderStoreSwitcher({ stores: [{ id: 'main', name: '总店' }], allStores: false });
+  out.hiddenClears = { before: beforeHidden, after: e3.sel.innerHTML };
 
   // ⑦ 自由文本必须转义:门店 ID 进属性值(escapeAttr)、门店名进元素内容(escapeHtml)
   const f = makeSandbox({
@@ -297,6 +319,113 @@ function makeSandbox(opts) {
 """
 
 
+# ===== 真实 storeContext.js:引导代次(登出后旧引导必须作废) =====
+#
+# 缺陷:reset() 清了 state / listeners,但没清在途的 init()。
+# 引导期间点登出 → 在途引导回来后把**旧用户**的门店写回 state,
+# 下一个登录继承上一个用户的门店(第一个数据请求带 ?store=<旧用户的店> → 403)。
+#
+# 修法:代次计数器 —— reset() 让代次 +1,在途引导发现自己不是最新代次就丢弃结果。
+_GEN_HARNESS = r"""
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = process.env.MS_ROOT;
+
+function makeSandbox(opts) {
+  opts = opts || {};
+  const map = {};
+  const sandbox = {
+    console, setTimeout, clearTimeout, Promise, JSON, Date, Number, String,
+    Array, Object, RegExp, Error, Boolean,
+    localStorage: {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+      setItem: (k, v) => { map[k] = String(v); },
+      removeItem: (k) => { delete map[k]; },
+    },
+    document: { getElementById: () => null },
+    window: null,
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+
+  const apiCalls = { list: 0, current: 0 };
+  sandbox.__apiCalls = apiCalls;
+  const storesByToken = opts.storesByToken || {};
+  sandbox.Api = {
+    stores: {
+      list: async () => {
+        apiCalls.list++;
+        // 请求发出那一刻的 token —— 之后换 token 不会改写已在途的请求
+        const token = sandbox.localStorage.getItem('token') || '';
+        if (opts.listDelay) await new Promise(function (r) { setTimeout(r, opts.listDelay); });
+        const stores = storesByToken[token] || opts.stores || [{ id: 'main', name: '总店' }];
+        return { ok: true, stores: stores, all_stores: true };
+      },
+      current: async () => {
+        apiCalls.current++;
+        const token = sandbox.localStorage.getItem('token') || '';
+        if (opts.listDelay) await new Promise(function (r) { setTimeout(r, opts.listDelay); });
+        const stores = storesByToken[token] || opts.stores || [{ id: 'main', name: '总店' }];
+        return { ok: true, store_id: stores[0].id, all_stores: true };
+      },
+    },
+  };
+
+  vm.runInContext(
+    fs.readFileSync(path.join(ROOT, 'js/core/storeContext.js'), 'utf8'),
+    sandbox, { filename: 'storeContext.js' },
+  );
+  return sandbox;
+}
+
+(async () => {
+  const out = {};
+  const storesByToken = {
+    userA: [{ id: 'main', name: '总店' }],
+    userB: [{ id: 's002', name: '国贸店' }],
+  };
+
+  // ① 引导在途 → reset()(登出)→ 旧引导的结果必须丢弃
+  const a = makeSandbox({ listDelay: 40, storesByToken: storesByToken });
+  a.localStorage.setItem('token', 'userA');
+  const reasonsA = [];
+  a.StoreContext.onChange(function (_s, r) { reasonsA.push(r); });
+  const p1 = a.StoreContext.init();     // userA 的引导在途
+  a.StoreContext.reset();               // 登出
+  await p1;
+  out.stale = {
+    storeId: a.StoreContext.getStoreId(),
+    stores: a.StoreContext.getStores().length,
+    ready: a.StoreContext.isReady(),
+    reasons: reasonsA,
+  };
+
+  // ② 引导在途 → reset()(登出)→ 另一个用户登录 → 必须重新引导,
+  //    且当前门店是新用户的店,不是旧用户的
+  const b = makeSandbox({ listDelay: 40, storesByToken: storesByToken });
+  b.localStorage.setItem('token', 'userA');
+  const pb1 = b.StoreContext.init();    // userA 的引导在途
+  b.StoreContext.reset();               // 登出
+  b.localStorage.setItem('token', 'userB');
+  const pb2 = b.StoreContext.init();    // userB 登录后的引导
+  await Promise.all([pb1, pb2]);
+  out.switchUser = {
+    storeId: b.StoreContext.getStoreId(),
+    stores: b.StoreContext.getStores().map(function (s) { return s.id; }),
+    listCalls: b.__apiCalls.list,
+  };
+
+  // ③ 重入保护不能退化:并发 init() 只打一次后端
+  const c = makeSandbox({ storesByToken: storesByToken });
+  c.localStorage.setItem('token', 'userA');
+  await Promise.all([c.StoreContext.init(), c.StoreContext.init()]);
+  out.concurrent = { listCalls: c.__apiCalls.list, currentCalls: c.__apiCalls.current };
+
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
 class TestStoreSwitcherWiring(unittest.TestCase):
 
     def test_index_has_store_switcher(self) -> None:
@@ -345,11 +474,31 @@ class TestStoreSwitcherWiring(unittest.TestCase):
         self.assertLess(idx_switch, idx_admin, "storeSwitcher.js 必须排在 admin.js 之前")
 
     def test_store_switcher_escapes_store_id_in_attribute(self) -> None:
-        """门店 ID 进 value="..." 必须走 escapeAttr(全局 escapeHtml 被弱版本覆盖)。"""
+        """门店 ID 进 value="..." 必须走 escapeAttr(全局 escapeHtml 被弱版本覆盖)。
+
+        断言要**带参数**:只断言文件里出现过 "escapeAttr(" 的话,
+        「ID 改用 escapeHtml、名字改用 escapeAttr」这条变异照样绿。
+        """
         src = STORE_SWITCHER_JS.read_text(encoding="utf-8")
-        self.assertIn("escapeAttr(", src, "门店 ID 进属性值必须用 escapeAttr")
-        self.assertIn("escapeHtml(", src, "门店名进元素内容必须用 escapeHtml")
+        self.assertRegex(src, r"escapeAttr\(\s*sid\s*\)",
+                         "门店 ID 进属性值必须用 escapeAttr(sid)")
+        self.assertRegex(src, r"escapeHtml\(\s*name\s*\)",
+                         "门店名进元素内容必须用 escapeHtml(name)")
         self.assertNotIn("function escapeHtml", src, "不要在切换器里重定义 escapeHtml")
+
+    def test_index_has_no_duplicate_initial_render(self) -> None:
+        """index.html 里那段 DOMContentLoaded 的 renderAll() 必须删掉。
+
+        它跑在 StoreContext.init() 之前(脚本求值期的 initAuth() 里那次
+        Api.system.me() 是网络请求)→ 第一个数据请求不带 ?store= →
+        多店用户每次刷新先看到默认店的数据;慢响应时那批数据还会留在页面上,
+        而切换器显示的是另一家店。
+        """
+        html = INDEX_HTML.read_text(encoding="utf-8")
+        self.assertNotIn("DOMContentLoaded", html,
+                         "index.html 里的 DOMContentLoaded 初始渲染必须删掉")
+        self.assertNotIn("renderAll()", html,
+                         "index.html 里不该再有独立的 renderAll() 调用")
 
     def test_admin_js_distinguishes_empty_store_states(self) -> None:
         """「当前店为空」有两种,提示文案必须不同,两种都不能去拉数据。"""
@@ -433,12 +582,29 @@ class TestStoreSwitcherBehaviour(unittest.TestCase):
         self.assertEqual(out["visibility"]["headquarters"], "block", "总部账号应显示切换器")
 
     def test_store_text_is_escaped(self) -> None:
-        """门店名是自由文本 → 元素内容转义;门店 ID 进属性值 → escapeAttr。"""
+        """门店名是自由文本 → 元素内容转义;门店 ID 进属性值 → escapeAttr(强版本)。
+
+        沙箱里 escapeHtml 是**弱版本**(不转义引号,与 admin.js 的弱实现一致),
+        escapeAttr 是强版本 —— 所以「ID 误用 escapeHtml」这条变异会在这里露出来:
+        弱版不转义 '"' → value="a"b" → 属性被打断。
+        """
         out = self._run(_SWITCHER_HARNESS)
         options = out["escaping"]["options"]
         self.assertNotIn("<b>A&B</b>", options, "门店名没转义")
         self.assertIn("&lt;b&gt;A&amp;B&lt;/b&gt;", options)
-        self.assertIn("&quot;", options, "门店 ID 进属性值没走 escapeAttr")
+        self.assertIn('value="a&quot;b"', options,
+                      "门店 ID 进属性值没走 escapeAttr(引号没转义)")
+        self.assertNotIn('value="a"b"', options,
+                         "门店 ID 用了弱 escapeHtml —— 属性值被打断")
+
+    def test_hidden_switcher_clears_options(self) -> None:
+        """切换器隐藏时要把下拉内容清空 —— 残留的是上一位用户的门店名。"""
+        out = self._run(_SWITCHER_HARNESS)
+        self.assertTrue(out["hiddenClears"]["before"], "前置场景没渲染出门店")
+        self.assertEqual(out["hiddenClears"]["after"], "",
+                         "切换器隐藏后 <option> 内容没清空")
+        self.assertEqual(out["visibility"]["singleOptions"], "",
+                         "单店用户(切换器不可见)不该留下门店名")
 
 
 class TestSetLoggedInOrder(unittest.TestCase):
@@ -487,6 +653,51 @@ class TestSetLoggedInOrder(unittest.TestCase):
                          "当前店为空时不该拉数据")
         self.assertTrue(res["alerts"], "当前店为空没有提示")
         self.assertIn("加载门店列表失败", res["alerts"][-1]["msg"])
+
+
+class TestStoreContextGeneration(unittest.TestCase):
+    """真实 js/core/storeContext.js:登出后旧引导必须作废(需要 node)。"""
+
+    def setUp(self) -> None:
+        if not shutil.which("node"):
+            self.skipTest("未安装 node,跳过前端行为验证")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _run(self) -> dict[str, Any]:
+        hp = Path(self.tmp.name) / "harness.js"
+        hp.write_text(_GEN_HARNESS, encoding="utf-8")
+        env = dict(**os.environ)
+        env["MS_ROOT"] = str(METERSTATS)
+        proc = subprocess.run(
+            ["node", str(hp)], capture_output=True, text=True, env=env, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, msg="node 执行失败:\n%s" % proc.stderr)
+        out: dict[str, Any] = json.loads(proc.stdout.strip().splitlines()[-1])
+        return out
+
+    def test_stale_bootstrap_is_discarded_after_reset(self) -> None:
+        """引导在途时登出 → 旧引导的结果不许再写回 state。"""
+        out = self._run()
+        stale = out["stale"]
+        self.assertEqual(stale["storeId"], "", "登出后旧引导把门店写回来了")
+        self.assertEqual(stale["stores"], 0, "登出后旧引导把门店列表写回来了")
+        self.assertFalse(stale["ready"], "登出后旧引导把引导状态写回来了")
+        self.assertNotIn("init", stale["reasons"], "旧引导在登出后还广播了变更")
+
+    def test_new_user_does_not_inherit_previous_users_store(self) -> None:
+        """引导在途 → 登出 → 另一个账号登录 → 当前门店必须是新账号的店。"""
+        out = self._run()
+        res = out["switchUser"]
+        self.assertEqual(res["storeId"], "s002", "新账号继承了上一个账号的门店")
+        self.assertEqual(res["stores"], ["s002"], "门店列表还是上一个账号的")
+        self.assertEqual(res["listCalls"], 2, "登出后的引导没有重新打后端(复用了陈旧 promise)")
+
+    def test_concurrent_init_still_hits_backend_once(self) -> None:
+        """代次计数器不许破坏重入保护 —— 并发 init() 仍然只打一次后端。"""
+        out = self._run()
+        self.assertEqual(out["concurrent"]["listCalls"], 1, "并发 init() 重复打了后端")
+        self.assertEqual(out["concurrent"]["currentCalls"], 1, "并发 init() 重复打了后端")
 
 
 if __name__ == "__main__":

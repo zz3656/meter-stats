@@ -34,6 +34,10 @@ function renderStoreSwitcher(state) {
 
   if (!visible || !stores.length) {
     wrap.style.display = 'none';
+    // 隐藏时把下拉内容清空 —— 残留的是上一位用户的门店名
+    // (登出后切换器 display:none 期间仍在 DOM 里 = 跨用户信息泄露)。
+    sel.innerHTML = '';
+    sel.value = '';
     return;
   }
   wrap.style.display = 'block';

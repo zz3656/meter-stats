@@ -55,6 +55,16 @@
   var pendingReason = '';
   // 最后一次广播的原因 —— handleStoreError 用它判断要不要补广播 'recovered'。
   var lastNotifiedReason = '';
+  // 引导代次 —— reset() 会 +1,在途的旧引导回来时发现自己不是最新代次就丢弃结果。
+  //
+  // 为什么需要:登出(reset)把 state / localStorage / listeners 都清了,
+  // 但**在途的引导请求还在飞**。它回来后会把旧用户的门店写回 state →
+  // 下一个登录的人继承上一个用户的门店(第一个数据请求带 ?store=<旧用户的店>
+  // → 门店闸 403,新用户被卡在 403 屏,切换器还渲染着旧用户的门店列表)。
+  //
+  // 不用「reset() 里把 initPromise 置空」来解:那只是让新引导与旧引导并发,
+  // 旧引导照样会写 state —— 真正的解法是让旧引导**认输**。
+  var initGeneration = 0;
 
   // ===== 基础工具 =====
 
@@ -265,10 +275,19 @@
         return initPromise;
       }
       pendingReason = r;
+      // 本次引导的代次 —— reset() 之后它就不是最新代次了,结果要丢弃。
+      var myGen = ++initGeneration;
       var work = (async function () {
         var listRes = null, curRes = null, listErr = null, curErr = null;
         try { listRes = await Api.stores.list(); } catch (e) { listErr = e; }
         try { curRes = await Api.stores.current(); } catch (e) { curErr = e; }
+
+        // ⚠️ 代次检查 —— 每次写 state 之前都要过这一关。
+        // reset() 之后(登出/换人登录),在途的旧引导**不许**再碰 state、
+        // 不许持久化、不许广播 —— 否则会把上一个用户的门店写给下一个人。
+        if (myGen !== initGeneration) {
+          return { picked: '', notifyReason: '', stale: true };
+        }
 
         // 列表拿不到 → 可能是「账号未分配门店」(403),也可能后端挂了
         if (listErr || !listRes || listRes.ok === false) {
@@ -308,6 +327,8 @@
       // 广播放在 work 之后:此刻 pendingReason 可能已被升级成更高优先级的 reason
       // (引导在途时触发的恢复)。广播完再 resolve,调用方 await 到的一定是已通知的。
       var p = work.then(function (res) {
+        // 陈旧结果(期间发生过 reset):不广播,也不把旧门店带回来。
+        if (res && res.stale) return '';
         _notify(res.notifyReason || pendingReason || 'init');
         return res.picked;
       });
@@ -358,6 +379,14 @@
       // → 恢复功能永久失效。
       state.recovering = false;
       _persist('');
+      // ⚠️ 代次 +1:在途的旧引导回来时发现自己不是最新代次 → 丢弃结果,
+      // 不再把旧用户的门店写回来。
+      // initPromise / pendingReason / lastNotifiedReason 一并清掉:
+      // 下一个登录必须重新引导(重新打后端),不能复用上一个用户的陈旧 promise。
+      initGeneration++;
+      initPromise = null;
+      pendingReason = '';
+      lastNotifiedReason = '';
       // 先通知再退订:让还挂着的订阅者知道「登出了」,然后把订阅清空 ——
       // 登出再登入时 UI 会重新订阅 onChange,不退订会重复注册 → 同一次切店刷两遍数据。
       _notify('reset');
