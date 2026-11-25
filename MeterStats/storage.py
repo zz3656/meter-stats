@@ -5,20 +5,17 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import os
-import re
 import shutil
-import tempfile
 import threading
 import zipfile
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import Dict, List, Optional
 from collections import OrderedDict
-from functools import lru_cache
+from datetime import datetime, timezone
+from pathlib import Path
 from threading import RLock
-
+from typing import Dict, Iterable, List, Optional
 
 # 支持的模型: 数据文件映射
 DATA_FILES = {
@@ -29,6 +26,22 @@ DATA_FILES = {
     "purchases": "purchases.json",
     "duty": "duty.json",
 }
+
+# settings.json 里属于「部署环境配置」的字段 —— 备份时**一律剥离**。
+#
+# 这些字段在每台机器/容器上独立配置,不是业务数据:
+# 备份包会被拿到别的机器/容器上恢复,带着它们回去会破坏目标环境的部署配置
+# (backup_dir 是宿主机绝对路径;nas_sync_pass 是 NAS 密码,绝不能进 ZIP)。
+#
+# ⚠️ 手动备份与自动备份**共用这一份**。以前各写一份,自动备份只剥了
+# backup_dir / backup_retention_count,漏掉 nas_sync_user / nas_sync_pass ——
+# 自动备份的 ZIP 里明文躺着 NAS 密码。
+BACKUP_EXCLUDED_SETTINGS_KEYS = frozenset({
+    "backup_dir",                # 宿主机绝对路径
+    "backup_retention_count",    # 保留个数
+    "nas_sync_user",             # 远端 NAS 账号(部署相关)
+    "nas_sync_pass",             # 远端 NAS 密码(绝不能进备份 ZIP)
+})
 
 # 每个模型的读写锁,避免 ThreadingHTTPServer 下并发写冲突
 _FILE_LOCKS: Dict[str, threading.Lock] = {name: threading.Lock() for name in DATA_FILES}
@@ -53,9 +66,9 @@ def get_data_dir() -> Path:
         print(f"[METER] 数据目录(来自 METER_DATA_DIR): {d}", flush=True)
         if not has_data:
             print(f"[METER] [注意] {d} 下没有找到 .json 数据文件。请确认:")
-            print(f"[METER]   1. docker-compose.yml 中 volumes: ./data:/data 的 ./data 目录是否包含旧数据")
-            print(f"[METER]   2. 或检查旧备份: ~/Library/Application Support/com.meter.stats/")
-            print(f"[METER]   3. 或检查旧位置: ~/Documents/electricity-stats/data/")
+            print("[METER]   1. docker-compose.yml 中 volumes: ./data:/data 的 ./data 目录是否包含旧数据")
+            print("[METER]   2. 或检查旧备份: ~/Library/Application Support/com.meter.stats/")
+            print("[METER]   3. 或检查旧位置: ~/Documents/electricity-stats/data/")
         return d
 
     # Docker 环境：使用 /data 目录（通过 docker-compose.yml 挂载）
@@ -83,7 +96,7 @@ def get_data_dir() -> Path:
 
     # 如果标准位置空,但旧位置有数据 -> 迁移
     if legacy.exists() and any(legacy.glob("*.json")) and not any(standard.glob("*.json")):
-        log(f"[METER] 首次启动 -- 从旧位置迁移数据...")
+        log("[METER] 首次启动 -- 从旧位置迁移数据...")
         log(f"  源: {legacy}")
         log(f"  目标: {standard}")
         standard.mkdir(parents=True, exist_ok=True)
@@ -170,7 +183,7 @@ def init_data_files(data_dir: Path) -> dict:
     # 每日定时自动备份（每天 0 点执行一次）
     try:
         import threading as _threading
-        from datetime import datetime, timezone, timedelta
+        from datetime import timedelta
 
         now = _local_now()
         tomorrow = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
@@ -208,7 +221,19 @@ def init_data_files(data_dir: Path) -> dict:
     return files
 
 
-def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Path]" = None):
+def _rel_in_store_filter(rel: str, store_ids: "set[str]") -> bool:
+    """备份相对路径是否落在给定的门店范围内。
+
+    归属规则(单一真相来源在 modules.stores.handler.backup_rel_store_id):
+    - "stores/<id>/xxx" → 归属 <id>
+    - 顶层数据文件 → 归属总店(main)
+    """
+    from modules.stores.handler import backup_rel_store_id
+    return backup_rel_store_id(rel) in store_ids
+
+
+def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Path]" = None,
+                store_filter: "Optional[Iterable[str]]" = None):
     """备份数据文件。
 
     - target_parent=None: 优先使用 METER_BACKUP_DIR 环境变量指定的备份目录
@@ -216,7 +241,11 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
                           若环境变量未设置则备份到 data_dir/backup/(默认)
     - target_parent=Path: 备份到该目录(用户自选备份目录)
     - force=False: 每日一次(YYYYMMDD 目录,当天已存在则跳过)
-    - force=True:  手动备份(YYYYMMDD_HHMMSS 目录,每次独立,不覆盖自动备份)
+    - force=True:  手动备份(YYYYMMDD_HHMMSS_毫秒 目录,每次独立,不覆盖自动备份)
+    - store_filter=None: **全量**备份(所有门店)—— 启动自动备份、每日定时备份、
+      迁移前备份都走这一档:它们不是用户会话驱动的,必须备份全店数据。
+    - store_filter=集合: 只备份这些门店的数据(stores/<id>/ 中 id 在集合内的,
+      以及总店 main 的顶层历史文件)。用于「按调用方门店范围导出」的路径。
 
     只加不删,用户可随时手动清理 backup/ 旧目录。
     返回备份目录路径(跳过时返回 None)。
@@ -237,17 +266,11 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
             else:
                 # settings 中没有 backup_dir，使用环境变量或默认路径
                 backup_rel = os.environ.get("METER_BACKUP_DIR", "").strip()
-                if backup_rel:
-                    parent = data_dir / backup_rel
-                else:
-                    parent = data_dir / "backup"
+                parent = data_dir / backup_rel if backup_rel else data_dir / "backup"
         except Exception:
             # settings 加载失败，使用环境变量或默认路径
             backup_rel = os.environ.get("METER_BACKUP_DIR", "").strip()
-            if backup_rel:
-                parent = data_dir / backup_rel
-            else:
-                parent = data_dir / "backup"
+            parent = data_dir / backup_rel if backup_rel else data_dir / "backup"
 
     # 缓存 settings.json（只读一次，后续复用）
     _settings_cache = None
@@ -258,11 +281,28 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     except Exception:
         pass
 
+    # 门店范围(None = 全量备份)。转成 set 便于反复查询。
+    scope: "Optional[set[str]]" = set(store_filter) if store_filter is not None else None
+
     log(f"[BACKUP] data_dir={data_dir}, target_parent={target_parent}, parent={parent}, force={force}")
     # 使用 UTC 时间戳确保备份目录名可排序且与时区无关
     utc_now = _local_now()
     if force:
-        stamp = utc_now.strftime("%Y%m%d_%H%M%S")
+        # ⚠️ 目录名带**毫秒**:秒级时间戳会让同一秒内的两次调用拿到同一个路径,
+        # 后者直接覆盖前者(手动备份/恢复前的 pre_backup 都走这里 ——
+        # 覆盖掉正在恢复的那个 ZIP 会导致「恢复到错误内容」)。
+        base_stamp = utc_now.strftime("%Y%m%d_%H%M%S")
+        millis = utc_now.microsecond // 1000
+        stamp = f"{base_stamp}_{millis:03d}"
+        # 同一毫秒内再撞名(极少见)→ 递增直到不撞。
+        # 绝不允许 ZipFile('w') 覆盖掉上一次的备份。
+        bump = 0
+        while (parent / f"auto-bak-{stamp}.zip").exists() or (parent / stamp).exists():
+            bump += 1
+            stamp = f"{base_stamp}_{(millis + bump) % 1000:03d}"
+            if bump > 999:  # 理论上到不了;兜底避免死循环
+                stamp = f"{base_stamp}_{utc_now.microsecond:06d}_{bump}"
+                break
         backup_dir = parent / stamp
     else:
         today = utc_now.strftime("%Y%m%d")
@@ -282,6 +322,11 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     for name in DATA_FILES.values():
         src = data_dir / name
         if src.exists():
+            # store_filter 给定时,顶层的**总店历史文件**只在总店在范围内才收:
+            # 多门店布局下顶层文件就是总店(legacy)的数据。
+            if scope is not None and not _rel_in_store_filter(name, scope):
+                log(f"[BACKUP] 跳过 {name}: 不在门店范围内")
+                continue
             try:
                 shutil.copy2(src, backup_dir / name)
                 log(f"[BACKUP] 已复制 {name} → {backup_dir}")
@@ -306,6 +351,9 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
             if src.suffix not in (".json", ".tmp"):
                 continue
             rel = src.relative_to(data_dir)
+            if scope is not None and not _rel_in_store_filter(rel.as_posix(), scope):
+                log(f"[BACKUP] 跳过 {rel}: 不在门店范围内")
+                continue
             dest = backup_dir / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -320,14 +368,17 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
     if settings_src.exists():
         try:
             settings_data = json.loads(settings_src.read_text(encoding="utf-8"))
-            # 剥离部署环境字段，保持与手动备份一致
+            # 剥离部署环境字段 —— 与手动备份**共用同一份**键集合
+            # (BACKUP_EXCLUDED_SETTINGS_KEYS):以前自动备份只剥 2 个键,
+            # nas_sync_pass 明文躺在自动备份的 ZIP 里。
             safe_settings = {k: v for k, v in settings_data.items()
-                             if k not in ("backup_dir", "backup_retention_count")}
+                             if k not in BACKUP_EXCLUDED_SETTINGS_KEYS}
             (backup_dir / "settings.json").write_text(
                 json.dumps(safe_settings, ensure_ascii=False, indent=2),
                 encoding="utf-8",
             )
-            log(f"[BACKUP] 已复制 settings.json → {backup_dir}")
+            log(f"[BACKUP] 已复制 settings.json → {backup_dir} "
+                f"(已剥离部署字段: {BACKUP_EXCLUDED_SETTINGS_KEYS & set(settings_data.keys())})")
         except Exception as e:
             log(f"[WARN] 读取 settings 失败,跳过: {e}")
 
@@ -583,10 +634,8 @@ def load_json(path: Path, default=None):
         restored = _try_restore_from_backup(path)
         if restored is not None:
             # 写入缓存
-            try:
+            with contextlib.suppress(OSError):
                 _cache_set(path_str, path.stat().st_mtime_ns, restored)
-            except OSError:
-                pass
             return restored
         return default
 
@@ -594,10 +643,8 @@ def load_json(path: Path, default=None):
         with path.open("r", encoding="utf-8") as f:
             data = json.load(f)
         # 写入缓存
-        try:
+        with contextlib.suppress(OSError):
             _cache_set(path_str, path.stat().st_mtime_ns, data)
-        except OSError:
-            pass
         return data
     except (json.JSONDecodeError, OSError) as e:
         log(f"[WARN] 加载 {path.name} 失败: {e},尝试从备份恢复")

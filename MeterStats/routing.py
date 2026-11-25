@@ -1,4 +1,4 @@
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001  (import 顺序是刻意的,见下方说明)
 import inspect
 import traceback
 from typing import Any, Dict, List, Optional, Tuple
@@ -9,7 +9,7 @@ from modules.readings import (
     handle_get_readings, handle_post_readings, handle_put_readings, handle_delete_readings,
 )
 from modules.utilities.handler import (
-    handle_get_readings_water, handle_get_readings_water_monthly,
+    handle_get_readings_water,
     handle_post_readings_water, handle_put_readings_water, handle_delete_readings_water,
 )
 from modules.charges import (
@@ -65,6 +65,12 @@ from modules.stores.handler import (
     handle_post_store, handle_put_store, handle_delete_store,
 )
 
+# ⚠️ 上面的 import 顺序是**刻意的**,别让 isort 自动重排:
+#    modules.system.admin_handler 必须排在 modules.backup.admin_handler 之前 ——
+#    反过来会撞上循环 import(modules.system.admin_handler → modules.backup.admin_handler
+#    → modules.system.settings_handler → modules.system.__init__ → modules.system.admin_handler)。
+#    这也是本文件带 # noqa: I001 的原因。
+#
 # 注：admin 模块已拆分,本表保留为兼容层。新代码推荐直接从子模块导入:
 #   - modules.system.auth_handler         — 登录/会话
 #   - modules.system.users_handler        — 用户 CRUD + 电表设置
@@ -86,6 +92,13 @@ ADMIN_ONLY_PREFIXES = ("/api/admin/users",)
 
 # 管理类接口至少主管:审计日志、备份删除/恢复、NAS 同步、电价倍率与图片目录配置
 # 这些不该由"只能录入抄表"的员工角色触碰,与前端 ADMIN_MANAGE_ROLES 的意图对齐。
+#
+# ⚠️ /api/upload、/api/restore、/api/backup、/api/admin/backup-download 也在其中:
+#   - upload / restore **能写任意门店的数据**(载荷里带 stores/<id>/ 路径),
+#     员工角色不该有「覆盖别人门店数据」的权限;
+#   - backup / backup-download 能**导出含全部门店数据的备份包**
+#     (Task 7 之前备份包只含顶层 = 单店,现在含全部门店 —— 导出面被放大了)。
+# 它们与已有的 /api/admin/data-files 同级:都是「数据文件」级别的操作。
 MANAGER_ONLY_PREFIXES = (
     "/api/admin/audit",
     "/api/admin/data-files",
@@ -94,12 +107,16 @@ MANAGER_ONLY_PREFIXES = (
     "/api/admin/restore-upload",
     "/api/admin/sync-from-nas",
     "/api/admin/backup-delete",
+    "/api/admin/backup-download",
     "/api/admin/meter",
     "/api/admin/images",
     "/api/admin/auto-backup",
     "/api/admin/backup-retention",
     "/api/admin/backup-config",
     "/api/admin/nas-config",
+    "/api/upload",
+    "/api/restore",
+    "/api/backup",
 )
 MANAGER_ROLES = frozenset({"admin", "supervisor"})
 
@@ -141,8 +158,8 @@ def _auth_gate(method: str, path_clean: str, handler) -> Optional[Dict[str, Any]
     if path_clean in PUBLIC_API_PATHS:
         return {}  # 匿名放行(白名单端点);门店闸会跳过这些路径
 
+    from modules.system.auth_handler import _touch_session, get_session
     from modules.system.permissions_handler import _get_token
-    from modules.system.auth_handler import get_session, _touch_session
 
     token = _get_token(handler)
     sess = get_session(token) if token else None

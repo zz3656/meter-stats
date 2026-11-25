@@ -14,10 +14,15 @@
 
 会话从 routing 拿(见 _current_session):鉴权与业务看的是同一份 session,
 不会出现「鉴权时还在、业务处理时已过期」的两次取 token 竞态。
+
+本模块还提供**门店范围闸**(store_scope_check / parse_store_target /
+rel_store_scope_check):备份、恢复、NAS 同步这些接口的**载荷里带目标门店**,
+查询参数上的门店闸(routing._store_gate)管不到它们 —— 「请求 ?store=main 被拒」
+不等于「载荷里写 stores/main/readings.json 也被拒」。这两个闸必须都在。
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import unquote
 
 from utils import read_body, send_json
@@ -74,6 +79,176 @@ def _visible_store_ids(sess: Dict[str, Any]) -> Tuple[bool, List[str]]:
         # 用户不存在(账号被删 / 会话是假的)→ 一家店都不给
         return (False, [])
     return scope
+
+
+def _multi_store_layout() -> bool:
+    """是否多门店布局。判不出(数据目录未初始化)时按单店处理。
+
+    口径与 routing._store_gate 一致:判不出布局时按单店放行,并记一条日志,
+    绝不把异常冒成 500。
+    """
+    try:
+        from modules.stores.context import multi_store_layout
+        return multi_store_layout()
+    except Exception as e:
+        from storage import log
+        log(f"[WARN] [store_scope] 判不出门店布局,按单店放行: {e}")
+        return False
+
+
+def _resolve_store_scope(handler: Any) -> Tuple[bool, Optional[List[str]], str]:
+    """解析调用方的门店范围。
+
+    返回 (是否通过, 允许的门店 ID 列表, 错误文案):
+    - (True, None, "")    → 不按门店过滤(单店布局 / 总部账号 all_stores)
+    - (True, ["s002"], "")→ 只能访问这些门店
+    - (False, [], "...")  → 拒绝(fail-closed)
+
+    **fail-closed**:settings.json 里查不到这个用户 → 拒绝,
+    绝不回退成「全部门店」(账号被删但会话还在 = 权限还在)。口径与
+    routing._store_gate / _visible_store_ids 完全一致。
+    """
+    if not _multi_store_layout():
+        # 单店布局:只有一家店,无从越权 → 放行(保持改造前行为完全一致)
+        return (True, None, "")
+
+    sess = _current_session(handler)
+    if not sess:
+        # 取不到会话:正常路径下不可能发生(所有请求都过 routing._auth_gate,
+        # 它会把 session 挂到 handler._auth_session)。只有单元测试直接调
+        # handler(不经 routing)时才会走到这里 —— 那时按 routing 的合成会话
+        # 口径处理(ENFORCE_AUTH=False = 测试模式)。
+        try:
+            import routing as _routing
+            if not getattr(_routing, "ENFORCE_AUTH", True):
+                return (True, None, "")
+        except Exception as e:
+            from storage import log
+            log(f"[WARN] [store_scope] 读取鉴权开关失败: {e}")
+        return (False, [], "未登录或会话已过期,请重新登录")
+    if sess.get("_synthetic"):
+        # 单元测试模式(ENFORCE_AUTH=False)的合成会话 —— 与 _store_gate 同口径。
+        return (True, None, "")
+
+    user_id = sess.get("user_id")
+    if not isinstance(user_id, int):
+        return (False, [], "账号不存在或门店权限无法确认,请重新登录")
+    try:
+        scope = registry.user_store_scope(user_id)
+    except Exception as e:
+        from storage import log
+        log(f"[WARN] [store_scope] 读用户门店范围失败: {e}")
+        return (False, [], "账号不存在或门店权限无法确认,请重新登录")
+    if scope is None:
+        # 用户不存在(账号被删 / 会话是假的)→ 一家店都不给
+        return (False, [], "账号不存在或门店权限无法确认,请重新登录")
+    all_stores, store_ids = scope
+    if all_stores:
+        return (True, None, "")
+    return (True, [str(s) for s in store_ids], "")
+
+
+def caller_store_scope(handler: Any) -> Tuple[bool, Optional[List[str]], str]:
+    """调用方的门店范围(公开 helper)。
+
+    返回 (是否通过, 允许的门店 ID 列表(None = 不按门店过滤), 错误文案)。
+    「只列出/只打包调用方范围内的门店」这类需求用它。
+    """
+    return _resolve_store_scope(handler)
+
+
+def store_scope_check(handler: Any, store_ids: Iterable[str]) -> Tuple[bool, str]:
+    """校验一批目标门店 ID 是否都在调用方的门店范围内。
+
+    返回 (是否通过, 错误文案)。通过时错误文案是空串。
+
+    规则(逐条都是安全边界,不要放宽):
+    - **单店布局**(数据目录下没有 stores/ 目录)→ 直接放行
+      (保持改造前行为完全一致;此时只有一家店,无从越权)。
+    - 取当前会话(handler._auth_session,没有就自己取 token)→ 查用户记录。
+    - **查不到用户记录 → 拒绝**(fail-closed),绝不回退成「全部门店」。
+    - all_stores=True(总部账号)→ 放行。
+    - 否则:每个目标门店 ID 都必须在该用户的 store_ids 里 →
+      **大小写敏感**比较("MAIN" != "main")。
+    """
+    ok, allowed, msg = _resolve_store_scope(handler)
+    if not ok:
+        return (False, msg)
+    if allowed is None:
+        return (True, "")
+    targets = [str(s) for s in store_ids]
+    if not targets:
+        return (True, "")
+    if not allowed:
+        return (False, "账号未分配门店,请联系管理员")
+    for sid in targets:
+        if sid not in allowed:  # 大小写敏感:registry 拒绝大小写冲突的门店 ID
+            return (False, f"无权访问门店: {sid}")
+    return (True, "")
+
+
+def parse_store_target(rel: str) -> Tuple[bool, Optional[str]]:
+    """解析备份包相对路径里的「目标门店」。
+
+    返回 (是否通过, 门店 ID):
+    - (True, None)   → 顶层文件(readings.json / settings.json 等),
+      没有门店维度 → 放行
+    - (True, "s002") → 目标门店是 s002
+    - (False, None)  → 路径形状不合法 / 门店 ID 非法 → **拒绝**(不放行)
+
+    门店 ID 必须过 registry.is_valid_store_id —— 解析不出合法 ID 的路径
+    绝不能当成「没有门店维度」放行(那等于「路径里写什么都行」)。
+    """
+    rel = (rel or "").strip()
+    if not rel or rel.startswith("/") or "\\" in rel:
+        return (False, None)
+    parts = rel.split("/")
+    if len(parts) == 1:
+        # 顶层文件:没有门店维度
+        return (True, None)
+    if parts[0] != "stores":
+        # 既不是顶层文件,也不是门店子路径 → 非法
+        return (False, None)
+    if len(parts) < 3:
+        # stores/<id> 没有文件名 → 非法
+        return (False, None)
+    store_id = parts[1]
+    if not registry.is_valid_store_id(store_id):
+        return (False, None)
+    return (True, store_id)
+
+
+def rel_store_scope_check(handler: Any, rel: str) -> Tuple[bool, str]:
+    """校验一个备份包相对路径的**目标门店**是否在调用方范围内。
+
+    顶层文件(没有门店维度)直接放行;门店子路径按 parse_store_target
+    解析出目标门店后走 store_scope_check。
+    """
+    ok, store_id = parse_store_target(rel)
+    if not ok:
+        return (False, f"非法的数据文件路径: {rel}")
+    if store_id is None:
+        return (True, "")
+    return store_scope_check(handler, [store_id])
+
+
+def backup_rel_store_id(rel: str) -> str:
+    """备份相对路径归属的门店 ID。
+
+    - "stores/<id>/xxx" → "<id>"
+    - 顶层数据文件("readings.json" 等)→ 总店 ID(main):
+      多门店布局下顶层文件就是总店的历史位置(迁移前的遗留),
+      它不是「没有门店维度」,而是**总店的数据**。
+
+    与 parse_store_target 的区别:那个判「这次写操作的目标门店是谁」
+    (顶层文件 → 没有门店维度 → 放行);这个判「这个文件属于谁的数据」
+    (打包/列举时用来决定要不要收进某个门店的备份)。
+    """
+    from modules.stores.context import DEFAULT_STORE_ID
+    parts = (rel or "").split("/")
+    if len(parts) >= 2 and parts[0] == "stores":
+        return parts[1]
+    return DEFAULT_STORE_ID
 
 
 def _read_body_dict(handler: Any) -> Dict[str, Any]:

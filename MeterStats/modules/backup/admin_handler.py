@@ -2,26 +2,31 @@
 业务逻辑在 modules/backup/handler.py,本文件只负责 HTTP 入口。
 """
 from __future__ import annotations
+
 import datetime
 import os
-import shutil
 import tempfile
 import zipfile
 from pathlib import Path
+from typing import Any, Dict
 from urllib.parse import parse_qs, urlparse
 
-from utils import send_json, read_body, CORS
-from storage import log, DATA_FILES, backup_data
-from modules.system.settings_handler import get_settings, save_settings
-from modules.backup.handler import (
-    _get_backup_retention_count,
-    _iter_store_files,
-    _merge_settings_after_restore,
-    _resolve_backup_parent,
-    _safe_rel_target,
-)
+from utils import CORS, read_body, send_json
 from utils.api import _validate_zip_safely
 
+from modules.backup.handler import (
+    _backup_zip_scope_ok,
+    _get_backup_retention_count,
+    _merge_settings_after_restore,
+    _resolve_backup_parent,
+    _resolve_extract_dir,
+    _restore_targets,
+    _safe_rel_target,
+    _scope_check_rels,
+    _write_restore_files,
+)
+from modules.system.settings_handler import get_settings, save_settings
+from storage import backup_data, log
 
 # ============ 备份列表 ============
 
@@ -164,6 +169,15 @@ def handle_post_backup_download(handler, use_get=False):
         send_json(handler, 403, {"error": "非法备份文件名"})
         return
 
+    # 门店范围闸:备份包是**盘上已有的文件**,不经过 backup_data(store_filter=...)
+    # 那条路 —— 自动备份永远是全量的。受门店范围限制的调用方能下载整包,
+    # 就等于跨店导出了别家门店的数据。「新建时按范围过滤」不等于
+    # 「下载时按范围过滤」,两头都得堵。
+    scope_ok, scope_err = _backup_zip_scope_ok(handler, zip_path)
+    if not scope_ok:
+        send_json(handler, 403, {"error": scope_err})
+        return
+
     zip_data = zip_path.read_bytes()
 
     handler.send_response(200)
@@ -287,10 +301,7 @@ def handle_get_backup_config(handler):
     # Docker 环境下备份目录由环境变量控制,不可修改
     if os.environ.get("METER_DOCKER"):
         backup_rel = os.environ.get("METER_BACKUP_DIR", "").strip()
-        if backup_rel:
-            effective_backup = str(data_dir / backup_rel)
-        else:
-            effective_backup = str(data_dir / "backup")
+        effective_backup = str(data_dir / backup_rel) if backup_rel else str(data_dir / "backup")
         send_json(handler, 200, {
             "ok": True,
             "backup_dir": effective_backup,
@@ -608,6 +619,7 @@ def handle_post_sync_from_nas(handler):
     返回: { ok: true, restored: [...], message: "..." }
     """
     from modules.stores.context import base_data_dir
+    from modules.stores.handler import rel_store_scope_check
     try:
         target_dir = base_data_dir()
     except RuntimeError as e:
@@ -621,6 +633,18 @@ def handle_post_sync_from_nas(handler):
     if not files:
         send_json(handler, 200, {"ok": False, "error": "没有数据文件"})
         return
+
+    # R1:门店范围闸 —— files 里每个目标门店都必须在调用方范围内。
+    # 先整体校验、再落盘:写一半再报错,用户根本不知道哪个文件已经落地了。
+    # (非法路径不在这里拦 —— 它由下面的 _safe_rel_target 记进 errors,
+    #  那是业务失败,不是越权。)
+    for name in files:
+        if _safe_rel_target(target_dir, name) is None:
+            continue
+        ok, err = rel_store_scope_check(handler, name)
+        if not ok:
+            send_json(handler, 403, {"ok": False, "error": err})
+            return
 
     # 恢复前自动备份当前数据
     pre_backup = backup_data(target_dir, force=True)
@@ -772,49 +796,29 @@ def handle_post_restore_upload(handler):
                     return
 
             # 找到数据目录(可能是 YYYYMMDD_HHMMSS/ 子目录或根目录)
-            extract_dir = Path(tmp_dir)
-            children = list(extract_dir.iterdir())
-            if len(children) == 1 and children[0].is_dir():
-                extract_dir = children[0]
+            extract_dir = _resolve_extract_dir(Path(tmp_dir))
 
-            # 恢复数据文件
-            restored = []
-            for name in DATA_FILES.values():
-                src_file = extract_dir / name
-                if src_file.exists():
-                    shutil.copy2(src_file, target_dir / name)
-                    restored.append(name)
-                    log(f"  恢复 {name} <- {src_file}")
+            # R1:门店范围闸 —— ZIP 里的目标门店必须在调用方范围内
+            ok, err = _scope_check_rels(handler, _restore_targets(extract_dir))
+            if not ok:
+                send_json(handler, 403, {"ok": False, "error": err})
+                return
 
-            # 恢复 stores/ 子树(路径保持)
-            for rel, src_path in _iter_store_files(extract_dir):
-                dest = _safe_rel_target(target_dir, rel)
-                if dest is None:
-                    log(f"  [WARN] 跳过非法备份路径: {rel}")
-                    continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_path, dest)
-                restored.append(rel)
-                log(f"  恢复 {rel} <- {src_path}")
+            # 恢复数据文件(顶层 + stores/ 子树;R3:旧格式顶层文件桥接到 stores/main/)
+            restored, notes = _write_restore_files(handler, target_dir, extract_dir)
 
-            # 恢复 settings.json:合并业务字段,保留目标环境的部署字段(backup_dir 等)
-            settings_src = extract_dir / "settings.json"
-            if settings_src.exists():
-                try:
-                    import json as _json
-                    src_settings = _json.loads(settings_src.read_text(encoding="utf-8"))
-                    _merge_settings_after_restore(target_dir, src_settings)
-                    restored.append("settings.json")
-                except Exception as e:
-                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
 
-        send_json(handler, 200, {
+        payload: Dict[str, Any] = {
             "ok": True,
             "restored": restored,
             "zip_name": zip_filename,
             "pre_backup": str(pre_backup) if pre_backup else "无",
             "message": f"✅ 已从 {zip_filename} 恢复 {len(restored)} 个文件",
-        })
+        }
+        if notes:
+            payload["notes"] = notes
+            payload["message"] += "；" + "；".join(notes)
+        send_json(handler, 200, payload)
     except zipfile.BadZipFile:
         send_json(handler, 200, {"ok": False, "error": "ZIP 文件格式错误,请确认是有效的备份文件"})
     except Exception as e:

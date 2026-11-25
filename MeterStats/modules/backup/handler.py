@@ -7,23 +7,27 @@ import re
 import shutil
 import tempfile
 import zipfile
-from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import Any, Iterable, List, Optional, Tuple
 
-from utils import send_json, read_body
-from storage import backup_data, DATA_FILES, log, _cache_clear
+from utils import read_body, send_json
 from utils.api import _validate_zip_safely
 
+from storage import (
+    BACKUP_EXCLUDED_SETTINGS_KEYS,
+    DATA_FILES,
+    _cache_clear,
+    backup_data,
+    log,
+)
 
 # settings.json 中属于"部署环境配置"的字段,备份时不应包含(避免恢复到其他机器时破坏部署)
 # 这些字段在每台机器/容器上独立配置,不是业务数据
-_BACKUP_EXCLUDED_SETTINGS_KEYS = frozenset({
-    "backup_dir",              # 宿主机绝对路径
-    "backup_retention_count",  # 保留天数
-    "nas_sync_user",           # 远端 NAS 账号(部署相关)
-    "nas_sync_pass",           # 远端 NAS 密码(绝不能进备份 ZIP)
-})
+#
+# ⚠️ 键集合的**唯一真相来源**在 storage.BACKUP_EXCLUDED_SETTINGS_KEYS ——
+#    手动备份与自动备份共用它。以前各写一份,自动备份漏了 nas_sync_*,
+#    自动备份的 ZIP 里明文躺着 NAS 密码。
+_BACKUP_EXCLUDED_SETTINGS_KEYS = BACKUP_EXCLUDED_SETTINGS_KEYS
 
 
 def _iter_store_files(base_dir: Path) -> list[tuple[str, Path]]:
@@ -96,6 +100,194 @@ def _filter_settings_for_backup(settings: dict) -> dict:
     return {k: v for k, v in settings.items() if k not in _BACKUP_EXCLUDED_SETTINGS_KEYS}
 
 
+# ============ 门店范围闸(R1)============
+
+class _StoreScopeDeniedError(Exception):
+    """门店范围校验失败 —— 整个请求拒绝(403),不是「跳过这个文件」。
+
+    载荷里的目标门店越界时,必须**一个文件都不写**:
+    写一半再报错,用户根本不知道哪个文件已经落地了。
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.message = message
+
+
+def _scope_check_rels(handler: Any, rels: Iterable[str]) -> Tuple[bool, str]:
+    """校验一批备份相对路径的**目标门店**是否都在调用方的门店范围内。
+    返回 (是否通过, 错误文案)。任何一个目标门店越界 → 整个请求拒绝。
+    """
+    from modules.stores.handler import rel_store_scope_check
+    for rel in rels:
+        ok, err = rel_store_scope_check(handler, rel)
+        if not ok:
+            log(f"[WARN] 门店范围校验失败: {rel} → {err}")
+            return (False, err)
+    return (True, "")
+
+
+def _backup_zip_scope_ok(handler: Any, zip_path: Path) -> Tuple[bool, str]:
+    """备份包里的门店是否都在调用方的门店范围内。
+
+    为什么下载也要过这道闸:备份包是**已经落在盘上的文件**,不经过
+    backup_data(store_filter=...) 那条路 —— 自动备份永远是全量的。
+    受门店范围限制的调用方只要能下载整包,就等于跨店导出了别家门店的数据。
+    「新建的备份按范围过滤」不等于「下载时按范围过滤」,两头都得堵。
+
+    - 单店布局 / 总部账号(all_stores)→ 放行
+    - 受限调用方 → 包里只要有范围外的门店数据就拒绝
+    - 顶层文件在多店布局下归属总店(与 backup_rel_store_id 同一口径)
+    """
+    from modules.stores.handler import (
+        backup_rel_store_id,
+        caller_store_scope,
+        parse_store_target,
+    )
+
+    ok, allowed, msg = caller_store_scope(handler)
+    if not ok:
+        return (False, msg)
+    if allowed is None:
+        return (True, "")
+
+    try:
+        with zipfile.ZipFile(zip_path) as zf:
+            names = zf.namelist()
+    except Exception as e:
+        return (False, f"读取备份包失败: {e}")
+
+    for name in names:
+        shape_ok, _sid = parse_store_target(name)
+        if not shape_ok:
+            # 不是数据文件形状(目录条目/其它文件)→ 不算门店数据
+            continue
+        owner = backup_rel_store_id(name)
+        if owner not in allowed:
+            return (False, f"备份包含其它门店的数据,无权下载: {owner}")
+    return (True, "")
+
+
+def _restore_targets(extract_dir: Path) -> List[str]:
+    """备份包里将被写回的数据文件相对路径(顶层 + stores/ 子树)。"""
+    rels: List[str] = []
+    for name in DATA_FILES.values():
+        if (extract_dir / name).exists():
+            rels.append(name)
+    for rel, _ in _iter_store_files(extract_dir):
+        rels.append(rel)
+    return rels
+
+
+def _looks_like_data_root(d: Path) -> bool:
+    """这个目录自己长得像「数据根」吗?
+
+    判据:里面有顶层数据文件 / settings.json / stores/ 子目录。
+    """
+    if any((d / name).exists() for name in DATA_FILES.values()):
+        return True
+    if (d / "settings.json").exists():
+        return True
+    return (d / "stores").is_dir()
+
+
+def _resolve_extract_dir(tmp_dir: Path) -> Path:
+    """找到解压出来的数据目录。
+
+    ZIP 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录。
+
+    ⚠️ 只有当**唯一的**子目录自己就长得像数据根时才下钻 ——
+    否则「stores/」会被误当成数据根(里面明明是 stores/s002/...,
+    下钻之后就变成 stores/stores/s002/... → 找不 → 恢复了个寂寞,
+    接口还报 ok:true)。
+    """
+    children = list(tmp_dir.iterdir())
+    if len(children) == 1 and children[0].is_dir() and _looks_like_data_root(children[0]):
+        return children[0]
+    return tmp_dir
+
+
+def _write_restore_files(handler: Any, target_dir: Path,
+                         extract_dir: Path) -> Tuple[List[str], List[str]]:
+    """把解压出来的备份内容写回 target_dir。
+
+    返回 (restored 文件名列表, notes 说明列表)。
+
+    R3:**旧格式备份的顶层数据文件必须桥接到 stores/main/**。
+    多门店布局下应用读的是 stores/main/readings.json
+    (modules.stores.context.resolve_store_path),只写顶层等于
+    「接口报成功、总店数据纹丝不动」。崩溃恢复路径
+    (storage._try_restore_from_backup)早就这么做了,这里对齐。
+    """
+    restored: List[str] = []
+    notes: List[str] = []
+
+    main_id = "main"
+    multi = False
+    try:
+        from modules.stores.context import DEFAULT_STORE_ID, multi_store_layout
+        main_id = DEFAULT_STORE_ID
+        multi = multi_store_layout()
+    except Exception as e:
+        log(f"[WARN] 判不出门店布局,按单店恢复: {e}")
+
+    # 1. 顶层数据文件(旧格式备份)
+    #    桥接目标(总店)也要过门店范围闸 —— 桥接本质上是一次「写别的门店」。
+    bridge_ok, bridge_err = (True, "")
+    if multi:
+        from modules.stores.handler import store_scope_check
+        bridge_ok, bridge_err = store_scope_check(handler, [main_id])
+
+    bridged: List[str] = []
+    for name in DATA_FILES.values():
+        src = extract_dir / name
+        if not src.exists():
+            continue
+        shutil.copy2(src, target_dir / name)
+        restored.append(name)
+        log(f"  恢复 {name} <- {src}")
+        if not multi:
+            continue
+        if not bridge_ok:
+            note = f"旧格式备份的顶层 {name} 未桥接到 stores/{main_id}/({bridge_err})"
+            notes.append(note)
+            log(f"  [WARN] {note}")
+            continue
+        main_dir = target_dir / "stores" / main_id
+        main_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, main_dir / name)
+        restored.append(f"stores/{main_id}/{name}")
+        bridged.append(name)
+        log(f"  [RESTORE] 旧格式备份的顶层 {name} 已桥接到 stores/{main_id}/{name}")
+    if bridged:
+        notes.append(
+            f"旧格式备份(顶层文件)已恢复到总店 stores/{main_id}/: {', '.join(bridged)}"
+        )
+
+    # 2. 恢复 stores/ 子树(路径保持)
+    for rel, src_path in _iter_store_files(extract_dir):
+        dest = _safe_rel_target(target_dir, rel)
+        if dest is None:
+            log(f"  [WARN] 跳过非法备份路径: {rel}")
+            continue
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_path, dest)
+        restored.append(rel)
+        log(f"  恢复 {rel} <- {src_path}")
+
+    # 3. 恢复 settings.json:合并业务字段,保留部署环境字段(backup_dir 等)
+    settings_src = extract_dir / "settings.json"
+    if settings_src.exists():
+        try:
+            src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
+            _merge_settings_after_restore(target_dir, src_settings)
+            restored.append("settings.json")
+        except Exception as e:
+            log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
+
+    return restored, notes
+
+
 def _merge_settings_after_restore(target_dir: Path, src_settings: dict) -> None:
     """恢复 settings 时,合并而非整体覆盖:保留目标环境独有的部署字段(如 backup_dir)。
 
@@ -111,7 +303,7 @@ def _merge_settings_after_restore(target_dir: Path, src_settings: dict) -> None:
             json.dumps(incoming, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        log(f"  [RESTORE] 目标无 settings.json,直接写入(已剥离部署字段)")
+        log("  [RESTORE] 目标无 settings.json,直接写入(已剥离部署字段)")
         return
     try:
         existing = json.loads(target_settings_path.read_text(encoding="utf-8"))
@@ -130,7 +322,7 @@ def _merge_settings_after_restore(target_dir: Path, src_settings: dict) -> None:
         json.dumps(existing, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    log(f"  [RESTORE] 合并 settings.json:覆盖业务字段,保留部署字段(backup_dir/backup_retention_count)")
+    log("  [RESTORE] 合并 settings.json:覆盖业务字段,保留部署字段(backup_dir/backup_retention_count)")
 
 
 
@@ -139,16 +331,29 @@ def handle_get_data_files(handler):
 
     返回 { ok: true, files: { "readings.json": "<JSON字符串>", ... } }
     多门店布局下额外包含 "stores/<id>/<name>.json" 形式的条目。
+
+    ⚠️ **只返回调用方门店范围内的文件**(R1):
+    这个接口原来把全部门店的数据都吐出来 —— 一个只管 s002 的主管
+    也能拿到总店和别家分店的数据。门店范围闸在这里是「读」这一侧的闸。
     """
     from modules.stores.context import base_data_dir
+    from modules.stores.handler import caller_store_scope
     try:
         target_dir = base_data_dir()
     except RuntimeError as e:
         send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
 
+    ok, allowed, err = caller_store_scope(handler)
+    if not ok:
+        send_json(handler, 403, {"ok": False, "error": err})
+        return
+
     files = {}
     data_file_names = set(DATA_FILES.values()) | {"settings.json"}
+    # allowed=None → 不按门店过滤(单店布局 / 总部账号)
+    # settings.json 是全局配置(用户表/门店注册表/单价),不是门店数据 → 始终返回
+    top_level_allowed = allowed is None or "main" in allowed
 
     try:
         top_entries = sorted(target_dir.iterdir())
@@ -157,12 +362,19 @@ def handle_get_data_files(handler):
         top_entries = []
     for f in top_entries:
         if f.is_file() and f.suffix == '.json' and f.name in data_file_names:
+            if f.name != "settings.json" and not top_level_allowed:
+                # 顶层数据文件在多门店布局下是**总店的历史位置** → 越权
+                continue
             try:
                 files[f.name] = f.read_text(encoding="utf-8")
             except OSError as e:
                 log(f"[WARN] 读取 {f.name} 失败: {e}")
 
     for rel, path in _iter_store_files(target_dir):
+        if allowed is not None:
+            from modules.stores.handler import backup_rel_store_id
+            if backup_rel_store_id(rel) not in allowed:
+                continue
         try:
             files[rel] = path.read_text(encoding="utf-8")
         except OSError as e:
@@ -230,16 +442,29 @@ def handle_post_backup(handler):
 
     每次点击都新建一个备份(同日可多次),手动备份最多保留 10 个(自动清理最旧的)。
 
+    ⚠️ **只打包调用方门店范围内的数据**(R1):
+    Task 7 之后备份包含全部门店 —— 一个只管 s002 的主管点「备份」,
+    拿到的 ZIP 里装着总店和别家分店的数据。总部账号(all_stores)不受限。
+
     返回 { ok: true, zip_path: "/data/backup/20250101_120000/meter-backup-20250101_120000.zip", backup_name: "20250101_120000" }
     """
     import datetime
 
     from modules.stores.context import base_data_dir
+    from modules.stores.handler import backup_rel_store_id, caller_store_scope
     try:
         source_dir = base_data_dir()
     except RuntimeError as e:
         send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
+
+    # 门店范围:allowed=None → 不按门店过滤(单店布局 / 总部账号)
+    ok, allowed, err = caller_store_scope(handler)
+    if not ok:
+        send_json(handler, 403, {"ok": False, "error": err})
+        return
+    # 顶层数据文件在多门店布局下是**总店的历史位置** → 越权时也不收
+    top_level_allowed = allowed is None or "main" in allowed
 
     backup_parent = _resolve_backup_parent(source_dir)
 
@@ -256,6 +481,9 @@ def handle_post_backup(handler):
         backup_dir.mkdir(parents=True, exist_ok=True)
         settings_src = source_dir / "settings.json"
         for name in DATA_FILES.values():
+            if not top_level_allowed:
+                log(f"[BACKUP] 跳过 {name}: 不在门店范围内")
+                continue
             src = source_dir / name
             if src.exists():
                 shutil.copy2(src, backup_dir / name)
@@ -278,6 +506,9 @@ def handle_post_backup(handler):
         # ⚠️ 只有 *.json 会进来(_iter_store_files 只认 JSON)——
         #    值班照片仍然不进备份,维持改造前现状。
         for rel, src in _iter_store_files(source_dir):
+            if allowed is not None and backup_rel_store_id(rel) not in allowed:
+                log(f"[BACKUP] 跳过 {rel}: 不在门店范围内")
+                continue
             dest = backup_dir / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             try:
@@ -324,7 +555,6 @@ def handle_post_restore(handler):
     从 ZIP 压缩包恢复数据到数据目录。
     ⚠️ 安全措施: 恢复前先把当前数据自动备份一份(可回滚),再解压覆盖。
     """
-    import datetime
     import zipfile
 
     body = read_body(handler)
@@ -354,47 +584,30 @@ def handle_post_restore(handler):
                 return
 
             # 找到解压出的数据目录（可能是 YYYYMMDD_HHMMSS/ 子目录或根目录）
-            extract_dir = Path(tmp_dir)
-            children = list(extract_dir.iterdir())
-            if len(children) == 1 and children[0].is_dir():
-                extract_dir = children[0]
+            extract_dir = _resolve_extract_dir(Path(tmp_dir))
+
+            # R1:门店范围闸 —— ZIP 里的目标门店必须在调用方范围内。
+            # 任何一个越界 → 整个请求拒绝,一个文件都不写。
+            ok, err = _scope_check_rels(handler, _restore_targets(extract_dir))
+            if not ok:
+                send_json(handler, 403, {"ok": False, "error": err})
+                return
 
             # 恢复数据文件 —— 顶层 + stores/ 子树
-            restored = []
-            for name in DATA_FILES.values():
-                src_file = extract_dir / name
-                if src_file.exists():
-                    shutil.copy2(src_file, target_dir / name)
-                    restored.append(name)
-                    log(f"  恢复 {name} <- {src_file}")
+            # (R3:多门店布局下,旧格式备份的顶层文件会桥接到 stores/main/)
+            restored, notes = _write_restore_files(handler, target_dir, extract_dir)
 
-            # 恢复 stores/ 子树(路径保持)
-            for rel, src_path in _iter_store_files(extract_dir):
-                dest = _safe_rel_target(target_dir, rel)
-                if dest is None:
-                    log(f"  [WARN] 跳过非法备份路径: {rel}")
-                    continue
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src_path, dest)
-                restored.append(rel)
-                log(f"  恢复 {rel} <- {src_path}")
-
-            # 恢复 settings.json:合并业务字段,保留部署环境字段(backup_dir 等)
-            settings_src = extract_dir / "settings.json"
-            if settings_src.exists():
-                try:
-                    src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
-                    _merge_settings_after_restore(target_dir, src_settings)
-                    restored.append("settings.json")
-                except Exception as e:
-                    log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
-
-        send_json(handler, 200, {
+        payload = {
             "ok": True,
             "restored": restored,
             "pre_backup": str(pre_backup) if pre_backup else "无",
             "source_zip": str(zip_file),
-        })
+        }
+        if notes:
+            # R3:让用户看得见「旧格式备份已落到 stores/main/」,别以为没生效
+            payload["notes"] = notes
+            payload["message"] = "；".join(notes)
+        send_json(handler, 200, payload)
     except zipfile.BadZipFile:
         send_json(handler, 200, {"ok": False, "error": "ZIP 文件格式错误"})
     except Exception as e:
@@ -420,11 +633,10 @@ def handle_post_upload(handler):
     ⚠️ 安全措施: 恢复前自动备份当前数据,可随时回滚。
     """
     import base64
-    import shutil
     import tempfile
-    import os
 
     from modules.stores.context import base_data_dir
+    from modules.stores.handler import rel_store_scope_check
     try:
         target_dir = base_data_dir()
     except RuntimeError as e:
@@ -434,6 +646,7 @@ def handle_post_upload(handler):
     content_type = handler.headers.get("Content-Type", "")
     uploaded = []
     restored = []
+    notes: List[str] = []
 
     # 恢复前自动备份当前数据(可回滚)
     pre_backup = backup_data(target_dir, force=True)
@@ -443,42 +656,24 @@ def handle_post_upload(handler):
 
         tmp_dir 由调用方传入(整个 handler 共享一个临时目录,避免 JSON 分支
         之前出现的 NameError:局部变量未定义)。
+
+        ⚠️ R1:解压出来的**目标门店**必须都在调用方范围内,否则抛
+        _StoreScopeDeniedError —— 整个请求拒绝,一个文件都不写。
         """
         names = []
         zip_path = Path(tmp_dir) / "upload.zip"
         zip_path.write_bytes(zip_bytes)
         with zipfile.ZipFile(zip_path, 'r') as zf:
             zf.extractall(tmp_dir)
-        extract_dir = Path(tmp_dir)
         # zip 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录
-        children = list(extract_dir.iterdir())
-        if len(children) == 1 and children[0].is_dir():
-            extract_dir = children[0]
-        for name in DATA_FILES.values():
-            src = extract_dir / name
-            if src.exists():
-                shutil.copy2(src, target_dir / name)
-                names.append(name)
-                log(f"  恢复 {name} <- {src}")
-        # 恢复 stores/ 子树(路径保持)
-        for rel, src_path in _iter_store_files(extract_dir):
-            dest = _safe_rel_target(target_dir, rel)
-            if dest is None:
-                log(f"  [WARN] 跳过非法备份路径: {rel}")
-                continue
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_path, dest)
-            names.append(rel)
-            log(f"  恢复 {rel} <- {src_path}")
-        # settings.json: 合并业务字段,保留部署字段(避免覆盖目标环境的 backup_dir 等)
-        settings_src = extract_dir / "settings.json"
-        if settings_src.exists():
-            try:
-                src_settings = json.loads(settings_src.read_text(encoding="utf-8"))
-                _merge_settings_after_restore(target_dir, src_settings)
-                names.append("settings.json")
-            except Exception as e:
-                log(f"  [WARN] 解析/合并 settings.json 失败: {e}")
+        extract_dir = _resolve_extract_dir(Path(tmp_dir))
+        ok, err = _scope_check_rels(handler, _restore_targets(extract_dir))
+        if not ok:
+            raise _StoreScopeDeniedError(err)
+        # 顶层 + stores/ 子树 + settings.json(R3:顶层文件会桥接到 stores/main/)
+        written, zip_notes = _write_restore_files(handler, target_dir, extract_dir)
+        names.extend(written)
+        notes.extend(zip_notes)
         return names
 
     # 把 tmp_dir 提到 handler 顶层,两个分支( multipart / JSON body)共享同一个临时目录
@@ -509,6 +704,10 @@ def handle_post_upload(handler):
                 if fname.lower().endswith('.zip'):
                     try:
                         restored.extend(_extract_zip_to_target(file_content, tmp_dir))
+                    except _StoreScopeDeniedError as e:
+                        # 门店越权 → 整个请求拒绝(不是「跳过这个文件」)
+                        send_json(handler, 403, {"ok": False, "error": e.message})
+                        return
                     except zipfile.BadZipFile:
                         log(f"[WARN] 上传的 {fname} 不是有效的 ZIP")
                     except Exception as e:
@@ -520,6 +719,11 @@ def handle_post_upload(handler):
                     dest = _safe_rel_target(target_dir, fname)
                     if dest is None:
                         continue
+                    # R1:目标门店必须在调用方范围内(载荷里的门店,不是 ?store= 参数)
+                    ok, err = rel_store_scope_check(handler, fname)
+                    if not ok:
+                        send_json(handler, 403, {"ok": False, "error": err})
+                        return
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     dest.write_bytes(file_content)
                     log(f"  上传 {fname} → {dest}")
@@ -545,6 +749,10 @@ def handle_post_upload(handler):
                             log(f"[WARN] 上传的 ZIP 不安全: {error}")
                             continue
                         restored.extend(_extract_zip_to_target(zip_bytes, tmp_dir))
+                    except _StoreScopeDeniedError as e:
+                        # 门店越权 → 整个请求拒绝(不是「跳过这个文件」)
+                        send_json(handler, 403, {"ok": False, "error": e.message})
+                        return
                     except Exception as e:
                         log(f"[WARN] 解码/解压 {fname} 失败: {e}")
                         continue
@@ -555,6 +763,11 @@ def handle_post_upload(handler):
                     dest = _safe_rel_target(target_dir, fname)
                     if dest is None:
                         continue
+                    # R1:目标门店必须在调用方范围内(载荷里的门店,不是 ?store= 参数)
+                    ok, err = rel_store_scope_check(handler, fname)
+                    if not ok:
+                        send_json(handler, 403, {"ok": False, "error": err})
+                        return
                     # settings.json 走合并分支:保留目标环境的部署字段(backup_dir 等)
                     if fname == "settings.json":
                         try:
@@ -581,11 +794,15 @@ def handle_post_upload(handler):
                         dest.write_text(content, encoding="utf-8")
                     log(f"  上传 {fname} → {dest}")
 
-    send_json(handler, 200, {
+    payload = {
         "ok": True,
         "uploaded": uploaded,
         "restored": restored,
         "pre_backup": str(pre_backup) if pre_backup else None,
-    })
+    }
+    if notes:
+        payload["notes"] = notes
+        payload["message"] = "；".join(notes)
+    send_json(handler, 200, payload)
     # 清除 JSON 缓存，确保上传/恢复后的数据立即可读
     _cache_clear()
