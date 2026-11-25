@@ -84,7 +84,7 @@
   - `context.stores_root() -> Path` —— `<base>/stores`
   - `context.store_dir(store_id: str) -> Path` —— `<base>/stores/<id>`
   - `context.multi_store_layout() -> bool` —— `stores/` 目录是否存在
-  - `context.resolve_store_path(model: str, store_id: str, filename: str) -> Path`
+  - `context.resolve_store_path(model: str, store_id: str) -> Path` —— 文件名由 `DATA_FILES[model]` 推导,单店分支直接取 `DATA_PATHS[model]`(修复轮 1 收敛后的签名)
   - `context.current_store_paths() -> dict` —— `{model: Path}`
 
 - [ ] **Step 1: 写失败测试**
@@ -211,7 +211,7 @@ class TestStorePaths(StoreTestBase):
 
     def test_resolve_store_path_is_scoped_by_store(self):
         (self.data_dir / "stores" / "main").mkdir(parents=True)
-        p = context.resolve_store_path("readings", "s002", "readings.json")
+        p = context.resolve_store_path("readings", "s002")
         self.assertEqual(p, self.data_dir / "stores" / "s002" / "readings.json")
 
 
@@ -305,15 +305,20 @@ def clear_current_store() -> None:
 def base_data_dir() -> Path:
     """顶层数据目录 —— settings.json 所在处,全局唯一。
 
-    取 app_handler.DATA_PATHS["readings"] 的父目录;DATA_PATHS 为空时回退
-    storage.get_data_dir()(服务尚未启动完时的兜底)。
+    取 app_handler.DATA_PATHS["readings"] 的父目录。
+
+    ⚠️ 修复轮 1 修订:DATA_PATHS 未初始化时**必须抛错**,不许回退到
+    storage.get_data_dir() —— 那不是纯查询(会 mkdir、可能自动迁移老目录),
+    回退等于在 DATA_PATHS 未就绪时静默碰到真实用户数据目录。
     """
     paths = getattr(app_handler_module(), "DATA_PATHS", None) or {}
     ref = paths.get("readings")
-    if ref:
-        return Path(ref).parent
-    from storage import get_data_dir
-    return Path(get_data_dir())
+    if not ref:
+        raise RuntimeError(
+            "数据目录未初始化:app_handler.DATA_PATHS 还没赋值。"
+            "路径解析不许回退到 storage.get_data_dir()(会触碰真实用户数据目录)。"
+        )
+    return Path(ref).parent
 
 
 def app_handler_module():
@@ -340,8 +345,11 @@ def multi_store_layout() -> bool:
     return stores_root().is_dir()
 
 
-def resolve_store_path(model: str, store_id: str, filename: str) -> Path:
+def resolve_store_path(model: str, store_id: str) -> Path:
     """解析某门店某模型的数据文件路径。
+
+    文件名由 storage.DATA_FILES[model] 推导 —— 「模型 → 文件名」只有一个真相来源。
+    单店分支直接取 app_handler.DATA_PATHS[model],与 current_store_paths() 同一来源。
 
     - 单店布局 → 顶层目录(与改造前一致)
     - 多店布局 → stores/<store_id>/<filename>>
@@ -351,7 +359,9 @@ def resolve_store_path(model: str, store_id: str, filename: str) -> Path:
     """
     base = base_data_dir()
     if not multi_store_layout():
-        return base / filename
+        return Path(app_handler_module().DATA_PATHS[model])
+    from storage import DATA_FILES
+    filename = DATA_FILES[model]
     target = store_dir(store_id) / filename
     if not target.exists() and store_id == DEFAULT_STORE_ID:
         legacy = base / filename
@@ -360,7 +370,7 @@ def resolve_store_path(model: str, store_id: str, filename: str) -> Path:
     return target
 
 
-def current_store_paths() -> Dict[str, Path]:
+def current_store_paths() -> dict:
     """当前门店的 {model: Path} 映射。
 
     单店布局 → 原样返回 app_handler.DATA_PATHS;
@@ -370,7 +380,7 @@ def current_store_paths() -> Dict[str, Path]:
         return dict(getattr(app_handler_module(), "DATA_PATHS", None) or {})
     from storage import DATA_FILES
     store_id = get_current_store()
-    return {m: resolve_store_path(m, store_id, fn) for m, fn in DATA_FILES.items()}
+    return {m: resolve_store_path(m, store_id) for m in DATA_FILES}
 ```
 
 - [ ] **Step 5: 改 `modules/_base.py` 的路径获取**
