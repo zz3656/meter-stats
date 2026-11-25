@@ -220,11 +220,19 @@ def verify_password(password: str, hashed: str) -> bool:
     return dk == expected_dk
 
 
-def get_next_user_id(users: List[dict]) -> int:
+def get_next_user_id(users: List[Dict[str, Any]]) -> int:
     return max((u.get("id", 0) for u in users), default=0) + 1
 
 
-def add_user(users: List[dict], username: str, password: str, name: str, role: str) -> Optional[dict]:
+def add_user(users: List[Dict[str, Any]], username: str, password: str, name: str, role: str,
+             store_ids: Optional[List[str]] = None,
+             all_stores: Optional[bool] = None) -> Optional[Dict[str, Any]]:
+    """新增用户。
+
+    门店归属:
+    - all_stores 省略时:admin 默认 True(总部账号,可跨店),其它角色默认 False
+    - store_ids 是该用户可访问的门店 ID 列表;非总部账号必须有值才能看到数据
+    """
     if any(u["username"] == username for u in users):
         return {"error": "用户名已存在"}
     users.append({
@@ -234,21 +242,105 @@ def add_user(users: List[dict], username: str, password: str, name: str, role: s
         "role": role,
         "name": name,
         "enabled": True,
+        "all_stores": (role == ROLE_ADMIN) if all_stores is None else bool(all_stores),
+        "store_ids": list(store_ids) if isinstance(store_ids, list) else [],
         "created_at": datetime.now().isoformat(),
     })
     return users[-1]
 
 
-def update_user(users: List[dict], uid: int, fields: dict) -> Optional[dict]:
+def update_user(users: List[Dict[str, Any]], uid: int, fields: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """更新用户。门店归属字段:store_ids / all_stores。
+
+    改角色时必须一起重算 all_stores ——
+    一个 admin 被降级成 employee 后如果 all_stores 还留着 True,
+    他仍然是「总部账号」,能看全部门店(降级形同虚设)。
+    """
     for u in users:
         if u["id"] == uid:
             for k in ("username", "name", "role", "enabled"):
                 if k in fields:
                     u[k] = fields[k]
+            if "all_stores" in fields:
+                u["all_stores"] = bool(fields["all_stores"])
+            elif "role" in fields:
+                # 本次没显式传 all_stores → 按新角色重算:
+                # 降级 → False(不再是总部账号);
+                # 升级 → 只有旧记录本来就没有这个字段才默认 True
+                #         (老 settings.json 里的用户记录没有 all_stores)。
+                if u["role"] != ROLE_ADMIN:
+                    u["all_stores"] = False
+                elif "all_stores" not in u:
+                    u["all_stores"] = True
+            if "store_ids" in fields:
+                v = fields["store_ids"]
+                u["store_ids"] = [str(x) for x in v] if isinstance(v, list) else []
             if "password" in fields and fields["password"]:
                 u["password"] = _hash_pass(fields["password"])
             return u
     return None
+
+
+def save_users_verified(settings: Dict[str, Any], user_id: int) -> None:
+    """保存 settings,并**回读校验**目标用户的门店归属真的落盘了。
+
+    为什么必须回读:_save() 会吞掉所有异常(只往 stderr 打一行
+    `[settings] [WARN] _save failed:`),写失败时调用方会以为成功 ——
+    管理员看到「分配成功」,用户实际没落盘。而门店闸
+    (registry.user_store_scope 实时读 settings.json)查不到他的 store_ids →
+    直接 403,用户被锁在自己门店外面。
+
+    与 registry._persist() 同一套思路:写 → 回读 → 比对 → 不通过就抛错。
+    """
+    try:
+        save_settings(settings)
+    except Exception as e:
+        raise RuntimeError(f"保存 settings.json 失败: {e}") from e
+    _verify_user_persisted(settings, user_id)
+
+
+def _verify_user_persisted(settings: Dict[str, Any], user_id: int) -> None:
+    """回读 settings.json,确认目标用户的门店归属真的落盘了。
+
+    比对:目标用户是否存在 + role / all_stores / store_ids 是否一致。
+    不通过就抛 RuntimeError —— 调用方绝不能以为「门店已分配」。
+    """
+    try:
+        on_disk = get_settings()
+    except Exception as e:
+        raise RuntimeError(f"写入 settings.json 后回读失败: {e}") from e
+    expected = _find_user(settings.get("users") or [], user_id)
+    actual = _find_user(on_disk.get("users") or [], user_id)
+    if expected is None:
+        raise RuntimeError(
+            f"写入 settings.json 后回读校验不通过: 内存里找不到用户 {user_id}")
+    if actual is None:
+        raise RuntimeError(
+            f"写入 settings.json 后回读校验不通过: 用户 {user_id} 没有落盘")
+    for field in ("role", "all_stores"):
+        if actual.get(field) != expected.get(field):
+            raise RuntimeError(
+                f"写入 settings.json 后回读校验不通过: 用户 {user_id} 的 {field} "
+                f"落盘值 {actual.get(field)!r} ≠ 预期 {expected.get(field)!r}")
+    if _store_ids_signature(actual) != _store_ids_signature(expected):
+        raise RuntimeError(
+            f"写入 settings.json 后回读校验不通过: 用户 {user_id} 的 store_ids 不一致")
+
+
+def _find_user(users: List[Dict[str, Any]], user_id: int) -> Optional[Dict[str, Any]]:
+    """按 id 找用户记录。找不到返回 None。"""
+    for u in users:
+        if isinstance(u, dict) and u.get("id") == user_id:
+            return u
+    return None
+
+
+def _store_ids_signature(user: Dict[str, Any]) -> List[str]:
+    """用户门店归属的可比签名(排序后比较,忽略顺序差异)。"""
+    ids = user.get("store_ids")
+    if not isinstance(ids, list):
+        return []
+    return sorted(str(x) for x in ids)
 
 
 def migrate_users_to_pbkdf2(users: List[dict]) -> bool:

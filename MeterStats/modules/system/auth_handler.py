@@ -9,6 +9,7 @@ import time
 from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
+from constants import ROLE_ADMIN
 from modules.system.settings_handler import (
     get_settings, save_settings, verify_password, _needs_migration, _hash_pass,
 )
@@ -146,16 +147,29 @@ def get_session(token: str) -> dict | None:
 
 
 def create_session(user: dict) -> str:
-    """创建新会话,返回 token。"""
+    """创建新会话,返回 token。
+
+    会话里带上门店范围(all_stores / store_ids)作为兜底 ——
+    门店闸优先读 settings.json 里的最新用户记录(改权限即时生效),
+    读不到时才用这里的值。
+
+    兜底字段的默认值与全项目口径一致:
+    - all_stores 省略时:admin 默认 True(总部账号,可跨店),其它角色默认 False
+    - store_ids 省略时:空列表
+    """
     _cleanup_expired_sessions()
     token = secrets.token_hex(32)
     now = time.time()
+    role = user.get("role", "employee")
+    store_ids = user.get("store_ids")
     with _SESSIONS_LOCK:
         _SESSIONS[token] = {
             "user_id": user["id"],
             "username": user["username"],
-            "role": user["role"],
+            "role": role,
             "name": user["name"],
+            "all_stores": bool(user.get("all_stores", role == ROLE_ADMIN)),
+            "store_ids": [str(x) for x in store_ids] if isinstance(store_ids, list) else [],
             "created_at": datetime.datetime.fromtimestamp(now).isoformat(),
             "_access_time": now,
         }
@@ -226,6 +240,8 @@ def handle_post_login(handler):
         "username": user["username"],
         "role": user["role"],
         "name": user["name"],
+        "all_stores": bool(user.get("all_stores", user.get("role") == ROLE_ADMIN)),
+        "store_ids": user.get("store_ids") if isinstance(user.get("store_ids"), list) else [],
     }
     token = create_session(user_info)
 
@@ -237,6 +253,8 @@ def handle_post_login(handler):
             "username": user["username"],
             "name": user["name"],
             "role": user["role"],
+            "all_stores": user_info["all_stores"],
+            "store_ids": user_info["store_ids"],
         },
     })
 
