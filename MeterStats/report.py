@@ -12,17 +12,19 @@ from datetime import datetime, timedelta, timezone
 from storage import _local_now
 from pathlib import Path
 from threading import RLock
+from typing import Any
 
-from constants import METER_MULTIPLIERS, ELECTRICITY_PRICE as PRICE
+from constants import DEFAULT_TABLES, ELECTRICITY_PRICE as PRICE
+from modules.stores.meters import row_has_any_value, row_values
 
 
-# 4 块表定义 (key / 标签 / 倍率)
-TABLES = [
-    {"key": "hall", "label": "1#大厅", "mult": METER_MULTIPLIERS["hall"]},
-    {"key": "fire", "label": "2#消防", "mult": METER_MULTIPLIERS["fire"]},
-    {"key": "private_room", "label": "3#包厢", "mult": METER_MULTIPLIERS["private_room"]},
-    {"key": "ac", "label": "4#空调", "mult": METER_MULTIPLIERS["ac"]},
-]
+def _tables_of(tables: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    """表定义的统一取值 —— 不传就用默认 4 表。
+
+    所有公开函数都从这里过一道,保证「不传 tables」与「显式传 DEFAULT_TABLES」
+    走的是同一条路(而不是一个走参数、另一个悄悄走模块常量)。
+    """
+    return tables if tables else DEFAULT_TABLES
 
 
 def _landing_date(charge: dict) -> str:
@@ -67,8 +69,8 @@ def _attributed_segment(rows: list, key: str, cdate: str):
     date_index = {r["date"]: i for i, r in enumerate(rows)}
     if cdate in date_index:
         i = date_index[cdate]
-        cur = rows[i].get(key)
-        prev = rows[i - 1].get(key) if i >= 1 else None
+        cur = row_values(rows[i], key)
+        prev = row_values(rows[i - 1], key) if i >= 1 else None
         if i >= 1 and cur is not None and prev is not None and float(cur) > float(prev):
             return (i - 1, i)
         if i + 1 < len(rows):
@@ -90,8 +92,8 @@ def _landing_transition(rows: list, key: str, from_idx: int):
     返回 (start_idx, end_idx);None = 后面的读数里表底再没跳过(钱始终没进表)。
     """
     for j in range(from_idx, len(rows) - 1):
-        a = rows[j].get(key)
-        b = rows[j + 1].get(key)
+        a = row_values(rows[j], key)
+        b = row_values(rows[j + 1], key)
         if a is None or b is None:
             continue
         if float(b) > float(a):
@@ -105,8 +107,8 @@ def _segment_plausible(rows: list, key: str, seg, amt: float, mult: float, cap: 
     返回 (implied_kwh, threshold_kwh, ok)。
     """
     si, ei = seg
-    s_val = rows[si].get(key)
-    e_val = rows[ei].get(key)
+    s_val = row_values(rows[si], key)
+    e_val = row_values(rows[ei], key)
     if s_val is None or e_val is None:
         return (0.0, 0.0, True)
     days = _days_between(rows[si]["date"], rows[ei]["date"])
@@ -136,8 +138,8 @@ def _resolve_charge(rows: list, key: str, cdate: str, amt: float, mult: float, c
     if seg is None:
         return (None, None)
     si, ei = seg
-    s_val = rows[si].get(key)
-    e_val = rows[ei].get(key)
+    s_val = row_values(rows[si], key)
+    e_val = row_values(rows[ei], key)
     if s_val is None or e_val is None:
         return (seg, None)
     if float(e_val) > float(s_val):
@@ -172,8 +174,8 @@ def _daily_cap_kwh(rows: list, key: str, mult: float) -> float:
     """
     best = 0.0
     for i in range(len(rows) - 1):
-        a = rows[i].get(key)
-        b = rows[i + 1].get(key)
+        a = row_values(rows[i], key)
+        b = row_values(rows[i + 1], key)
         if a is None or b is None:
             continue
         days = _days_between(rows[i]["date"], rows[i + 1]["date"])
@@ -185,7 +187,8 @@ def _daily_cap_kwh(rows: list, key: str, mult: float) -> float:
     return best
 
 
-def find_pasted_reading_charges(readings: list, charges: list) -> list:
+def find_pasted_reading_charges(readings: list, charges: list,
+                                tables: list | None = None) -> list:
     """找出「充值额和当天抄表读数一模一样」的记录 —— 八成是把抄表读数填进了充值栏。
 
     几乎零误报:充值额恰好等于当前表底,意味着充完钱表底要翻倍;而这类表一天只用
@@ -194,8 +197,9 @@ def find_pasted_reading_charges(readings: list, charges: list) -> list:
 
     返回 [{charge_id, date, meter, label, amount, reading, reason}]
     """
+    tables = _tables_of(tables)
     rows = sorted(
-        [r for r in readings if r.get("date") and r.get("hall") is not None],
+        [r for r in readings if r.get("date") and row_has_any_value(r, tables)],
         key=lambda r: r["date"],
     )
     if not rows:
@@ -203,13 +207,13 @@ def find_pasted_reading_charges(readings: list, charges: list) -> list:
     date_index = {r["date"]: i for i, r in enumerate(rows)}
     out: list = []
 
-    for t in TABLES:
+    for t in tables:
         key, label = t["key"], t["label"]
         for c in charges:
             if c.get("status", "confirmed") == "pending":
                 continue
             try:
-                amt = float(c.get(key, 0) or 0)
+                amt = float(row_values(c, key) or 0)
             except (TypeError, ValueError):
                 continue
             if amt <= 0:
@@ -218,8 +222,8 @@ def find_pasted_reading_charges(readings: list, charges: list) -> list:
             if cdate not in date_index:
                 continue
             i = date_index[cdate]
-            cur = rows[i].get(key)
-            prev = rows[i - 1].get(key) if i >= 1 else None
+            cur = row_values(rows[i], key)
+            prev = row_values(rows[i - 1], key) if i >= 1 else None
             if cur is None or prev is None:
                 continue
             if float(cur) > float(prev):
@@ -242,7 +246,8 @@ def find_pasted_reading_charges(readings: list, charges: list) -> list:
     return out
 
 
-def find_charge_conflicts(readings: list, charges: list) -> list:
+def find_charge_conflicts(readings: list, charges: list,
+                          tables: list | None = None) -> list:
     """找出与抄表对不上的充值记录 —— 多半是把抄表读数填进了充值栏。
 
     预付费表的物理事实:表底下降 = 用电,表底上升 = 刚到账。一笔 X 表字的充值如果
@@ -256,8 +261,9 @@ def find_charge_conflicts(readings: list, charges: list) -> list:
 
     返回 [{charge_id, date, meter, label, amount, implied_kwh, threshold_kwh, reason}]
     """
+    tables = _tables_of(tables)
     rows = sorted(
-        [r for r in readings if r.get("date") and r.get("hall") is not None],
+        [r for r in readings if r.get("date") and row_has_any_value(r, tables)],
         key=lambda r: r["date"],
     )
     if len(rows) < 2:
@@ -265,14 +271,14 @@ def find_charge_conflicts(readings: list, charges: list) -> list:
     date_index = {r["date"]: i for i, r in enumerate(rows)}
     conflicts: list = []
 
-    for t in TABLES:
+    for t in tables:
         key, mult, label = t["key"], t["mult"], t["label"]
         cap = _daily_cap_kwh(rows, key, mult)
         for c in charges:
             if c.get("status", "confirmed") == "pending":
                 continue  # 待确认的充值申请不计入任何统计
             try:
-                amt = float(c.get(key, 0) or 0)
+                amt = float(row_values(c, key) or 0)
             except (TypeError, ValueError):
                 continue
             if amt <= 0:
@@ -288,7 +294,8 @@ def find_charge_conflicts(readings: list, charges: list) -> list:
             e_val = conflict["end_val"]
 
             # 充值额和当天抄表读数一模一样 → 八成是把抄表读数填进了充值栏
-            landing_val = rows[date_index[cdate]].get(key) if cdate in date_index else None
+            landing_val = (row_values(rows[date_index[cdate]], key)
+                           if cdate in date_index else None)
             same_as_reading = (
                 landing_val is not None and abs(amt - float(landing_val)) < 0.01
             )
@@ -319,7 +326,8 @@ def find_charge_conflicts(readings: list, charges: list) -> list:
     return conflicts
 
 
-def _charge_attribution(readings: list, charges: list, skip: set | None = None) -> dict:
+def _charge_attribution(readings: list, charges: list, skip: set | None = None,
+                        tables: list | None = None) -> dict:
     """把每笔充值归属到"它真正到账的那个抄表区间"。
 
     预付费表:表底下降 = 用电,上升 = 刚到账。充值记录的 `date` 是当天算量提申请的日子,
@@ -340,12 +348,13 @@ def _charge_attribution(readings: list, charges: list, skip: set | None = None) 
     `skip` 是 {(charge_id, meter_key)} 集合 —— 命中即跳过该表的这笔充值。
     月报用它排除"与抄表对不上"的充值(见 find_charge_conflicts)。
     """
+    tables = _tables_of(tables)
     rows = sorted(
-        [r for r in readings if r.get("date") and r.get("hall") is not None],
+        [r for r in readings if r.get("date") and row_has_any_value(r, tables)],
         key=lambda r: r["date"],
     )
     out: dict = {}
-    caps = {t["key"]: _daily_cap_kwh(rows, t["key"], t["mult"]) for t in TABLES}
+    caps = {t["key"]: _daily_cap_kwh(rows, t["key"], t["mult"]) for t in tables}
 
     def _add(pair, key, amt):
         slot = out.setdefault(pair, {})
@@ -355,10 +364,10 @@ def _charge_attribution(readings: list, charges: list, skip: set | None = None) 
         if c.get("status", "confirmed") == "pending":
             continue  # 待确认的充值申请不计入任何统计
         cdate = _landing_date(c)
-        for t in TABLES:
+        for t in tables:
             key = t["key"]
             try:
-                amt = float(c.get(key, 0) or 0)
+                amt = float(row_values(c, key) or 0)
             except (TypeError, ValueError):
                 continue
             if amt == 0:
@@ -374,13 +383,21 @@ def _charge_attribution(readings: list, charges: list, skip: set | None = None) 
     return out
 
 
-def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
+def calculate_monthly_report(readings: list, charges: list, month: str,
+                             tables: list | None = None,
+                             price: float | None = None) -> dict:
     """计算指定月份的逐日逐表用电度数。
 
     带内存缓存（5 分钟 TTL）：相同月份和数据的请求直接返回缓存。
+
+    `tables` 是**当前门店**的表定义(不传 = 默认 4 表)。`price` 是该店电价
+    (不传 = constants.ELECTRICITY_PRICE)。两者都进缓存键 —— 同店同月换了表
+    集合必须重新算,否则 2 表门店会看到 4 表的数字。
     """
-    # 尝试缓存(键带门店维度 —— 不同门店互不命中)
-    cache_key = _report_cache_key(month)
+    tables = _tables_of(tables)
+    unit_price = PRICE if price is None else price
+    # 尝试缓存(键带门店维度 + 表集合签名 —— 不同门店/不同表集合互不命中)
+    cache_key = _report_cache_key(month, tables)
     cached = _get_cached_report(cache_key)
     if cached is not None:
         return cached
@@ -388,17 +405,17 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     year, mon = int(month[:4]), int(month[5:7])
     _, days_in_month = monthrange(year, mon)
 
-    # 当月所有抄表(按日期排序;跳过只录水电的行 — 4 表全 null 不参与用电计算)
+    # 当月所有抄表(按日期排序;跳过只录水电的行 — 所有表全 null 不参与用电计算)
     month_readings = sorted(
         [r for r in readings if r.get("date", "").startswith(month)
-         and r.get("hall") is not None],
+         and row_has_any_value(r, tables)],
         key=lambda r: r["date"],
     )
 
     # 上月最后一次抄表(用于本月第一段"前段")
     prev_reading = None
     for r in sorted(readings, key=lambda r: r["date"], reverse=True):
-        if r["date"] < month + "-01" and r.get("hall") is not None:
+        if r["date"] < month + "-01" and row_has_any_value(r, tables):
             prev_reading = r
             break
 
@@ -406,7 +423,7 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     month_end_str = f"{month}-{days_in_month:02d}"
     next_reading = None
     for r in sorted(readings, key=lambda r: r["date"]):
-        if r["date"] > month_end_str and r.get("hall") is not None:
+        if r["date"] > month_end_str and row_has_any_value(r, tables):
             next_reading = r
             break
 
@@ -422,13 +439,13 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     # 计算每对 (X, Y) 的用电(含期间充值),分摊到区间
     daily_avg_by_date = {}  # date_str -> {key: 日均}
     month_total_kwh = 0.0
-    sum_by_meter = {t["key"]: 0.0 for t in TABLES}
+    sum_by_meter = {t["key"]: 0.0 for t in tables}
 
     # 每笔充值归属到"表底真正跳升"的区间(见 _charge_attribution)
     # 与抄表对不上的充值(多半是把抄表读数填进了充值栏)先排除,否则用电量会被顶飞
-    conflicts = find_charge_conflicts(readings, charges)
+    conflicts = find_charge_conflicts(readings, charges, tables=tables)
     skip = {(c["charge_id"], c["meter"]) for c in conflicts}
-    attribution = _charge_attribution(readings, charges, skip=skip)
+    attribution = _charge_attribution(readings, charges, skip=skip, tables=tables)
 
     for X, Y in pairs:
         X_dt = datetime.strptime(X["date"], "%Y-%m-%d")
@@ -441,15 +458,15 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
 
         # 计算每表的"原始用电 + 本区间实际到账的充值"
         usage = {}
-        for t in TABLES:
-            X_val = float(X.get(t["key"], 0) or 0)
-            Y_val = float(Y.get(t["key"], 0) or 0)
+        for t in tables:
+            X_val = float(row_values(X, t["key"]) or 0)
+            Y_val = float(row_values(Y, t["key"]) or 0)
             charge_sum = credited.get(t["key"], 0.0)
             u = (X_val - Y_val + charge_sum) * t["mult"]
             usage[t["key"]] = round(max(u, 0), 1)
 
         # 分摊给 [X_dt, Y_dt) 区间内属于当月的天
-        avg = {t["key"]: round(usage[t["key"]] / span, 1) for t in TABLES}
+        avg = {t["key"]: round(usage[t["key"]] / span, 1) for t in tables}
         d = X_dt
         while d < Y_dt:
             d_str = d.strftime("%Y-%m-%d")
@@ -464,9 +481,9 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
         )
         month_total_kwh += sum(
             usage[t["key"]] * days_in_month_for_seg / span
-            for t in TABLES
+            for t in tables
         )
-        for t in TABLES:
+        for t in tables:
             sum_by_meter[t["key"]] += (
                 usage[t["key"]] * days_in_month_for_seg / span
             )
@@ -476,27 +493,23 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     days = []
     for day in range(1, days_in_month + 1):
         d_str = f"{month}-{day:02d}"
+        # ⚠️ 键顺序 = date → 各表(按表定义顺序) → total → is_reading_day。
+        # 默认 4 表时与改造前逐字节一致(缓存/快照/前端都依赖这个形状)。
+        entry: dict = {"date": d_str}
         if d_str in daily_avg_by_date:
             avg = daily_avg_by_date[d_str]
-            total = round(sum(avg.values()), 1)
-            days.append({
-                "date": d_str,
-                "hall": avg["hall"],
-                "fire": avg["fire"],
-                "private_room": avg["private_room"],
-                "ac": avg["ac"],
-                "total": total,
-                "is_reading_day": d_str in reading_dates,
-            })
+            for t in tables:
+                entry[t["key"]] = avg.get(t["key"], 0.0)
+            entry["total"] = round(sum(avg.values()), 1)
+            entry["is_reading_day"] = d_str in reading_dates
         else:
-            days.append({
-                "date": d_str,
-                "hall": 0, "fire": 0, "private_room": 0, "ac": 0,
-                "total": 0,
-                "is_reading_day": False,
-            })
+            for t in tables:
+                entry[t["key"]] = 0
+            entry["total"] = 0
+            entry["is_reading_day"] = False
+        days.append(entry)
 
-    month_total_cost = round(month_total_kwh * PRICE, 2)
+    month_total_cost = round(month_total_kwh * unit_price, 2)
 
     result = {
         "month": month,
@@ -504,9 +517,9 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
         "summary": {
             "total_kwh": round(month_total_kwh, 1),
             "total_cost": month_total_cost,
-            "by_meter": {t["key"]: round(sum_by_meter[t["key"]], 1) for t in TABLES},
+            "by_meter": {t["key"]: round(sum_by_meter[t["key"]], 1) for t in tables},
             "reading_days": sum(1 for d in days if d["is_reading_day"]),
-            "price": PRICE,
+            "price": unit_price,
         },
         # 与抄表对不上的充值(界面用来提示"有一条充值记录填错了")
         "conflicts": conflicts,
@@ -515,12 +528,15 @@ def calculate_monthly_report(readings: list, charges: list, month: str) -> dict:
     return result
 
 
-def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
+def calculate_yearly_report(readings: list, charges: list, year: str,
+                            tables: list | None = None,
+                            price: float | None = None) -> dict:
     """计算指定年份的月度汇总(12 个月,复用月度报告引擎)。
 
     带内存缓存（5 分钟 TTL）。
     """
-    cache_key = _report_cache_key(f"yearly:{year}")
+    tables = _tables_of(tables)
+    cache_key = _report_cache_key(f"yearly:{year}", tables)
     cached = _get_cached_report(cache_key)
     if cached is not None:
         return cached
@@ -530,7 +546,8 @@ def calculate_yearly_report(readings: list, charges: list, year: str) -> dict:
 
     for m in range(1, 13):
         month_str = f"{year}-{m:02d}"
-        r = calculate_monthly_report(readings, charges, month_str)
+        r = calculate_monthly_report(readings, charges, month_str,
+                                     tables=tables, price=price)
         s = r["summary"]
         if s["reading_days"] > 0:
             months.append({
@@ -561,18 +578,31 @@ _report_cache_lock = RLock()
 _REPORT_CACHE_TTL = 5 * 60  # 5 分钟
 
 
-def _report_cache_key(key: str) -> str:
-    """报表缓存键加门店维度。
+def _tables_signature(tables: list) -> str:
+    """表集合签名 —— 参与缓存键,防止「同店同月、不同表集合」互相命中。
+
+    key 里不能出现冒号(缓存统计靠冒号拆 store / month),而表 key 按规则不含冒号、
+    倍率是整数,所以 `key_倍率` 直接连起来就够,而且可读、可直接在缓存统计里看出来。
+    """
+    return "-".join(f'{t["key"]}_{t["mult"]}' for t in tables)
+
+
+def _report_cache_key(key: str, tables: list | None = None) -> str:
+    """报表缓存键加门店维度 + 表集合签名。
 
     缓存原本只按月份做键 —— 多门店上线后,总店先请求的月报会被分店同月份
     的请求直接命中,拿到**总店的用电数字**(跨店数据泄漏)。
     键改成 f"{store_id}:{key}",不同门店互不干扰。
 
+    P2 又把表定义变成了参数:同一家店同一个月份,4 表和 2 表算出来的 by_meter
+    形状与数字都不同,只按 store+month 做键会让第二次调用直接拿第一次的结果。
+    所以签名一并进键。
+
     延迟 import:report.py 已被 modules/reports/handler.py 引入,
     不在模块级引入 modules.stores 以免循环依赖。
     """
     from modules.stores.context import get_current_store
-    return f"{get_current_store()}:{key}"
+    return f"{get_current_store()}:{key}:{_tables_signature(_tables_of(tables))}"
 
 
 def _cache_report(month: str, report: dict) -> None:
@@ -607,8 +637,12 @@ def _get_report_cache_stats() -> dict:
         entries = []
         for cache_key, (cache_time, data) in _report_cache.items():
             age = now - cache_time
-            # 键是 f"{store_id}:{month}" —— 拆开,month 字段保持原样
-            store_id, _, month = cache_key.partition(":")
+            # 键是 f"{store_id}:{month}:{表集合签名}" —— 首段 store、末段签名,
+            # 中间全部属于 month(年报的 month 本身是 "yearly:2026",自带冒号,
+            # 所以不能用 partition,必须取「首段 + 中间段」)
+            parts = cache_key.split(":")
+            store_id = parts[0]
+            month = ":".join(parts[1:-1])
             entries.append({
                 "store": store_id,
                 "month": month,

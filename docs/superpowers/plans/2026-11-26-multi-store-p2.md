@@ -44,7 +44,7 @@
 | D5 | **每店至少 1 块表；倍率必须是正整数** | 0 块表的门店会让报表、图表、表单全部落入「无表」分支，收益为零而分支成本很高。倍率 0 会让该表用电恒为 0，属于静默错数据。 |
 | D6 | **电价 / 水价 / 总表倍率 / 分表倍率也按店**（`store.json` 的 `config`） | 规格 §3.3 已定。`get_store_prices()` 已就绪，P2 只把 `modules/reports/handler.py` 里的常量引用换掉。 |
 | D7 | **`/api/meters` 按**当前店**返回**；前端**切店后必须重新 `loadMeterConfig()`** | 不重载 = 切到 B 店还显示 A 店的表名与倍率，抄进去的就是错数据。这是本期最容易漏的一条，与 P1 的「切店清缓存」是同一类问题。 |
-| D8 | **报表缓存键沿用 P0 的 `f"{store_id}:{key}"`，本期不动** | 门店维度已经在里面了（`report.py::_report_cache_key`）。但 P2 改了表集合 —— **配置变更时必须主动失效报表缓存**，否则改完备率看到的还是旧数字。 |
+| D8 | **报表缓存键 = `f"{store_id}:{month}:{表集合签名}"`**（在 P0 的 `f"{store_id}:{month}"` 上加了签名段）；**配置变更时必须主动失效报表缓存** | 门店维度 P0 已有。但 P2 把表定义变成了**函数参数** —— 同店同月换表集合算出来的 `by_meter` 形状与数字都不同，只按 store+month 做键会让第二次调用直接拿第一次的结果（2 表门店看到 4 表的数字）。签名用 `key_倍率` 连起来（不含冒号，缓存统计才能按冒号拆字段）。<br>⚠️ **这是实施中发现、原计划没覆盖的一条**：原计划写「缓存键本期不动」，实测必须先加签名才正确。 |
 | D9 | **自定义表不参与水电总表计算** | 总表 / 分表 / 水表是另一套（`readings_water.json`），有独立的倍率与口径，与用电表无关。 |
 | D10 | **默认 4 表 = 现状**（`DEFAULT_METERS`），缺配置的门店自动拿默认 | 老店升级后行为零变化；`read_store_config()` 在文件缺失时已经回落 `DEFAULT_METERS`。 |
 | D11 | **三个配置端点同批改完**：`GET /api/meters`、`GET /api/admin/meter`、`PUT /api/admin/meter`，响应统一「`meters` 数组 + 兼容的 `meter` 字典」 | 现在三个都读写**全局** settings，且字段名一个叫 `meter` 一个叫 `meters`。只改其中一两个 → 「写进本店、读的是全局」= 保存成功但刷新变回去；或者设置页与别的页面显示不同的表。过渡期两种形状都返回，前端可分批改。 |
@@ -104,13 +104,18 @@
 
 ### Task 1: 后端 —— 表定义参数化 + 统一读取器
 
+> **状态:已完成**(2026-11-26)。新增 `tests/test_meter_tables.py` 22 项;
+> 全量 **571** 项全绿(549 存量 + 22 新增);ruff 273 / mypy 793 与基线持平、新文件零错误。
+> 实施中发现两条原计划没覆盖的:`r.get("hall")` 实际有 **6 处**、
+> `report.py` 另有 5 处 `.get(key)` 直读(自定义表读不到),以及缓存键必须加表集合签名。
+
 **Files:**
 - Create: `MeterStats/modules/stores/meters.py`
 - Modify: `MeterStats/constants.py`
 - Modify: `MeterStats/report.py`
 - Create: `tests/test_meter_tables.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 新建 `tests/test_meter_tables.py`，覆盖四件事：
 
@@ -119,7 +124,7 @@
 3. **2 表门店能算**：造一组只有 `m1`/`m2` 的抄表（值写进 `meters` 字典），传 `tables=[m1, m2]`，断言 `by_meter` 只有这两个键、`total_kwh` 等于手算值。
 4. **`row_values` 读取器**：`{"hall": 5, "meters": {"m1": 7}}` → `row_values(row, "hall") == 5`、`row_values(row, "m1") == 7`、`row_values(row, "nope") is None`；再验证**同 key 同时存在时 `meters` 优先**（这条是 D2 的口径，必须锁死）。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 ```bash
 cd /Users/ceasar/Documents/GitHub/meter-stats
@@ -127,7 +132,7 @@ python3 -m unittest tests.test_meter_tables -v
 ```
 Expected: FAIL（`modules.stores.meters` 不存在 / 签名不收 `tables`）。
 
-- [ ] **Step 3: 新建 `modules/stores/meters.py`**
+- [x] **Step 3: 新建 `modules/stores/meters.py`**
 
 ```python
 """表定义与表值读取 —— 每店表集合的唯一入口。
@@ -176,7 +181,7 @@ def row_has_any_value(row: dict[str, Any], tables: list[dict[str, Any]]) -> bool
     ...
 ```
 
-- [ ] **Step 4: `constants.py` 加 `DEFAULT_TABLES`**
+- [x] **Step 4: `constants.py` 加 `DEFAULT_TABLES`**
 
 保持 `METER_MULTIPLIERS` 不动（还有兼容引用），新增：
 
@@ -196,7 +201,7 @@ DEFAULT_TABLES: list[dict] = [
 > **不要**强行统一 —— `report.py` 有 9 处 `t["mult"]`，改名会扩大改动面且毫无收益。
 > 转换在调用方做一次（`modules/reports/handler.py`，Task 2），并写测试锁住映射。
 
-- [ ] **Step 5: `report.py` 参数化**
+- [x] **Step 5: `report.py` 参数化**
 
 改动点（行号以当前文件为准）：
 
@@ -208,13 +213,16 @@ DEFAULT_TABLES: list[dict] = [
 | `report.py:322` `_charge_attribution` | `caps = {... for t in TABLES}` | 加 `tables` 参数，一路传进 `_add` |
 | `report.py:377` `calculate_monthly_report` | `(readings, charges, month)` | 加**关键字**参数 `tables=None, price=None` |
 | `report.py:518` `calculate_yearly_report` | `(readings, charges, year)` | 同上（它内部会调 `calculate_monthly_report`，必须把 `tables`/`price` 透传） |
-| `report.py:393-394` | `r.get("hall") is not None` | `row_has_any_value(r, tables)` |
+| `report.py:393-394` | `r.get("hall") is not None` | `row_has_any_value(r, tables)`（**共 6 处**：198/260/344/394/401/409 一带，全都要换） |
 | `report.py:499/509` | `PRICE` | `price if price is not None else PRICE` |
 | `report.py:452` | `avg = {...}` 用 `span` | `span` 为 0 时除零 —— 顺带确认逻辑未被参数化改坏 |
+| `report.py:482-497` | `days` 里硬编码 `hall/fire/private_room/ac` 四个键 | `{t["key"]: ... for t in tables}`，**键顺序**必须是 date → 各表 → total → is_reading_day（默认 4 表时与改造前逐字节一致） |
+| `report.py` 的 `_daily_cap_kwh` / `_attributed_segment` / `_landing_transition` / `_segment_plausible` / `_resolve_charge` | 5 处 `row.get(key)` 直读 | 全部换 `row_values(...)` —— 自定义表的值在 `meters` 字典里，直读拿不到 |
+| `report.py::_report_cache_key` | `f"{store}:{key}"` | **追加表集合签名**（见 D8）+ `_get_report_cache_stats` 改用 `split(":")` 取中间段（年报的 key 自带冒号，不能用 `partition`） |
 
 ⚠️ **签名兼容**：所有新增参数一律**关键字**且带默认值，现有 27 处 `calculate_monthly_report(a, b, "2026-11")` 调用必须零改动通过（`tests/test_charge_consistency.py` 7 处、`test_monthly_report.py` 12 处、`test_stores.py` 8 处）。
 
-- [ ] **Step 6: 运行测试确认全绿**
+- [x] **Step 6: 运行测试确认全绿**
 
 ```bash
 python3 -m unittest tests.test_meter_tables -v
@@ -222,14 +230,14 @@ python3 -m unittest tests.test_monthly_report tests.test_charge_consistency test
 ```
 Expected: 全绿，且 `71226.1` 断言通过。
 
-- [ ] **Step 7: 跑存量回归**
+- [x] **Step 7: 跑存量回归**
 
 ```bash
 python3 -m unittest discover -s tests 2>&1 | tail -3
 ```
 Expected: `Ran 549+N tests ... OK`。
 
-- [ ] **Step 8: 提交**
+- [x] **Step 8: 提交**
 
 ```bash
 git add MeterStats/modules/stores/meters.py MeterStats/constants.py MeterStats/report.py \

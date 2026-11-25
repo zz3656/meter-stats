@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from typing import Any
+
 # ============ 电表倍率 (表读数值 × 倍率 = 实际度数) ============
 METER_MULTIPLIERS: dict[str, int] = {
     "hall": 160,        # 大厅
@@ -16,6 +18,19 @@ METER_MULTIPLIERS: dict[str, int] = {
 # ============ 总表/分表倍率 (水电月报专用) ============
 MAIN_METER_MULT = 50   # 总表倍率
 SUB_METER_MULT = 40    # 分表倍率
+
+# ============ 默认表定义 (P2) ============
+# report.py 的 tables 参数默认值 —— 全项目只有这一份「默认 4 表」的乘率口径。
+# 字段用 `mult`(不是 store.json 的 `multiplier`):report.py 里 9 处 `t["mult"]`,
+# 改名只会扩大改动面且毫无收益。两套名字的转换在调用方做一次
+# (modules/reports/handler.py::_report_tables)。
+# 注意:本表顺序即界面顺序(key 顺序被前端 METER_KEYS 复用)。
+DEFAULT_TABLES: list[dict[str, Any]] = [
+    {"key": "hall", "label": "1#大厅", "mult": METER_MULTIPLIERS["hall"]},
+    {"key": "fire", "label": "2#消防", "mult": METER_MULTIPLIERS["fire"]},
+    {"key": "private_room", "label": "3#包厢", "mult": METER_MULTIPLIERS["private_room"]},
+    {"key": "ac", "label": "4#空调", "mult": METER_MULTIPLIERS["ac"]},
+]
 
 # ============ 价格（元） ============
 ELECTRICITY_PRICE = 0.9  # 电费单价 元/度
