@@ -26,9 +26,12 @@ from utils import send_json, read_body
 
 
 def get_data_paths() -> dict:
-    """全局获取 DATA_PATHS 映射。"""
-    import app_handler as _h
-    return _h.DATA_PATHS
+    """全局获取当前门店的 DATA_PATHS 映射。
+
+    多门店布局下按当前门店解析;单店布局下原样返回 app_handler.DATA_PATHS。
+    """
+    from modules.stores.context import current_store_paths
+    return current_store_paths()
 
 
 def _parse_pagination(path: str) -> tuple[int, int]:
@@ -78,9 +81,8 @@ class JsonModelHandler:
     # ------- 数据路径 -------
     @staticmethod
     def _get_data_paths() -> dict:
-        """从 app_handler 模块读取 DATA_PATHS。"""
-        import app_handler as _h
-        return _h.DATA_PATHS
+        """从 context 模块读取当前门店的数据路径映射。"""
+        return get_data_paths()
 
     def _path(self) -> Any:
         return self._get_data_paths().get(self.model)

@@ -32,10 +32,10 @@ class ModuleStorage:
         self.name = name
     
     def _get_filepath(self) -> Path:
-        """获取数据文件路径 (动态从 app_handler 获取)。"""
+        """获取数据文件路径 (动态按当前门店解析)。"""
         try:
-            from app_handler import DATA_PATHS
-            path = DATA_PATHS.get(self.name)
+            from modules.stores.context import current_store_paths
+            path = current_store_paths().get(self.name)
             if path:
                 return Path(path)
         except (ImportError, AttributeError):

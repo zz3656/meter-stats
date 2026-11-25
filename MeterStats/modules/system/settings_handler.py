@@ -30,9 +30,13 @@ def _load() -> dict:
 
 
 def _get_current_dir() -> Path:
-    """从 app_handler 获取数据目录。"""
-    import app_handler as _h
-    return _h.DATA_PATHS.get("readings", Path.home()).parent
+    """顶层数据目录 —— settings.json 是全局配置,不随门店变化。
+
+    注意:不要在这里返回门店目录。settings.json 存放用户表、门店注册表和部署配置,
+    是所有门店共享的;门店自己的表定义/价格在 stores/<id>/store.json。
+    """
+    from modules.stores.context import base_data_dir
+    return base_data_dir()
 
 
 def _save(data: dict) -> None:
