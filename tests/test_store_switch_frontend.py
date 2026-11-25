@@ -127,6 +127,71 @@ vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/core/storeContext.js'), 'utf
 })();
 """
 
+# 空态:账号没有可用门店。后端 routing.py::_store_gate 有两条不同的 403 文案 ——
+# 「账号未分配门店」(一个店都没分到)与「账号未分配有效门店」(分到的店全被删了)。
+# 两条都是空态,不是致命错误 —— 前端必须都认出来,置 noStore,而不是让用户看一屏空白。
+_NO_STORE_HARNESS = r"""
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = process.env.MS_ROOT;
+
+function makeSandbox(listImpl) {
+  const sandbox = {
+    console, setTimeout, clearTimeout, JSON, Date, Number, String, Array, Object,
+    Promise, RegExp, Error, isNaN, parseInt, parseFloat,
+    localStorage: (function () {
+      const map = {};
+      return {
+        getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+        setItem: (k, v) => { map[k] = String(v); },
+        removeItem: (k) => { delete map[k]; },
+      };
+    })(),
+    window: null,
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  sandbox.State = { reset: () => {} };
+  sandbox.Api = {
+    stores: {
+      list: listImpl,
+      current: async () => ({ ok: false, error: '账号未分配门店,请联系管理员' }),
+    },
+  };
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/core/storeContext.js'), 'utf8'),
+                  sandbox, { filename: 'storeContext.js' });
+  return sandbox;
+}
+
+async function probe(listImpl) {
+  const sandbox = makeSandbox(listImpl);
+  const reasons = [];
+  sandbox.StoreContext.onChange((_state, reason) => { reasons.push(reason); });
+  await sandbox.StoreContext.init();
+  return {
+    noStore: sandbox.StoreContext.hasNoStore(),
+    storeId: sandbox.StoreContext.getStoreId(),
+    ready: sandbox.StoreContext.isReady(),
+    stores: sandbox.StoreContext.getStores().length,
+    reasons: reasons,
+  };
+}
+
+(async () => {
+  const out = {};
+  out.throwNoStore = await probe(async () => {
+    throw new Error('账号未分配门店,请联系管理员');
+  });
+  out.throwNoValidStore = await probe(async () => {
+    throw new Error('账号未分配有效门店,请联系管理员');
+  });
+  out.badEnvelope = await probe(async () => ({
+    ok: false, error: '账号未分配门店,请联系管理员',
+  }));
+  console.log(JSON.stringify(out));
+})();
+"""
+
 
 class TestStoreContextBehaviour(unittest.TestCase):
     """用真实的 js/core/storeContext.js 跑一遍(需要 node,缺失则跳过)。"""
@@ -138,8 +203,11 @@ class TestStoreContextBehaviour(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
 
     def _run(self) -> dict[str, Any]:
+        return self._run_harness(_HARNESS)
+
+    def _run_harness(self, harness: str) -> dict[str, Any]:
         hp = Path(self.tmp.name) / "harness.js"
-        hp.write_text(_HARNESS, encoding="utf-8")
+        hp.write_text(harness, encoding="utf-8")
         env = dict(**os.environ)
         env.update(MS_ROOT=str(METERSTATS))
         proc = subprocess.run(
@@ -179,6 +247,23 @@ class TestStoreContextBehaviour(unittest.TestCase):
         out = self._run()
         self.assertIn("/api/stores", out["calls"])
         self.assertIn("/api/stores/current", out["calls"])
+
+    def test_no_store_account_enters_empty_state(self) -> None:
+        """账号没有可用门店 → 置空态,不是致命错误。
+
+        后端 routing.py::_store_gate 有两条不同的 403 文案:
+        「账号未分配门店」(一个店都没分到)与「账号未分配有效门店」(分到的店全被删了)。
+        两条都要认出来 —— 只认一条的话,另一种用户看到的是一屏空白。
+        """
+        out = self._run_harness(_NO_STORE_HARNESS)
+        for case in ("throwNoStore", "throwNoValidStore", "badEnvelope"):
+            with self.subTest(case=case):
+                res = out[case]
+                self.assertTrue(res["noStore"], "%s 没置 noStore 空态" % case)
+                self.assertEqual(res["storeId"], "", "%s 不该留下当前门店" % case)
+                self.assertTrue(res["ready"], "%s bootstrap 应当结束" % case)
+                self.assertEqual(res["stores"], 0, "%s 不该有门店列表" % case)
+                self.assertIn("no-store", res["reasons"], "%s 没广播 no-store" % case)
 
 
 if __name__ == "__main__":

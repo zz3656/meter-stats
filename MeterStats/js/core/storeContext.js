@@ -102,6 +102,18 @@
     return false;
   }
 
+  /**
+   * 后端「这个账号没有可用门店」有**两条**不同的 403 文案(routing.py::_store_gate):
+   *   - 「账号未分配门店」     —— 一个店都没分到
+   *   - 「账号未分配有效门店」 —— 分到的店全被管理员删了
+   * 两条都是「空态」而不是「致命错误」,都要置 noStore;
+   * 只认第一条的话,第二种用户会看到一屏空白而不是「请联系管理员」。
+   */
+  function _isNoStoreMessage(msg) {
+    var s = String(msg || '');
+    return s.indexOf('未分配门店') >= 0 || s.indexOf('未分配有效门店') >= 0;
+  }
+
   function _notify(reason) {
     var snapshot = {
       storeId: state.storeId,
@@ -216,7 +228,7 @@
           var msg = (listErr && listErr.message) || (listRes && listRes.error) || '';
           state.stores = [];
           state.allStores = false;
-          state.noStore = String(msg).indexOf('未分配门店') >= 0;
+          state.noStore = _isNoStoreMessage(msg);
           state.storeId = '';
           _persist('');
           state.ready = true;
@@ -288,7 +300,7 @@
     handleStoreError: function (status, text) {
       var msg = String(text || '');
       if (state.recovering) return;
-      if (msg.indexOf('未分配门店') >= 0) {
+      if (_isNoStoreMessage(msg)) {
         state.storeId = '';
         state.stores = [];
         state.allStores = false;
