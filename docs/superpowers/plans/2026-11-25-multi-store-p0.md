@@ -2806,8 +2806,8 @@ function renderStoresPage() {
             '<div class="card-header"><h3>🏪 门店管理</h3>' +
             '<button type="button" class="btn btn-primary btn-sm" onclick="resetStoreForm()">+ 新增门店</button></div>' +
             '<div style="overflow-x:auto;">' +
-            '<table class="data-table"><thead><tr>' +
-                '<th>门店名称</th><th>门店 ID</th><th>编号</th><th>地址</th><th>状态</th><th>记录数</th><th>操作</th>' +
+            '<table class="settings-table"><thead><tr>' +
+                '<th>门店名称</th><th>门店 ID</th><th>编号</th><th>地址</th><th>状态</th><th>记录数</th><th class="ta-right">操作</th>' +
             '</tr></thead><tbody>' + rows + '</tbody></table>' +
             '</div>' +
         '</div>' +
@@ -2967,11 +2967,17 @@ window.loadStores = loadStores;
         <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
 ```
 
-在 `index.html` 的 `<script>` 引入区加入:
+在 `index.html` 的 `<script>` 引入区加入 —— 放在 `js/modules/backup.js` 那一行**之后**
+(与其它 `js/modules/*.js` 排在一起,模块分组更整齐):
 
 ```html
-<script src="js/modules/stores.js"></script>
+  <script src="js/modules/stores.js"></script>
 ```
+
+> 加载顺序说明:`api.js`(1546 行)在 `js/modules/*.js` 之前,`modals.js`(1552 行)也在前面,
+> 所以 `stores.js` 里用到的 `Api.stores.*` / `showModal` / `showAlert` 在定义时都已就绪。
+> `admin.js`(1569 行)在 `stores.js` 之后 —— 它要用到 `ensureStoreList()`,
+> 而 `ensureStoreList` 定义在 `admin.js` 自己内部,不依赖 `stores.js`,没有时序问题。
 
 并在 `section-settings-users` **之前**插入门店管理页容器:
 
