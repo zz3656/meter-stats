@@ -19,9 +19,16 @@ from __future__ import annotations
 import re
 from typing import Any
 
-# 旧 4 表 —— 固定在记录顶层。新表 key 禁止与它们重名(P2 计划 D3):
-# 若允许重名,`meters` 里一份、顶层一份,`row_values()` 的优先级就成了隐藏口径,
-# 导入/迁移时极易写出「两处不一致」的数据。
+# 旧 4 表 —— 固定在记录顶层。
+#
+# ⚠️ 但**表定义里必须允许**这 4 个 key 出现:默认门店的表集合就是它们
+# (config.DEFAULT_METERS)。写入时 LEGACY_KEYS 命中一律走顶层字段
+# (见 modules/readings/handler.py::_collect_meter_values),永远不会往
+# `meters` 字典里塞同名的键 —— 所以不存在「同一块表两处存值」的歧义,
+# 也不需要禁止它们出现在表定义里。
+#
+# (曾试图禁止:结果是默认门店在「电表设置」里一保存就 400 —— 因为它提交的
+#  正是这 4 个 key。校验必须放行。)
 LEGACY_KEYS: tuple[str, ...] = ("hall", "fire", "private_room", "ac")
 
 # 新表 key 规则:小写字母开头,后续小写字母/数字/下划线,总长 2~32。
@@ -128,8 +135,6 @@ def validate_tables_payload(meters: Any) -> str:
         key = item.get("key")
         if not isinstance(key, str) or not is_valid_meter_key(key):
             return f"表 key 非法: {key!r}(只能小写字母开头、小写字母/数字/下划线,2~32 位)"
-        if key in LEGACY_KEYS:
-            return f"表 key {key!r} 是系统保留的旧表名,请换一个"
         if key in seen:
             return f"表 key 重复: {key!r}"
         seen.add(key)

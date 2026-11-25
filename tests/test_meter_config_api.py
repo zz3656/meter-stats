@@ -177,14 +177,46 @@ class TestMetersWrite(MeterConfigApiBase):
                            token=tok)
             self.assertEqual(h.response_status, 400, "倍率 %r 应被拒: %s" % (bad, h.parsed))
 
-    def test_rejects_legacy_key_collision(self) -> None:
-        """新表不许用旧 4 表的 key(D3:会造成顶层/meters 两份数据的隐藏口径)。"""
+    def test_can_save_the_default_four_tables(self) -> None:
+        """默认 4 表必须能保存 —— 它就是默认门店的表集合,不许被校验挡住。
+
+        这条是回归护栏:曾经在校验里「禁止新表复用旧 4 表 key」,结果**默认门店**
+        在「电表设置」里一按保存就 400(它提交的正是这 4 个 key)。
+        旧 4 表 key 在表定义里是合法的:写入时它们固定走顶层字段,
+        不会往 meters 字典里塞同名键,所以不存在两处存值的歧义。
+        """
         tok = self._admin_token()
-        h = self._call("PUT", "/api/admin/meter?store=s002",
-                       {"meters": [{"key": "hall", "label": "大厅", "multiplier": 2}]},
-                       token=tok)
-        self.assertEqual(h.response_status, 400, h.parsed)
-        self.assertIn("保留", h.parsed["error"])
+        default_four = [
+            {"key": "hall", "label": "大厅", "multiplier": 160},
+            {"key": "fire", "label": "消防", "multiplier": 1},
+            {"key": "private_room", "label": "包厢", "multiplier": 160},
+            {"key": "ac", "label": "空调", "multiplier": 160},
+        ]
+        h = self._call("PUT", "/api/admin/meter?store=main",
+                       {"meters": default_four}, token=tok)
+        self.assertEqual(h.response_status, 200, h.parsed)
+        got = self._get_meters(tok, "main")
+        self.assertEqual(list(got["meters"].keys()),
+                         ["hall", "fire", "private_room", "ac"])
+        self.assertEqual(got["meters"]["hall"]["multiplier"], 160)
+
+    def test_legacy_key_values_go_to_top_level_not_meters_dict(self) -> None:
+        """旧 4 表的值写顶层字段,自定义表才写 meters 字典。
+
+        这条锁住「同 key 两处存值」这个歧义不会发生:即使表定义里同时有
+        hall(旧)和 m1(新),hall 也不会出现在 meters 字典里。
+        """
+        self._set_meters("s002", [
+            {"key": "hall", "label": "大厅", "multiplier": 1},
+            {"key": "m1", "label": "吧台", "multiplier": 2},
+        ])
+        tok = self._admin_token()
+        h = self._call("POST", "/api/readings?store=s002",
+                       {"date": "2026-09-08", "hall": 3.0, "m1": 4.0}, token=tok)
+        self.assertEqual(h.response_status, 200, h.parsed)
+        row = h.parsed["row"]
+        self.assertEqual(row["hall"], 3.0)
+        self.assertEqual(row.get("meters"), {"m1": 4.0})
 
     def test_rejects_invalid_and_duplicate_keys(self) -> None:
         tok = self._admin_token()
