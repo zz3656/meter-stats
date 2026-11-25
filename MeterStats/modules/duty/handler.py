@@ -148,18 +148,26 @@ def handle_delete_duty(handler, path_clean: str):
 
 
 def _get_images_dir():
-    """获取图片目录。
+    """获取图片目录(按门店隔离)。
 
-    优先用设置里的 image_dir（数据管理页可配置），但这个值可能是从 Docker
-    部署带过来的绝对路径（例如 /data/images）—— 在 macOS 上既不存在也创建
-    不了（Read-only file system），直接 mkdir 会让整个上传接口 500。
-    所以创建失败时回退到 data_dir/images，保证上传永远有地方落盘。
+    优先用设置里的 image_dir(数据管理页可配置),但这个值可能是从 Docker
+    部署带过来的绝对路径(例如 /data/images)—— 在 macOS 上既不存在也创建
+    不了(Read-only file system),直接 mkdir 会让整个上传接口 500。
+    所以创建失败时回退到「当前门店目录/images」,保证上传永远有地方落盘。
+
+    多门店布局下,图片落在 stores/<store_id>/images/,不同门店互不干扰。
     """
-    data_dir = get_data_dir()
-    settings = _get_settings()
-    fallback = Path(data_dir) / "images"
+    from modules.stores.context import get_current_store, multi_store_layout, store_dir
+    from storage import get_data_dir
 
+    settings = _get_settings()
     configured = (settings.get("image_dir") or "").strip()
+
+    if multi_store_layout():
+        fallback = store_dir(get_current_store()) / "images"
+    else:
+        fallback = Path(get_data_dir()) / "images"
+
     if configured:
         try:
             d = Path(configured)

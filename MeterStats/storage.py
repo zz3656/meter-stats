@@ -291,6 +291,30 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         else:
             log(f"[BACKUP] 跳过 {name}: 文件不存在")
 
+    # 多门店布局:stores/ 整个子树也要进备份。
+    # P0 之后业务数据都在 stores/<store_id>/ 下,不复制的话备份包是空的。
+    #
+    # ⚠️ 后缀过滤只放行 .json / .tmp —— 值班照片(images/)从来就没被备份过,
+    #    这里是「维持现状」,不做半吊子:
+    #    若把图片收进备份,恢复侧(_iter_store_files / _safe_rel_target)必须
+    #    同步扩展,否则会出现「备份包里有照片、恢复时静默丢弃」。
+    stores_dir = data_dir / "stores"
+    if stores_dir.is_dir():
+        for src in sorted(stores_dir.rglob("*")):
+            if not src.is_file():
+                continue
+            if src.suffix not in (".json", ".tmp"):
+                continue
+            rel = src.relative_to(data_dir)
+            dest = backup_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(src, dest)
+                log(f"[BACKUP] 已复制 {rel} → {backup_dir}")
+            except OSError as e:
+                log(f"[BACKUP] 复制 {rel} 失败: {e}")
+                raise
+
     # 自动备份也包含 settings.json（与手动备份一致）
     settings_src = data_dir / "settings.json"
     if settings_src.exists():
@@ -314,10 +338,14 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
 
     try:
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            # 只打包数据文件,跳过 zip_path 自身(避免 zip 包含自身 0 字节空文件)
-            for f in sorted(backup_dir.iterdir()):
+            # 递归打包(含 stores/ 子树),跳过 zip_path 自身。
+            # ⚠️ 必须用 rglob:iterdir() 只拿到顶层条目,stores/ 是目录会被跳过,
+            #    备份包里就不会有门店数据。
+            # 条目名用相对路径 —— 否则 stores/main/readings.json 会被压成
+            # readings.json,恢复时找不到位置。
+            for f in sorted(backup_dir.rglob("*")):
                 if f.is_file() and f != zip_path:
-                    zf.write(f, f.name)
+                    zf.write(f, str(f.relative_to(backup_dir)))
         log(f"[BACKUP] 已打包 ZIP: {zip_filename}")
     except Exception as e:
         log(f"[BACKUP] 打包 ZIP 失败: {e}")
@@ -432,11 +460,23 @@ def _backup_roots(path: Path) -> list[Path]:
 def _try_restore_from_backup(path: Path):
     """从 backup/ 最新日期目录恢复文件。
 
-    依次查找:文件同级的 backup/、顶层数据目录的 backup/(仅总店自己的数据);
-    每个目录内部按日期目录名(YYYYMMDD)倒序取最新的。
+    查找顺序:
+    1. <backup根>/<日期>/<相对 base 的路径>  —— 新格式(路径保持)
+       多门店布局下备份里存的是 stores/<id>/readings.json,必须按相对路径找。
+    2. <backup根>/<日期>/<文件名>             —— 旧格式(迁移前遗留)
 
-    返回恢复后的数据(成功时),否则返回 None。
+    ⚠️ 允许访问哪些 backup 根由 _backup_roots() 决定 —— 顶层 backup/ 只对
+    总店自己开放,分店绝不能拿总店的数据来填(那是跨店串数据)。
     """
+    # 相对 base 的路径(stores/<id>/<name>.json);拿不到 base 时为 None。
+    rel = None
+    try:
+        from modules.stores.context import base_data_dir
+        base = base_data_dir()
+        rel = path.resolve().relative_to(base.resolve())
+    except (ImportError, RuntimeError, ValueError, OSError):
+        rel = None
+
     for backup_root in _backup_roots(path):
         if not backup_root.exists():
             continue
@@ -446,8 +486,14 @@ def _try_restore_from_backup(path: Path):
             reverse=True,
         )
         for d in date_dirs:
-            src = d / path.name
-            if src.exists():
+            # 新格式(路径保持)优先,旧格式(按文件名)兜底
+            candidates = []
+            if rel is not None:
+                candidates.append(d / rel)
+            candidates.append(d / path.name)
+            for src in candidates:
+                if not src.exists():
+                    continue
                 try:
                     with src.open("r", encoding="utf-8") as f:
                         data = json.load(f)

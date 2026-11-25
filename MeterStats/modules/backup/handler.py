@@ -9,10 +9,10 @@ import tempfile
 import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Optional
 
 from utils import send_json, read_body
 from storage import backup_data, DATA_FILES, log, _cache_clear
-from modules._base import get_data_paths
 from utils.api import _validate_zip_safely
 
 
@@ -24,6 +24,68 @@ _BACKUP_EXCLUDED_SETTINGS_KEYS = frozenset({
     "nas_sync_user",           # 远端 NAS 账号(部署相关)
     "nas_sync_pass",           # 远端 NAS 密码(绝不能进备份 ZIP)
 })
+
+
+def _iter_store_files(base_dir: Path) -> list[tuple[str, Path]]:
+    """列出 stores/ 子树下的数据文件。
+
+    返回 [(相对路径, 绝对路径)],相对路径形如 "stores/s002/readings.json"。
+
+    ⚠️ 只认 *.json —— 值班照片(images/)从来就没被备份过,维持现状。
+    若将来要把图片纳入备份,这里必须同步扩展,恢复侧(_safe_rel_target 的白名单)
+    也要一起扩展,否则会出现「备份包里有照片、恢复时静默丢弃」。
+    """
+    out: list[tuple[str, Path]] = []
+    stores_dir = base_dir / "stores"
+    if not stores_dir.is_dir():
+        return out
+    for src in sorted(stores_dir.rglob("*.json")):
+        if not src.is_file():
+            continue
+        out.append((str(src.relative_to(base_dir)).replace("\\", "/"), src))
+    return out
+
+
+def _is_under(base: Path, target: Path) -> bool:
+    """target 是否在 base 之内(路径穿越的最后一道护栏)。"""
+    try:
+        b = base.resolve()
+        t = target.resolve()
+    except OSError:
+        return False
+    return t == b or b in t.parents
+
+
+def _safe_rel_target(base_dir: Path, rel: str) -> Optional[Path]:
+    """把备份包里的相对路径解析成目标路径,挡掉路径穿越。
+
+    允许的两种形态:
+    - 顶层数据文件:readings.json / settings.json 等
+    - 门店子文件:stores/<safe_id>/<safe_name>.json
+      (safe_id 要过 registry.is_valid_store_id,safe_name 要过白名单;
+       store.json 是门店配置,必须能恢复)
+
+    其它一律拒绝(返回 None)。特别是 ".." 和绝对路径。
+    """
+    if not rel or not isinstance(rel, str):
+        return None
+    if rel.startswith("/") or "\\" in rel:
+        return None
+    parts = rel.split("/")
+    if len(parts) == 1:
+        if parts[0] in set(DATA_FILES.values()) | {"settings.json"}:
+            target = base_dir / parts[0]
+            return target if _is_under(base_dir, target) else None
+        return None
+    if len(parts) == 3 and parts[0] == "stores":
+        from modules.stores.registry import is_valid_store_id
+        if not is_valid_store_id(parts[1]):
+            return None
+        if parts[2] not in set(DATA_FILES.values()) | {"store.json"}:
+            return None
+        target = base_dir / "stores" / parts[1] / parts[2]
+        return target if _is_under(base_dir, target) else None
+    return None
 
 
 def _filter_settings_for_backup(settings: dict) -> dict:
@@ -76,23 +138,35 @@ def handle_get_data_files(handler):
     """GET /api/admin/data-files — 浏览器备份: 获取所有数据文件的当前内容。
 
     返回 { ok: true, files: { "readings.json": "<JSON字符串>", ... } }
-    用于 Docker/浏览器环境下的备份（无需 Swift 桥接）。
+    多门店布局下额外包含 "stores/<id>/<name>.json" 形式的条目。
     """
-    data_dir = get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+    from modules.stores.context import base_data_dir
+    try:
+        target_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
 
-    target_dir = data_dir.parent
     files = {}
     data_file_names = set(DATA_FILES.values()) | {"settings.json"}
 
-    for f in target_dir.iterdir():
+    try:
+        top_entries = sorted(target_dir.iterdir())
+    except OSError as e:
+        log(f"[WARN] 读取数据目录失败: {e}")
+        top_entries = []
+    for f in top_entries:
         if f.is_file() and f.suffix == '.json' and f.name in data_file_names:
             try:
                 files[f.name] = f.read_text(encoding="utf-8")
             except OSError as e:
                 log(f"[WARN] 读取 {f.name} 失败: {e}")
+
+    for rel, path in _iter_store_files(target_dir):
+        try:
+            files[rel] = path.read_text(encoding="utf-8")
+        except OSError as e:
+            log(f"[WARN] 读取 {rel} 失败: {e}")
 
     send_json(handler, 200, {"ok": True, "files": files})
 
@@ -160,12 +234,13 @@ def handle_post_backup(handler):
     """
     import datetime
 
-    data_dir = get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+    from modules.stores.context import base_data_dir
+    try:
+        source_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
 
-    source_dir = data_dir.parent
     backup_parent = _resolve_backup_parent(source_dir)
 
     backup_parent.mkdir(parents=True, exist_ok=True)
@@ -199,13 +274,26 @@ def handle_post_backup(handler):
             except Exception as e:
                 log(f"[WARN] 读取 settings 失败,跳过剥离: {e}")
 
-        # 2. 打包为 ZIP（只打包数据文件,不包含 zip 自身 0 字节空文件）
+        # 1.5 多门店布局:复制 stores/ 子树(保持相对路径)
+        # ⚠️ 只有 *.json 会进来(_iter_store_files 只认 JSON)——
+        #    值班照片仍然不进备份,维持改造前现状。
+        for rel, src in _iter_store_files(source_dir):
+            dest = backup_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.copy2(src, dest)
+            except OSError as e:
+                log(f"[WARN] 复制 {rel} 失败: {e}")
+
+        # 2. 打包为 ZIP（递归打包,含 stores/ 子树；不包含 zip 自身 0 字节空文件）
         zip_path = backup_dir / zip_filename
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for f in sorted(backup_dir.iterdir()):
-                # 只打包数据文件和剥离后的 settings.json,跳过 zip_path 自身
+            # ⚠️ 必须用 rglob:iterdir() 只拿到顶层条目,stores/ 是目录会被跳过。
+            # 条目名用相对路径 —— 否则 stores/main/readings.json 会被压成
+            # readings.json,恢复时找不到位置。
+            for f in sorted(backup_dir.rglob("*")):
                 if f.is_file() and f != zip_path:
-                    zf.write(f, f.name)
+                    zf.write(f, str(f.relative_to(backup_dir)))
 
         # 3. 将 zip 移到备份父目录（避免被 rmtree 误删），再清理临时目录
         final_zip = backup_parent / zip_filename
@@ -248,7 +336,14 @@ def handle_post_restore(handler):
         return
 
     # 恢复前自动备份当前数据(可回滚)
-    pre_backup = backup_data(data_dir.parent, force=True) if (data_dir := get_data_paths().get("readings")) else None
+    from modules.stores.context import base_data_dir
+    try:
+        target_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
+        return
+
+    pre_backup = backup_data(target_dir, force=True)
 
     try:
         # 解压到临时目录
@@ -258,15 +353,13 @@ def handle_post_restore(handler):
                 send_json(handler, 400, {"ok": False, "error": f"ZIP 文件不安全: {error}"})
                 return
 
-            target_dir = (data_dir.parent if data_dir else Path("/data"))
-
             # 找到解压出的数据目录（可能是 YYYYMMDD_HHMMSS/ 子目录或根目录）
             extract_dir = Path(tmp_dir)
             children = list(extract_dir.iterdir())
             if len(children) == 1 and children[0].is_dir():
                 extract_dir = children[0]
 
-            # 恢复数据文件
+            # 恢复数据文件 —— 顶层 + stores/ 子树
             restored = []
             for name in DATA_FILES.values():
                 src_file = extract_dir / name
@@ -274,6 +367,17 @@ def handle_post_restore(handler):
                     shutil.copy2(src_file, target_dir / name)
                     restored.append(name)
                     log(f"  恢复 {name} <- {src_file}")
+
+            # 恢复 stores/ 子树(路径保持)
+            for rel, src_path in _iter_store_files(extract_dir):
+                dest = _safe_rel_target(target_dir, rel)
+                if dest is None:
+                    log(f"  [WARN] 跳过非法备份路径: {rel}")
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_path, dest)
+                restored.append(rel)
+                log(f"  恢复 {rel} <- {src_path}")
 
             # 恢复 settings.json:合并业务字段,保留部署环境字段(backup_dir 等)
             settings_src = extract_dir / "settings.json"
@@ -320,12 +424,13 @@ def handle_post_upload(handler):
     import tempfile
     import os
 
-    data_dir = get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+    from modules.stores.context import base_data_dir
+    try:
+        target_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
 
-    target_dir = data_dir.parent
     content_type = handler.headers.get("Content-Type", "")
     uploaded = []
     restored = []
@@ -355,6 +460,16 @@ def handle_post_upload(handler):
                 shutil.copy2(src, target_dir / name)
                 names.append(name)
                 log(f"  恢复 {name} <- {src}")
+        # 恢复 stores/ 子树(路径保持)
+        for rel, src_path in _iter_store_files(extract_dir):
+            dest = _safe_rel_target(target_dir, rel)
+            if dest is None:
+                log(f"  [WARN] 跳过非法备份路径: {rel}")
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src_path, dest)
+            names.append(rel)
+            log(f"  恢复 {rel} <- {src_path}")
         # settings.json: 合并业务字段,保留部署字段(避免覆盖目标环境的 backup_dir 等)
         settings_src = extract_dir / "settings.json"
         if settings_src.exists():
@@ -398,9 +513,16 @@ def handle_post_upload(handler):
                         log(f"[WARN] 上传的 {fname} 不是有效的 ZIP")
                     except Exception as e:
                         log(f"[WARN] 解压 {fname} 失败: {e}")
-                elif fname in DATA_FILES.values() or fname == "settings.json":
-                    (target_dir / fname).write_bytes(file_content)
-                    log(f"  上传 {fname} → {target_dir / fname}")
+                elif fname in DATA_FILES.values() or fname == "settings.json" \
+                        or _safe_rel_target(target_dir, fname) is not None:
+                    # 门店子路径(stores/<id>/<name>.json)也要能上传 ——
+                    # 目标路径一律由 _safe_rel_target 解析,挡掉路径穿越。
+                    dest = _safe_rel_target(target_dir, fname)
+                    if dest is None:
+                        continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    dest.write_bytes(file_content)
+                    log(f"  上传 {fname} → {dest}")
 
         else:
             # JSON body: { "files": { "<filename>": <json|base64 zip wrapper> } }
@@ -426,8 +548,13 @@ def handle_post_upload(handler):
                     except Exception as e:
                         log(f"[WARN] 解码/解压 {fname} 失败: {e}")
                         continue
-                elif fname in DATA_FILES.values() or fname == "settings.json":
-                    dest = target_dir / fname
+                elif fname in DATA_FILES.values() or fname == "settings.json" \
+                        or _safe_rel_target(target_dir, fname) is not None:
+                    # 门店子路径(stores/<id>/<name>.json)也要能上传 ——
+                    # 目标路径一律由 _safe_rel_target 解析,挡掉路径穿越。
+                    dest = _safe_rel_target(target_dir, fname)
+                    if dest is None:
+                        continue
                     # settings.json 走合并分支:保留目标环境的部署字段(backup_dir 等)
                     if fname == "settings.json":
                         try:
@@ -447,6 +574,7 @@ def handle_post_upload(handler):
                                 dest.write_text(content, encoding="utf-8")
                         restored.append("settings.json")
                         continue
+                    dest.parent.mkdir(parents=True, exist_ok=True)
                     if isinstance(content, (list, dict)):
                         dest.write_text(json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
                     elif isinstance(content, str):

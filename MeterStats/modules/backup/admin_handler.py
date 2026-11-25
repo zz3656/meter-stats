@@ -15,10 +15,11 @@ from storage import log, DATA_FILES, backup_data
 from modules.system.settings_handler import get_settings, save_settings
 from modules.backup.handler import (
     _get_backup_retention_count,
+    _iter_store_files,
     _merge_settings_after_restore,
     _resolve_backup_parent,
+    _safe_rel_target,
 )
-from modules._base import get_data_paths as _get_data_paths
 from utils.api import _validate_zip_safely
 
 
@@ -606,12 +607,12 @@ def handle_post_sync_from_nas(handler):
     请求体: { files: { "readings.json": "...", "settings.json": "..." } }
     返回: { ok: true, restored: [...], message: "..." }
     """
-    data_dir = _get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+    from modules.stores.context import base_data_dir
+    try:
+        target_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
-
-    target_dir = data_dir.parent
 
     # 读取 JSON body
     body = read_body(handler)
@@ -625,35 +626,42 @@ def handle_post_sync_from_nas(handler):
     pre_backup = backup_data(target_dir, force=True)
 
     restored = []
+    restored_paths = []
     errors = []
     for name, content in files.items():
         if not isinstance(content, str):
             errors.append(f"跳过 {name}: 不是字符串")
             continue
-        target_file = target_dir / name
-        if name in DATA_FILES.values() or name == "settings.json":
-            try:
-                if name == "settings.json":
-                    # ⚠️ settings.json 必须"合并"而不是"覆盖" —— 远端实例并不知道
-                    # 本机的部署字段(nas_sync_user/nas_sync_pass/nas_sync_url/backup_dir)。
-                    # 直接覆盖会导致:同步一次 → 本机 NAS 凭据被清空 → 下次同步直接失败。
-                    # 与三条恢复路径保持一致,统一走 _merge_settings_after_restore。
-                    import json as _json
-                    try:
-                        src_settings = _json.loads(content)
-                    except ValueError as e:
-                        errors.append(f"跳过 settings.json: 不是合法 JSON ({e})")
-                        continue
-                    if not isinstance(src_settings, dict):
-                        errors.append("跳过 settings.json: 不是对象结构")
-                        continue
-                    _merge_settings_after_restore(target_dir, src_settings)
-                else:
-                    target_file.write_text(content, encoding="utf-8")
-                restored.append(name)
-                log(f"  同步写入 {name}")
-            except Exception as e:
-                errors.append(f"{name}: {e}")
+        # 目标路径一律由 _safe_rel_target 解析 ——
+        # 顶层数据文件 + stores/<id>/<name>.json,其余(含路径穿越)一律拒绝。
+        rel_target = _safe_rel_target(target_dir, name)
+        if rel_target is None:
+            errors.append(f"跳过 {name}: 不是允许的数据文件路径")
+            continue
+        try:
+            if name == "settings.json":
+                # ⚠️ settings.json 必须"合并"而不是"覆盖" —— 远端实例并不知道
+                # 本机的部署字段(nas_sync_user/nas_sync_pass/nas_sync_url/backup_dir)。
+                # 直接覆盖会导致:同步一次 → 本机 NAS 凭据被清空 → 下次同步直接失败。
+                # 与三条恢复路径保持一致,统一走 _merge_settings_after_restore。
+                import json as _json
+                try:
+                    src_settings = _json.loads(content)
+                except ValueError as e:
+                    errors.append(f"跳过 settings.json: 不是合法 JSON ({e})")
+                    continue
+                if not isinstance(src_settings, dict):
+                    errors.append("跳过 settings.json: 不是对象结构")
+                    continue
+                _merge_settings_after_restore(target_dir, src_settings)
+            else:
+                rel_target.parent.mkdir(parents=True, exist_ok=True)
+                rel_target.write_text(content, encoding="utf-8")
+            restored.append(name)
+            restored_paths.append(rel_target)
+            log(f"  同步写入 {name}")
+        except Exception as e:
+            errors.append(f"{name}: {e}")
 
     # 同步进来的文件是直接 write_text 写的,绕过了 storage.save_json,
     # 所以这里必须手动失效两层缓存:
@@ -662,8 +670,8 @@ def handle_post_sync_from_nas(handler):
     #      看起来像"同步没生效"(用户会以为同步失败又点一次)
     try:
         from storage import _cache_invalidate
-        for name in restored:
-            _cache_invalidate(str((target_dir / name).resolve()))
+        for fp in restored_paths:
+            _cache_invalidate(str(fp.resolve()))
     except Exception as e:
         log(f"[SYNC] 失效文件缓存失败: {e}")
     try:
@@ -692,12 +700,12 @@ def handle_post_restore_upload(handler):
 
     返回 { ok: true, restored: [...], message: "..." }
     """
-    data_dir = _get_data_paths().get("readings")
-    if not data_dir:
-        send_json(handler, 200, {"ok": False, "error": "数据目录未知"})
+    from modules.stores.context import base_data_dir
+    try:
+        target_dir = base_data_dir()
+    except RuntimeError as e:
+        send_json(handler, 200, {"ok": False, "error": f"数据目录未知: {e}"})
         return
-
-    target_dir = data_dir.parent
 
     # 解析 multipart 上传
     content_type = handler.headers.get("Content-Type", "")
@@ -777,6 +785,17 @@ def handle_post_restore_upload(handler):
                     shutil.copy2(src_file, target_dir / name)
                     restored.append(name)
                     log(f"  恢复 {name} <- {src_file}")
+
+            # 恢复 stores/ 子树(路径保持)
+            for rel, src_path in _iter_store_files(extract_dir):
+                dest = _safe_rel_target(target_dir, rel)
+                if dest is None:
+                    log(f"  [WARN] 跳过非法备份路径: {rel}")
+                    continue
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_path, dest)
+                restored.append(rel)
+                log(f"  恢复 {rel} <- {src_path}")
 
             # 恢复 settings.json:合并业务字段,保留目标环境的部署字段(backup_dir 等)
             settings_src = extract_dir / "settings.json"
