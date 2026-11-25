@@ -657,14 +657,20 @@ def load_json(path: Path, default=None):
 def save_json(path: Path, data) -> None:
     """原子写入:先写临时文件,再 rename,防止中途崩溃导致损坏。
 
-    同时失效该路径的缓存。"""
+    缓存失效放在 finally:写盘失败时若不失效,调用方原地改过的对象会留在缓存里,
+    而盘上是旧值 → 内存里是幻影数据、磁盘上是旧值,要重启才消失。
+
+    (load_json 命中缓存时返回的是缓存里那个对象本身,不是副本;
+     modules/_base.py 的 handle_post / handle_put 又是原地改它再存盘。)"""
     tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    tmp.replace(path)
-    # 失效缓存
-    _cache_invalidate(str(path.resolve()))
-    log(f"  OK {path.name} 已保存 ({len(data)} 条)")
+    try:
+        with tmp.open("w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp.replace(path)
+        log(f"  OK {path.name} 已保存 ({len(data)} 条)")
+    finally:
+        # 失效缓存 —— 成功与失败都要失效(失败的语义见上面 docstring)
+        _cache_invalidate(str(path.resolve()))
 
 
 def get_lock(model: str) -> threading.Lock:
