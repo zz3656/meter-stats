@@ -273,7 +273,7 @@ def _store_id_from_path(path_clean: str) -> str:
 
 
 def handle_get_stores(handler: Any) -> None:
-    """GET /api/stores → { ok, stores }"""
+    """GET /api/stores → { ok, stores, all_stores }"""
     sess = _current_session(handler)
     if not sess:
         # 没有有效会话 → 401。绝不放行成「全部门店」。
@@ -289,11 +289,14 @@ def handle_get_stores(handler: Any) -> None:
         return
     if not all_stores:
         stores = [s for s in stores if s.get("id") in store_ids]
-    send_json(handler, 200, {"ok": True, "stores": stores})
+    # all_stores:调用方是不是总部账号(可见全部门店)。
+    # 前端据此决定要不要显示门店切换器 —— 总部账号即使只有 1 家店也要能看到
+    # 「当前在哪家店」,所以不能只看 stores 的条数。
+    send_json(handler, 200, {"ok": True, "stores": stores, "all_stores": all_stores})
 
 
 def handle_get_current_store(handler: Any) -> None:
-    """GET /api/stores/current → { ok, store_id, store }"""
+    """GET /api/stores/current → { ok, store_id, store, all_stores }"""
     sess = _current_session(handler)
     if not sess:
         send_json(handler, 401, {"ok": False, "error": "未登录或会话已过期,请重新登录"})
@@ -309,7 +312,9 @@ def handle_get_current_store(handler: Any) -> None:
         store = None
     if store is None:
         store = {"id": store_id, "name": store_id}
-    send_json(handler, 200, {"ok": True, "store_id": store_id, "store": store})
+    all_stores, _ = _visible_store_ids(sess)
+    send_json(handler, 200, {"ok": True, "store_id": store_id, "store": store,
+                             "all_stores": all_stores})
 
 
 def handle_post_store(handler: Any) -> None:
