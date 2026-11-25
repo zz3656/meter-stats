@@ -662,6 +662,112 @@ class TestStoreRegistry(StoreTestBase):
         self.assertEqual(main["name"], "总店")
         self.assertEqual(s002["name"], "国贸店")
 
+    # --- 复核修复轮 2 ---
+
+    def test_add_store_rolls_back_registry_on_disk_when_store_files_cannot_be_created(self) -> None:
+        """全局模式(不传 settings)下建目录失败 → 注册表必须回滚**落盘**。
+
+        轮 1 的用例只覆盖了内存模式(settings=...):那条路径由调用方自己落盘,
+        registry 根本不碰 settings.json。全局模式才会调 _persist() 落盘 ——
+        也正是「磁盘上留着幻影门店条目」的路径,此前完全没有测试覆盖。
+
+        幻影条目的后果:内存里已经删了这家店,磁盘上还在 →
+        Task 4 的门店闸会放行一个**没有数据目录**的门店,它的每个请求都 404。
+        """
+        from unittest import mock
+
+        self._settings()
+        patcher = mock.patch.object(registry, "_create_store_files",
+                                    side_effect=OSError("磁盘满了"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        with self.assertRaises(OSError):
+            registry.add_store("s002", "国贸店")
+
+        on_disk = json.loads((self.data_dir / "settings.json").read_text(encoding="utf-8"))
+        ids = [s["id"] for s in on_disk.get("stores") or []]
+        # 这家店不能留在注册表里
+        self.assertNotIn("s002", ids)
+        # 总店必须还在,而且只能有一条(回滚不能把 main 挤掉或写成两条)
+        self.assertIn("main", ids)
+        self.assertEqual(ids.count("main"), 1)
+        # 不留孤儿目录
+        self.assertFalse((self.data_dir / "stores" / "s002").exists())
+
+    def test_add_store_raises_when_rollback_persist_fails(self) -> None:
+        """回滚落盘失败必须喊出来 —— 绝不能静默吞掉。
+
+        静默吞掉的结局:内存里已删这家店,settings.json 里却留着幻影条目
+        (内存与磁盘不一致),而且**没人知道**。必须抛错,让上层知道
+        「门店没建成,而且注册表也需要人工清理」。
+        """
+        from unittest import mock
+
+        self._settings()
+        calls: list[int] = []
+
+        def flaky_persist(settings: dict[Any, Any]) -> None:
+            calls.append(1)
+            if len(calls) == 1:
+                return  # 第一次(登记新店)成功
+            raise RuntimeError("模拟回滚落盘失败")
+
+        patcher = mock.patch.object(registry, "_persist", side_effect=flaky_persist)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        create_patcher = mock.patch.object(registry, "_create_store_files",
+                                           side_effect=OSError("磁盘满了"))
+        create_patcher.start()
+        self.addCleanup(create_patcher.stop)
+
+        with self.assertRaises(RuntimeError) as cm:
+            registry.add_store("s002", "国贸店")
+        self.assertIn("回滚", str(cm.exception))
+        # 原始异常(建目录失败)必须挂在异常链上,不能被吞掉
+        self.assertIsInstance(cm.exception.__cause__, OSError)
+
+    def test_registry_returns_deep_copies_of_nested_fields(self) -> None:
+        """交出去的门店 dict 必须是**深**拷贝。
+
+        模块 docstring 承诺「调用方改不动注册表本体」。当前门店字段全是标量,
+        浅拷贝看不出问题 —— 但 Task 6 会给用户记录加 store_ids 列表字段,
+        Task 4 的门店闸要遍历这些字段;一旦门店记录带上任何列表/字典,
+        浅拷贝就会漏。
+        """
+        settings = self._settings()
+        registry.ensure_default_store(settings)
+        settings["stores"].append(
+            {"id": "s003", "name": "嵌套店", "store_ids": ["a"]}
+        )
+
+        one = registry.get_store("s003", settings=settings)
+        assert one is not None  # mypy:收窄
+        one["store_ids"].append("b")
+        self.assertEqual(settings["stores"][1]["store_ids"], ["a"])
+
+        listed = registry.list_stores(settings)
+        listed[1]["store_ids"].append("c")
+        self.assertEqual(settings["stores"][1]["store_ids"], ["a"])
+
+    def test_add_store_returns_deep_copy(self) -> None:
+        """add_store() 的返回值也不能是注册表本体的引用。"""
+        settings = self._settings()
+        store = registry.add_store("s002", "国贸店", settings=settings)
+        store["name"] = "被改坏了"
+        again = registry.get_store("s002", settings=settings)
+        assert again is not None  # mypy:收窄
+        self.assertEqual(again["name"], "国贸店")
+
+    def test_update_store_returns_deep_copy(self) -> None:
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        # 给门店记录补一个嵌套字段(模拟将来的 store_ids)
+        settings["stores"][1]["store_ids"] = ["a"]
+        updated = registry.update_store("s002", {"name": "国贸分店"}, settings=settings)
+        updated["store_ids"].append("b")
+        self.assertEqual(settings["stores"][1]["store_ids"], ["a"])
+
 
 class TestStoreConfig(StoreTestBase):
     """门店配置 store.json。"""
@@ -762,3 +868,80 @@ class TestStoreConfig(StoreTestBase):
         self.assertFalse(path.parent.exists())
         config.write_store_config("s003", {"id": "s003", "name": "南京店", "meters": [], "config": {}})
         self.assertTrue(path.exists())
+
+
+class TestStoreConfigIsolation(StoreTestBase):
+    """门店配置与 storage 层 LRU 缓存的隔离。
+
+    storage.load_json 命中缓存时**直接返回缓存里那个解析后的对象本身** ——
+    调用方改它的嵌套结构,改的就是缓存本体。文件 mtime 没变时,下次读到的
+    就是被改坏的内存值(磁盘上的文件是好的)。
+
+    这是 P2「每店可自定义表数和倍率」的地基:P2 前端一改倍率,写盘前的
+    中间态就已经把缓存改坏了;写盘失败时磁盘是旧值、内存是新值。
+    """
+
+    def _write(self, store_id: str = "s002", **overrides: Any) -> None:
+        cfg: dict[str, Any] = {
+            "id": store_id,
+            "name": "国贸店",
+            "meters": [dict(m) for m in config.DEFAULT_METERS],
+            "config": dict(config.DEFAULT_CONFIG),
+        }
+        cfg.update(overrides)
+        config.write_store_config(store_id, cfg)
+
+    def test_read_store_config_does_not_leak_nested_mutations(self) -> None:
+        """读出来的配置改坏了不能影响下一次读。"""
+        self._write()
+        cfg = config.read_store_config("s002")
+        cfg["meters"][0]["multiplier"] = 999
+        cfg["meters"].append({"key": "xx", "multiplier": 1})
+        cfg["config"]["electricity_price"] = 0.1
+
+        cfg2 = config.read_store_config("s002")
+        self.assertEqual(cfg2["meters"][0]["multiplier"], 160)
+        self.assertEqual(len(cfg2["meters"]), 4)
+        self.assertEqual(cfg2["config"]["electricity_price"], 0.9)
+
+    def test_read_store_config_does_not_pollute_storage_cache(self) -> None:
+        """改返回值绝不能改坏 storage 的 LRU 缓存本体。"""
+        from storage import load_json
+
+        self._write()
+        cfg = config.read_store_config("s002")
+        cfg["meters"][0]["multiplier"] = 999
+
+        raw = load_json(config.store_config_path("s002"))
+        self.assertEqual(raw["meters"][0]["multiplier"], 160)
+
+    def test_get_store_meters_returns_deep_copy(self) -> None:
+        """get_store_meters() 交出去的 list 必须是副本。"""
+        context.set_current_store("s002")
+        self._write()
+        meters = config.get_store_meters()
+        meters[0]["multiplier"] = 999
+        meters.append({"key": "xx", "multiplier": 1})
+
+        again = config.get_store_meters()
+        self.assertEqual(again[0]["multiplier"], 160)
+        self.assertEqual(len(again), 4)
+
+    def test_get_store_prices_returns_deep_copy(self) -> None:
+        """get_store_prices() 的值是引用拷贝 —— 嵌套结构会被改坏。"""
+        context.set_current_store("s002")
+        self._write(config={"electricity_price": 0.9, "tariff": {"peak": 1.2}})
+        prices = config.get_store_prices()
+        prices["electricity_price"] = 0.0
+        prices["tariff"]["peak"] = 99.0
+
+        again = config.get_store_prices()
+        self.assertEqual(again["electricity_price"], 0.9)
+        self.assertEqual(again["tariff"]["peak"], 1.2)
+
+    def test_default_meters_are_not_mutated_by_callers(self) -> None:
+        """默认值也不能被调用方改坏(模块级常量必须是只读的)。"""
+        context.set_current_store("s999")
+        meters = config.get_store_meters()
+        meters[0]["multiplier"] = 999
+        self.assertEqual(config.DEFAULT_METERS[0]["multiplier"], 160)

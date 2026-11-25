@@ -16,9 +16,16 @@ P0 阶段:每店先复制一份默认表定义(与总店一致),P2 再开放自�
     - 吃存储层的 LRU 缓存(同一份配置不重复解析)
     - 文件损坏时自动走「从备份恢复」,而不是静默降级成默认值
     - 写的时候由存储层失效缓存,不会留下陈旧值
+
+**读出来的配置一律是深拷贝**:
+storage.load_json 命中缓存时直接交出缓存里那个解析后的对象本身(不是副本)。
+只做顶层浅拷贝的话,调用方改一下 cfg["meters"][0] 就是在改缓存本体 ——
+文件 mtime 没变时,下次读到的就是被改坏的内存值(磁盘上的文件是好的)。
+P2「每店自定义表数和倍率」正是走这条路,写盘前的中间态就会污染缓存。
 """
 from __future__ import annotations
 
+import copy
 from pathlib import Path
 from typing import Any
 
@@ -59,20 +66,25 @@ def read_store_config(store_id: str) -> dict[str, Any]:
     走 storage.load_json —— 文件损坏时存储层会尝试从备份恢复,
     恢复不了才回落到这里的默认配置。
 
+    **返回深拷贝**:storage 的 LRU 缓存命中时交出的是缓存里那个对象本身。
+    调用方改嵌套结构就是在改缓存本体 —— 文件 mtime 不变时,下次读到的
+    就是被改坏的内存值(磁盘上的文件是好的)。
+
     store_id 本身非法时抛 ValueError —— 那是调用方的错,不是「配置损坏」。
     """
     from storage import load_json
-    default = {
+    # default 每次调用新建 —— 调用方改它也不会碰到模块级常量或缓存
+    default: dict[str, Any] = {
         "id": store_id, "name": "",
-        "meters": [dict(m) for m in DEFAULT_METERS],
-        "config": dict(DEFAULT_CONFIG),
+        "meters": copy.deepcopy(DEFAULT_METERS),
+        "config": copy.deepcopy(DEFAULT_CONFIG),
     }
     path = store_config_path(store_id)
     data = load_json(path, default)
     # 文件内容不是 dict(被人手改坏)→ 用默认配置
     if not isinstance(data, dict):
         return default
-    return dict(data)
+    return copy.deepcopy(data)
 
 
 def write_store_config(store_id: str, cfg: dict[str, Any]) -> None:
@@ -91,18 +103,22 @@ def get_store_settings() -> dict[str, Any]:
 
 
 def get_store_meters() -> list[dict[str, Any]]:
-    """当前门店的表定义列表。"""
+    """当前门店的表定义列表。返回深拷贝 —— 调用方改不动缓存本体。"""
     meters = get_store_settings().get("meters")
     if isinstance(meters, list) and meters:
-        return meters
-    return [dict(m) for m in DEFAULT_METERS]
+        return copy.deepcopy(meters)
+    return copy.deepcopy(DEFAULT_METERS)
 
 
 def get_store_prices() -> dict[str, Any]:
-    """当前门店的价格/倍率配置(缺失项用默认值补齐)。"""
+    """当前门店的价格/倍率配置(缺失项用默认值补齐)。返回深拷贝。
+
+    值必须是深拷贝而不是引用拷贝:store.json 的 config 里将来可能有嵌套
+    结构(标量时代看不出来),引用拷贝会让调用方改坏缓存本体。
+    """
     cfg = get_store_settings().get("config")
-    out: dict[str, Any] = dict(DEFAULT_CONFIG)
+    out: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)
     if isinstance(cfg, dict):
         for k, v in cfg.items():
-            out[str(k)] = v
+            out[str(k)] = copy.deepcopy(v)
     return out

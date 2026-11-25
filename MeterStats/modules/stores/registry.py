@@ -12,7 +12,9 @@ stores/MAIN 与 stores/main 是**同一个目录**。所以注册表除了拒绝
 不做"统一转小写":已有门店的 ID 可能已经被用户看到、用过了,
 静默改写 ID 比拒绝新增更糟。
 
-本模块交出去的门店 dict 一律是**副本** —— 调用方改不动注册表本体。
+本模块交出去的门店 dict 一律是**深拷贝** —— 调用方改不动注册表本体。
+(深拷贝而不是浅拷贝:门店记录将来会带上列表字段(Task 6 的 store_ids),
+浅拷贝会让调用方改坏注册表本体 —— docstring 承诺过的事必须兑现。)
 
 settings 参数的约定:
     传入了就用传入的那份 dict(调用方自己负责落盘),不传就读写全局
@@ -20,7 +22,7 @@ settings 参数的约定:
 """
 from __future__ import annotations
 
-import contextlib
+import copy
 import json
 import re
 from datetime import datetime
@@ -83,20 +85,20 @@ def _stores_signature(st: dict[str, Any]) -> str:
 
 
 def list_stores(settings: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
-    """全部门店(按创建顺序)。返回副本 —— 调用方改不动注册表本体。"""
+    """全部门店(按创建顺序)。返回深拷贝 —— 调用方改不动注册表本体。"""
     st = _load_settings(settings)
     stores = st.get("stores")
     if not isinstance(stores, list):
         return []
-    return [dict(s) for s in stores if isinstance(s, dict)]
+    return [copy.deepcopy(s) for s in stores if isinstance(s, dict)]
 
 
 def get_store(store_id: str, settings: Optional[dict[str, Any]] = None) -> Optional[dict[str, Any]]:
-    """按 ID 查门店;不存在返回 None。返回副本。"""
-    for s in list_stores(settings):
-        if s.get("id") == store_id:
-            return s
-    return None
+    """按 ID 查门店;不存在返回 None。返回深拷贝。"""
+    store = _live_store(_load_settings(settings), store_id)
+    if store is None:
+        return None
+    return copy.deepcopy(store)
 
 
 def _live_store(st: dict[str, Any], store_id: str) -> Optional[dict[str, Any]]:
@@ -115,7 +117,9 @@ def ensure_default_store(settings: dict[str, Any]) -> dict[str, Any]:
 
     顺带把 stores 规整成 list —— settings.json 被人手改坏时也能自愈。
 
-    返回的是副本 —— 改它不会改到注册表本体。
+    返回的是深拷贝 —— 改它不会改到注册表本体。
+    (对传入的 settings dict 的原地修改保持不变 —— Task 3 的迁移逻辑
+     依赖这个行为:它用「调用前取快照 + 调用后比对」判定注册表是否落盘。)
     """
     stores = settings.setdefault("stores", [])
     if not isinstance(stores, list):
@@ -123,7 +127,7 @@ def ensure_default_store(settings: dict[str, Any]) -> dict[str, Any]:
         settings["stores"] = stores
     for s in stores:
         if isinstance(s, dict) and s.get("id") == DEFAULT_STORE_ID:
-            return dict(s)
+            return copy.deepcopy(s)
     store: dict[str, Any] = {
         "id": DEFAULT_STORE_ID,
         "name": DEFAULT_STORE_NAME,
@@ -133,7 +137,7 @@ def ensure_default_store(settings: dict[str, Any]) -> dict[str, Any]:
         "created_at": _now(),
     }
     stores.append(store)
-    return dict(store)
+    return copy.deepcopy(store)
 
 
 def add_store(store_id: str, name: str, code: str = "", address: str = "",
@@ -174,17 +178,28 @@ def add_store(store_id: str, name: str, code: str = "", address: str = "",
         _persist(st)
     try:
         _create_store_files(store_id, store["name"])
-    except Exception:
+    except Exception as create_err:
         # 建目录失败 → 把刚登记的这家撤掉,不留「有门店、没数据」的幻影店。
         # 目录不删(万一里面已经有数据,删掉比留着更糟)。
         st["stores"] = [s for s in st["stores"]
                         if not (isinstance(s, dict) and s.get("id") == store_id)]
         if settings is None:
-            # 回滚也失败 → 保留原始异常,让上层知道「没成功」
-            with contextlib.suppress(Exception):
+            # 回滚必须**落盘**:不落盘的话,settings.json 里就留着幻影门店条目,
+            # 内存与磁盘不一致,Task 4 的门店闸会放行一个没有数据目录的门店
+            # (它的每个请求都 404)。
+            #
+            # 回滚失败绝不能静默吞掉 —— 那等于「建店失败 + 注册表也被改坏」
+            # 两件事一起被瞒下来。抛 RuntimeError,把原始异常(建目录失败)
+            # 挂在异常链上,让上层知道门店没建成、注册表需要人工清理。
+            try:
                 _persist(st)
+            except Exception as rollback_err:
+                raise RuntimeError(
+                    f"门店 {store_id} 建目录失败,且回滚注册表落盘也失败 —— "
+                    f"settings.json 里可能残留幻影门店条目,请手工检查: {rollback_err}"
+                ) from create_err
         raise
-    return dict(store)
+    return copy.deepcopy(store)
 
 
 def _reject_case_insensitive_conflict(st: dict[str, Any], store_id: str) -> None:
@@ -230,7 +245,7 @@ def update_store(store_id: str, fields: dict[str, Any],
         store["active"] = bool(fields["active"])
     if settings is None:
         _persist(st)
-    return dict(store)
+    return copy.deepcopy(store)
 
 
 def delete_store(store_id: str, settings: Optional[dict[str, Any]] = None) -> bool:
