@@ -1,6 +1,7 @@
 from __future__ import annotations
 import inspect
 import traceback
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 from utils import send_json
 
@@ -102,15 +103,39 @@ MANAGER_ROLES = frozenset({"admin", "supervisor"})
 # 生产启动路径不读任何环境变量,这个开关在进程内,外部配不出来。
 ENFORCE_AUTH = True
 
+# 鉴权关闭时(ENFORCE_AUTH=False)用的合成管理员会话。
+# 门店闸要靠它才知道「本次请求属于哪个用户、能看到哪些门店」——
+# 返回空会话/None 会让下游拿不到 user_id。
+# user_id=0 在 settings.json 里永远不会存在(用户 id 从 1 开始),
+# 所以 "_synthetic" 这个标记不会和真实用户混淆:
+#   - 合成会话 → 测试模式,按全店放行
+#   - 真实会话查不到用户记录 → 403(fail-closed),绝不回退成「全店权限」
+_SYNTHETIC_SESSION: Dict[str, Any] = {
+    "user_id": 0,
+    "username": "test",
+    "role": "admin",
+    "name": "test",
+    "all_stores": True,
+    "store_ids": [],
+    "_synthetic": True,
+}
 
-def _auth_gate(method: str, path_clean: str, handler) -> bool:
-    """统一鉴权入口。放行返回 True;已发出 401/403 响应则返回 False。
+
+def _auth_gate(method: str, path_clean: str, handler) -> Optional[Dict[str, Any]]:
+    """统一鉴权入口。返回 session dict 表示放行;返回 None 表示已发出 401/403。
 
     token 由 _get_token 依次尝试 Cookie / ?token= / Authorization 头,
     所以 <img src> 与 <a href> 这类带不了请求头的请求也能用 query 通过校验。
+
+    返回 session 而不是 bool,是为了把「这次请求是谁」交给下游的门店闸 ——
+    门店闸要按用户的门店范围放行,不能只看有没有登录。
     """
-    if not ENFORCE_AUTH or path_clean in PUBLIC_API_PATHS:
-        return True
+    if not ENFORCE_AUTH:
+        # 业务回归测试关闭了鉴权 —— 合成一个管理员会话,
+        # 让下游的门店闸也能拿到可用的 session(而不是空/None)。
+        return dict(_SYNTHETIC_SESSION)
+    if path_clean in PUBLIC_API_PATHS:
+        return {}  # 匿名放行(白名单端点);门店闸会跳过这些路径
 
     from modules.system.permissions_handler import _get_token
     from modules.system.auth_handler import get_session, _touch_session
@@ -119,24 +144,131 @@ def _auth_gate(method: str, path_clean: str, handler) -> bool:
     sess = get_session(token) if token else None
     if not sess:
         send_json(handler, 401, {"error": "未登录或会话已过期,请重新登录"})
-        return False
+        return None
 
     _touch_session(token)  # 有活动就续期,与 check_permission 装饰器行为一致
     role = sess.get("role", "employee")
 
     if method == "DELETE" and role not in DELETE_ROLES:
         send_json(handler, 403, {"error": "权限不足: 删除需要主管或管理员权限"})
-        return False
+        return None
 
     if path_clean.startswith(ADMIN_ONLY_PREFIXES) and role != "admin":
         send_json(handler, 403, {"error": "权限不足: 用户管理需要管理员权限"})
-        return False
+        return None
 
     if path_clean.startswith(MANAGER_ONLY_PREFIXES) and role not in MANAGER_ROLES:
         send_json(handler, 403, {"error": "权限不足: 该操作需要主管或管理员权限"})
+        return None
+
+    return sess
+
+
+def _store_gate(sess: Dict[str, Any], handler: Any) -> bool:
+    """解析并校验当前门店。返回 False 表示已发出 403/404。
+
+    规则:
+    - **单店布局**(没有 stores/ 目录)→ 整体放行,落到默认店。此时只有一家店,
+      无从越权;这也保证存量业务回归测试的行为完全不变。
+    - **多店布局** → 严格执行:
+        - 范围优先取 settings.json 里的用户记录(改权限即时生效,不必重新登录)
+        - all_stores=True(总部账号)→ 允许任意**已注册**门店
+        - 否则请求的门店必须在该用户的 store_ids 里 → 否则 403
+        - 不带 store 参数时:取该用户第一个 store_ids;总部账号取默认店 main
+        - 请求的门店没在注册表里 → 404(与「没权限」区分开)
+
+    门店闸是「拦越权」的闸,不是新的 500 来源:判不出布局/权限时一律 403,
+    绝不把异常冒给前端。
+    """
+    from modules.stores import registry
+    from modules.stores.context import (
+        DEFAULT_STORE_ID,
+        multi_store_layout,
+        set_current_store,
+    )
+
+    # 布局判定:数据目录未初始化时 base_data_dir() 会抛 RuntimeError
+    # (Task 1 的 fail-fast 设计 —— 不猜目录,免得静默碰到真实生产数据)。
+    # 判不出布局就按单店放行,并记一条日志,绝不把异常冒成 500。
+    try:
+        multi = multi_store_layout()
+    except Exception as e:
+        from storage import log
+        log(f"[WARN] [store_gate] 数据目录未初始化,按单店布局放行: {e}")
+        multi = False
+
+    if not multi:
+        set_current_store(DEFAULT_STORE_ID)
+        return True
+
+    scope = _user_store_scope(sess)
+    if scope is None:
+        # 查不到用户记录 → fail-closed:账号可能已被删除,旧会话还在。
+        # 绝不回退成「全店权限」—— 那等于「号删了,权限还在」。
+        send_json(handler, 403, {"error": "账号不存在或门店权限无法确认,请重新登录"})
         return False
 
+    all_stores, store_ids = scope
+    if not all_stores and not store_ids:
+        # 受限账号但一个门店都没分配 → 无从谈越权,直接拒绝。
+        send_json(handler, 403, {"error": "账号未分配门店,请联系管理员"})
+        return False
+
+    requested = _requested_store(handler)
+    if not requested:
+        requested = store_ids[0] if store_ids else DEFAULT_STORE_ID
+
+    # 权限先判、存在性后判:分店员工探测别的门店 ID 时只能拿到 403,
+    # 不会从 403/404 的差别里摸到别家门店存不存在。
+    if not all_stores and requested not in store_ids:
+        send_json(handler, 403, {"error": f"无权访问门店: {requested}"})
+        return False
+
+    if not _store_exists(requested, registry):
+        send_json(handler, 404, {"error": f"门店不存在: {requested}"})
+        return False
+
+    set_current_store(requested)
     return True
+
+
+def _user_store_scope(sess: Dict[str, Any]) -> Optional[Tuple[bool, List[str]]]:
+    """用户的门店范围。返回 None 表示「查不到用户记录」→ 交给调用方 403。
+
+    优先读 settings.json(改权限即时生效,不必重新登录);
+    合成会话(ENFORCE_AUTH=False 的测试模式)按全店放行。
+    """
+    if sess.get("_synthetic"):
+        return (True, [])
+    from modules.stores import registry
+    user_id = sess.get("user_id")
+    if not isinstance(user_id, int):
+        # 会话里没有合法的 user_id → 判不出范围 → fail-closed
+        return None
+    try:
+        return registry.user_store_scope(user_id)
+    except Exception as e:
+        # settings.json 读不到(不存在/损坏)→ 判不出范围 → fail-closed
+        from storage import log
+        log(f"[WARN] [store_gate] 读用户门店范围失败: {e}")
+        return None
+
+
+def _requested_store(handler: Any) -> str:
+    """请求里指定的门店 ID(query 的 ?store=)。没有则返回空串。"""
+    qs = parse_qs(urlparse(getattr(handler, "path", "") or "").query)
+    values = qs.get("store") or []
+    return (values[0] if values else "").strip()
+
+
+def _store_exists(store_id: str, registry: Any) -> bool:
+    """门店是否在注册表里。读不到注册表时按「不存在」处理(fail-closed)。"""
+    try:
+        return registry.get_store(store_id) is not None
+    except Exception as e:
+        from storage import log
+        log(f"[WARN] [store_gate] 读门店注册表失败: {e}")
+        return False
 
 
 _GET_ROUTES = {
@@ -264,8 +396,16 @@ def _route(method: str, handler, path: str) -> bool:
         return True
 
     # GET: 精确匹配 + 前缀匹配
-    if not _auth_gate(method, path_clean, handler):
+    sess = _auth_gate(method, path_clean, handler)
+    if sess is None:
         return True  # 已经发了 401/403,不再往下分发
+
+    # 门店闸:解析并校验当前门店。挂在 _route() 这个唯一入口上 →
+    # 新增接口默认就带门店隔离,不用逐个接口改。
+    # 公开端点(health/version/login)与门店无关,必须跳过 ——
+    # 否则 /api/health 会被 404,Docker HEALTHCHECK 会把容器判成 unhealthy。
+    if path_clean not in PUBLIC_API_PATHS and not _store_gate(sess, handler):
+        return True  # 已经发了 403/404,不再往下分发
 
     if method == "GET":
         # 特殊路径: /api/duty/image/{filename}

@@ -242,5 +242,81 @@ class TestSessionTtlTouch(AuthBase):
         _touch_session  # noqa: B018 (确认符号可导入)
 
 
+class TestStoreScope(AuthBase):
+    """门店越权防护(多门店布局下)。
+
+    门店闸挂在 routing._route() 这个唯一入口上 —— 改 ?store= 参数就能
+    访问别家门店的数据,必须在这里被拦住。
+    """
+
+    def _enable_multi_store(self) -> str:
+        """造出多门店布局 + 一个只属于分店的员工,返回该员工的 token。"""
+        from modules.system.settings_handler import get_settings, save_settings
+
+        from storage import DATA_FILES
+
+        for store_id in ("main", "s002"):
+            d = self.data_dir / "stores" / store_id
+            d.mkdir(parents=True)
+            for fname in DATA_FILES.values():
+                (d / fname).write_text("[]", encoding="utf-8")
+
+        settings = get_settings()
+        settings["stores"] = [
+            {"id": "main", "name": "总店", "active": True},
+            {"id": "s002", "name": "国贸店", "active": True},
+        ]
+        settings["users"][0]["all_stores"] = True
+        settings["users"].append({
+            "id": 99, "username": "branch", "password": "x", "role": "employee",
+            "name": "分店员工", "enabled": True,
+            "store_ids": ["s002"], "all_stores": False,
+        })
+        save_settings(settings)
+        return create_session({
+            "id": 99, "username": "branch", "role": "employee", "name": "分店员工",
+        })
+
+    def test_branch_employee_cannot_read_other_store(self) -> None:
+        """分店员工改 ?store=main → 403。"""
+        tok = self._enable_multi_store()
+        h = self.call("GET", "/api/readings?store=main", token=tok)
+        self.assertEqual(h.response_status, 403)
+        self.assertIn("无权访问门店", h.parsed.get("error", ""))
+
+    def test_branch_employee_can_read_own_store(self) -> None:
+        tok = self._enable_multi_store()
+        h = self.call("GET", "/api/readings?store=s002", token=tok)
+        self.assertNotEqual(h.response_status, 403)
+
+    def test_admin_can_read_any_registered_store(self) -> None:
+        """总部账号(all_stores)可访问任意已注册门店。"""
+        self._enable_multi_store()
+        h = self.call("GET", "/api/readings?store=s002", token=self.tok_admin)
+        self.assertNotEqual(h.response_status, 403)
+
+    def test_unknown_store_returns_404(self) -> None:
+        """门店不存在 → 404(与「没权限」的 403 区分开)。"""
+        self._enable_multi_store()
+        h = self.call("GET", "/api/readings?store=nope", token=self.tok_admin)
+        self.assertEqual(h.response_status, 404)
+
+    def test_session_of_deleted_user_is_rejected(self) -> None:
+        """账号被删但会话还在 → 403(fail-closed),不能继续访问门店数据。
+
+        settings.json 里只有 id=1 的管理员,tok_emp 的 user_id=3 查不到 ——
+        这正是「账号被删、旧会话未过期」的场景,绝不能回退成全店权限。
+        """
+        self._enable_multi_store()
+        h = self.call("GET", "/api/readings?store=s002", token=self.tok_emp)
+        self.assertEqual(h.response_status, 403)
+
+    def test_health_still_ok_in_multi_store_layout(self) -> None:
+        """公开端点不受门店闸影响 —— 404 会让 Docker HEALTHCHECK 判 unhealthy。"""
+        self._enable_multi_store()
+        h = self.call("GET", "/api/health")
+        self.assertEqual(h.response_status, 200)
+
+
 if __name__ == "__main__":
     unittest.main()
