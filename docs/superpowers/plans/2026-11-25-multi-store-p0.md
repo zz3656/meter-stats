@@ -1044,6 +1044,13 @@ def migrate_to_stores(data_dir: Path) -> dict:
 
     legacy_present = any(_file_has_records(Path(data_dir) / fn) for fn in DATA_FILES.values())
 
+    # 0. 注册表先落盘 —— **必须在建 stores/ 目录之前**。
+    #    反过来的话:目录建好了但注册表写失败 → multi_store_layout() 变 True,
+    #    而门店闸要求门店必须已注册 → 全站 404。
+    #    先写注册表则反之无风险:stores/ 不存在 = 单店布局,门店闸整体放行,
+    #    数据仍走顶层文件,下次启动再迁一次即可(幂等)。
+    result["stores"] = _ensure_registry(data_dir)
+
     if legacy_present:
         # 1. 先备份 —— 备份失败就不迁
         backup_path = _backup_before_migration(data_dir)
@@ -1074,9 +1081,6 @@ def migrate_to_stores(data_dir: Path) -> dict:
 
     # 3. 门店配置 store.json(从 settings.json 的 meter/config 合成)
     _write_default_store_json(data_dir)
-
-    # 4. 注册表 + 用户门店归属
-    result["stores"] = _ensure_registry(data_dir)
 
     log(f"[MIGRATE] 多门店布局就绪: stores/main/ (迁移={result['migrated']}, "
         f"新建={result['created']}, 门店数={result['stores']})")
@@ -1176,8 +1180,14 @@ def _ensure_registry(data_dir: Path) -> int:
         return 0
 
     changed = False
+    # ⚠️ 修复:ensure_default_store() 会 setdefault("stores", []) 原地改 settings,
+    #    所以**调用之后**再判断 `"stores" not in settings` 永远是 False(死代码),
+    #    默认店就永远存不进 settings.json。必须在调用**之前**取快照。
+    had_stores_key = isinstance(settings.get("stores"), list)
+    before_ids = {s.get("id") for s in registry.list_stores(settings)}
     registry.ensure_default_store(settings)
-    if "stores" not in settings:
+    after_ids = {s.get("id") for s in registry.list_stores(settings)}
+    if (not had_stores_key) or (before_ids != after_ids):
         changed = True
 
     stores = settings.get("stores") or []
