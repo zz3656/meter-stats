@@ -196,6 +196,7 @@ class TestStoreSwitchFlags(StoreSwitchTestBase):
         h = self._call("GET", "/api/stores/current?store=s002", token=tok)
         self.assertEqual(h.response_status, 200)
         self.assertEqual(h.parsed["store_id"], "s002")
+        self.assertTrue(h.parsed["all_stores"])
 
     def test_bootstrap_endpoints_work_without_store_param(self) -> None:
         """前端引导必须能在「当前店已失效」时也拿到门店列表 —— 否则用户锁死。"""
