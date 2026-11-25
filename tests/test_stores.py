@@ -5,7 +5,7 @@
 - 按门店路径解析:单店布局原样返回 DATA_PATHS;多店布局指向 stores/<id>/
 - 默认店在迁移前可回退顶层旧文件;分店不回退(否则会读到总店数据)
 - 路径解析失败时必须报错,绝不静默回退到真实用户数据目录
-- 门店数据的崩溃恢复:从顶层 backup/ 恢复
+- 崩溃恢复:总店可回退顶层 backup/;分店绝不能拿总店备份来填(串店)
 - 报表缓存按门店隔离(总店的月报不能被分店命中)
 """
 import json
@@ -104,7 +104,12 @@ class TestStoreContext(StoreTestBase):
 
         called = []
         original = storage.get_data_dir
-        storage.get_data_dir = lambda: called.append(1) or Path("/should-not-be-used")
+
+        def fake_get_data_dir() -> Path:
+            called.append(1)
+            return Path("/should-not-be-used")
+
+        storage.get_data_dir = fake_get_data_dir
         try:
             # 未初始化 → 报错,且不调用 get_data_dir()
             app_handler.DATA_PATHS = {}
@@ -218,18 +223,22 @@ class TestHandlerStoreScoping(StoreTestBase):
 
 
 class TestStoreBackupRecovery(StoreTestBase):
-    """门店数据的崩溃恢复 —— 备份在顶层,门店自己的 backup/ 不存在。"""
+    """门店数据的崩溃恢复。
+
+    顶层 backup/ 里存的是**总店**的数据,只能回退给总店自己;
+    分店绝不能拿总店快照来填(那是串店)。
+    """
 
     def _write_backup(self, day: str, filename: str, data) -> None:
         d = self.data_dir / "backup" / day
         d.mkdir(parents=True)
         (d / filename).write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-    def test_store_file_recovers_from_top_level_backup(self):
-        """门店文件损坏 → 从顶层 backup/ 恢复。
+    def test_main_store_recovers_from_top_level_backup(self):
+        """总店(stores/main/)损坏 → 可以从顶层 backup/ 恢复。
 
-        门店路径是 stores/<id>/readings.json,它同级的 stores/<id>/backup/ 不存在;
-        不回退顶层就等于「崩溃后从 backup/ 自动恢复」对门店数据静默失效。
+        顶层 backup/ 里存的就是总店数据(backup_data() 只复制顶层目录的文件),
+        默认店 main 就是总店,所以这条回退是安全的。
         """
         import storage
 
@@ -255,16 +264,58 @@ class TestStoreBackupRecovery(StoreTestBase):
 
         self.assertEqual(storage.load_json(target, []), payload)
 
-    def test_missing_store_file_is_restored_from_top_level_backup(self):
-        """门店文件整个丢失 → 同样从顶层 backup/ 恢复。"""
+    def test_branch_store_never_recovers_from_top_level_backup(self):
+        """分店绝不能从顶层 backup/ 恢复 —— 那是总店的数据。
+
+        顶层备份里存的是总店快照,门店文件在 stores/<id>/ 下,顶层备份里
+        根本没有分店的文件。按文件名匹配会把总店内容写进分店 —— 串店。
+        """
         import storage
 
-        payload = [{"date": "2026-01-02", "hall": 3.0}]
-        self._write_backup("20260102", "charges.json", payload)
+        hq_payload = [{"date": "2026-01-01", "hall": 999.0, "_store": "HQ(总店)"}]
+        self._write_backup("20260101", "readings.json", hq_payload)
+        store = self.data_dir / "stores" / "s002"
+        store.mkdir(parents=True)
+        target = store / "readings.json"
+        target.write_text("{损坏", encoding="utf-8")
+
+        # 不恢复 → 返回默认值
+        self.assertEqual(storage.load_json(target, []), [])
+        # 分店文件绝不能被总店数据覆盖
+        self.assertEqual(target.read_text(encoding="utf-8"), "{损坏")
+        self.assertNotIn("总店", target.read_text(encoding="utf-8"))
+
+    def test_missing_branch_store_file_is_not_restored_from_top_level_backup(self):
+        """分店文件整个丢失 → 也不能拿总店的备份来填。"""
+        import storage
+
+        hq_payload = [{"date": "2026-01-02", "hall": 3.0, "_store": "HQ(总店)"}]
+        self._write_backup("20260102", "charges.json", hq_payload)
         store = self.data_dir / "stores" / "s002"
         store.mkdir(parents=True)
 
-        self.assertEqual(storage.load_json(store / "charges.json", []), payload)
+        self.assertEqual(storage.load_json(store / "charges.json", []), [])
+        # 分店目录里不应该凭空多出总店的备份文件
+        self.assertFalse((store / "charges.json").exists())
+
+    def test_branch_store_prefers_its_own_backup(self):
+        """门店自己的 backup/ 优先 —— 恢复源必须是本门店的数据。"""
+        import storage
+
+        own = [{"date": "2026-02-01", "hall": 11.0}]
+        hq = [{"date": "2026-01-01", "hall": 999.0, "_store": "HQ(总店)"}]
+        self._write_backup("20260101", "readings.json", hq)
+        store = self.data_dir / "stores" / "s002"
+        store.mkdir(parents=True)
+        own_day = store / "backup" / "20260201"
+        own_day.mkdir(parents=True)
+        (own_day / "readings.json").write_text(
+            json.dumps(own, ensure_ascii=False), encoding="utf-8"
+        )
+        target = store / "readings.json"
+        target.write_text("{损坏", encoding="utf-8")
+
+        self.assertEqual(storage.load_json(target, []), own)
 
 
 class TestReportCacheStoreScoping(StoreTestBase):

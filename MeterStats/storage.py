@@ -399,22 +399,32 @@ def log(msg: str) -> None:
 
 
 def _backup_roots(path: Path) -> list[Path]:
-    """备份查找顺序:文件同级的 backup/ → 顶层数据目录的 backup/。
+    """备份查找顺序:文件同级的 backup/ → (仅总店)顶层数据目录的 backup/。
 
-    门店数据的路径是 stores/<id>/readings.json,它同级的 backup/ 从不存在;
-    真正的备份在**顶层**数据目录的 backup/ 里 —— 不回退就等于「崩溃后从
-    backup/ 自动恢复」对门店数据静默失效。
+    顶层 backup/ 里存的是**总店**的数据 —— backup_data() 只复制顶层目录的文件
+    (data_dir / name),门店数据在 stores/<id>/ 下,顶层备份里根本没有分店的文件。
+    所以顶层 backup/ 只能回退给「总店自己的数据」:
+      - 顶层文件(base/readings.json):它自己的备份就在顶层 backup/
+      - base/stores/main/(默认店就是总店):顶层备份里存的就是总店数据
+    分店(stores/<其它 id>/)**一律不许**回退顶层 backup/ ——
+    否则会把总店的数据写进分店文件,正是「门店之间彼此物理隔离」要消灭的串店。
 
-    DATA_PATHS 尚未初始化时拿不到顶层目录,只用同级的 backup/。
+    DATA_PATHS 尚未初始化时取不到顶层目录,只用同级的 backup/。
     """
     roots = [path.parent / "backup"]
-    top: Path | None = None
     try:
-        from modules.stores.context import base_data_dir
-        top = base_data_dir() / "backup"
+        from modules.stores.context import DEFAULT_STORE_ID, base_data_dir, store_dir
+        base = base_data_dir()
+        main_dir = store_dir(DEFAULT_STORE_ID)
     except (ImportError, RuntimeError):
-        top = None
-    if top is not None and top not in roots:
+        # 取不到顶层目录 → 只用自己的 backup 目录
+        return roots
+    top = base / "backup"
+    if top in roots:
+        # 顶层文件:它同级的 backup/ 就是顶层 backup/,已经加过了
+        return roots
+    # 只有总店自己的数据才允许回退到顶层 backup/(分店一律不许)
+    if path.parent == main_dir:
         roots.append(top)
     return roots
 
@@ -422,7 +432,7 @@ def _backup_roots(path: Path) -> list[Path]:
 def _try_restore_from_backup(path: Path):
     """从 backup/ 最新日期目录恢复文件。
 
-    依次查找:文件同级的 backup/、顶层数据目录的 backup/(门店数据的备份在顶层);
+    依次查找:文件同级的 backup/、顶层数据目录的 backup/(仅总店自己的数据);
     每个目录内部按日期目录名(YYYYMMDD)倒序取最新的。
 
     返回恢复后的数据(成功时),否则返回 None。
