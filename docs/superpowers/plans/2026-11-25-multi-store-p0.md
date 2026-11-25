@@ -3371,15 +3371,15 @@ git commit -m "feat(stores): 门店管理页与用户门店分配"
 
 ## 验收清单（P0 完成时逐条核对）
 
-- [ ] `python3 -m unittest discover -s tests -v` 全绿,**169 个存量用例一个不少**
-- [ ] `ruff check .` 与 `mypy .` 无新增告警
+- [ ] `python3 -m unittest discover -s tests -v` 全绿,**原有的 169 个存量用例一个不少**(P0 期间新增的分店用例会累加,总数会大于 169 —— 这里要确认的是**存量那 169 个仍然全过**)
+- [ ] `ruff check .` 与 `mypy .` 无新增告警(口径:`ruff check .` ≤ 309 条;`mypy . --exclude 'data/'` ≤ 807 条 —— 仓库根的旧版 `data/` 副本与 `MeterStats/server.py` 重名,`mypy .` 裸跑会直接失败)
 - [ ] 新建一台干净数据目录启动服务 → 自动建出 `stores/main/`,服务可正常登录、录抄表、看报表
 - [ ] 用旧数据目录启动服务 → 顶层数据自动搬进 `stores/main/`,顶层旧文件仍在(可回滚),备份目录里有迁移前的快照
 - [ ] 手动备份产出的 ZIP 内含 `stores/main/readings.json` 与 `settings.json`
 - [ ] 新建一个分店 → `stores/<id>/` 目录自动建好,6 个空数据文件就位
 - [ ] 分店员工账号只勾了一个门店 → 登录后请求别的门店返回 403
 - [ ] 总部账号(admin)可访问全部门店
-- [ ] **口径未变**:用 2026 年 6 月 Excel 核对值 **71226.1 度** 复验通过(本计划不动 `report.py` 的计算口径,但报表缓存键在 P2 才加门店维度,P0 期间单店行为必须与改造前完全一致)
+- [ ] **口径未变**:用 2026 年 6 月 Excel 核对值 **71226.1 度** 复验通过(`tests/test_monthly_report.py` 的断言原样保留,本计划不动 `report.py` 的任何计算口径)。⚠️ 补充:**报表缓存键的门店维度已经在 P0 加了**(Task 1 修复轮 1 —— `report.py` 的月报/年报缓存键改为 `f"{store_id}:{month}"`),不是 P2 才做;加它的理由是 P0 上线即多门店生效,同一月份的缓存不区分门店就会跨店串数据。
 - [ ] `MeterStats/VERSION` **未改动**
 
 ## 交付后仍需人工确认的事项
