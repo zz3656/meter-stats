@@ -189,6 +189,114 @@
     },
   };
 
+  // ==================== 电表设置页(P2:增删表) ====================
+
+  var SETTINGS_ICONS = ['⚡', '🍸', '🔥', '💡', '🌡️', '🔌', '🧊', '🎛️'];
+
+  /**
+   * 下一个可用的表 key:`m1` / `m2` …，避开已用的。
+   *
+   * 刻意不用旧 4 表的 key(hall/fire/private_room/ac)作为新表名 ——
+   * 那 4 个 key 的值固定写记录顶层字段,新表复用会让「这块表的数据在哪」
+   * 变成需要猜的事(虽然后端允许,但人看着会乱)。
+   */
+  function nextMeterKey(used) {
+    var taken = used || [];
+    var n = 1;
+    while (taken.indexOf('m' + n) >= 0) n++;
+    return 'm' + n;
+  }
+
+  function _esc(x) {
+    return (typeof escapeHtml === 'function') ? escapeHtml(x) : String(x == null ? '' : x);
+  }
+  function _escAttr(x) {
+    return (typeof escapeAttr === 'function') ? escapeAttr(x) : _esc(x);
+  }
+
+  /**
+   * 渲染设置页的表定义单元格。
+   *
+   * @param {HTMLElement} form 容器
+   * @param {Array} list        [{key,label,icon,multiplier}]
+   * @param {Function} onDelete 点删除时回调(收到 key)
+   */
+  function renderSettings(form, list, onDelete) {
+    if (!form) return;
+    var canDelete = list.length > 1;   // 至少保留 1 块表
+    form.innerHTML = list.map(function (m, i) {
+      var key = String(m.key || '');
+      var label = String(m.label || '');
+      var icon = String(m.icon || '⚡');
+      var mult = (m.multiplier != null && !isNaN(m.multiplier)) ? m.multiplier : '';
+      return '' +
+        '<div class="meter-cell" data-meter-key="' + _escAttr(key) + '">' +
+          '<div class="meter-cell-title">' +
+            _esc(icon + ' ' + (i + 1) + '#' + (label || key)) +
+            (canDelete
+              ? '<button type="button" class="meter-del-btn" data-remove-key="' + _escAttr(key) + '" ' +
+                'title="删除这块表" style="float:right;color:var(--danger);background:none;' +
+                'border:none;cursor:pointer;font-size:14px;line-height:1;">✕</button>'
+              : '') +
+          '</div>' +
+          '<div class="meter-cell-row"><label>表名</label>' +
+            '<input type="text" class="meter-input" data-key="' + _escAttr(key) + '" data-field="label" ' +
+            'value="' + _escAttr(label) + '" maxlength="20"></div>' +
+          '<div class="meter-cell-row"><label>倍率</label>' +
+            '<input type="number" class="meter-input" data-key="' + _escAttr(key) + '" data-field="multiplier" ' +
+            'min="1" step="1" value="' + _escAttr(mult) + '"></div>' +
+          '<div class="meter-cell-row"><label>图标</label>' +
+            '<input type="text" class="meter-input" data-key="' + _escAttr(key) + '" data-field="icon" ' +
+            'value="' + _escAttr(icon) + '" maxlength="4"></div>' +
+        '</div>';
+    }).join('');
+
+    // 事件委托式绑定 —— 不用内联 onclick,省掉把 key 拼进 JS 字符串(XSS 面)
+    if (typeof onDelete === 'function' && form.querySelectorAll) {
+      form.querySelectorAll('.meter-del-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          onDelete(btn.getAttribute('data-remove-key'));
+        });
+      });
+    }
+  }
+
+  /** 把设置页的输入读回 [{key,label,icon,multiplier}] */
+  function readSettings(form) {
+    var out = [];
+    if (!form || !form.querySelectorAll) return out;
+    form.querySelectorAll('.meter-cell').forEach(function (cell) {
+      var item = { key: cell.getAttribute('data-meter-key') || '', label: '', icon: '', multiplier: NaN };
+      cell.querySelectorAll('.meter-input').forEach(function (inp) {
+        var f = inp.getAttribute('data-field');
+        if (f === 'label') item.label = inp.value;
+        else if (f === 'icon') item.icon = inp.value;
+        // 刻意不兜底成 1:非法值原样交给后端拒绝,而不是替用户静默改掉
+        else if (f === 'multiplier') item.multiplier = parseInt(inp.value, 10);
+      });
+      out.push(item);
+    });
+    return out;
+  }
+
+  /** 设置页的列表 → 接口载荷(数组)。倍率非法值原样传,交给后端拒绝。 */
+  function settingsPayload(list) {
+    return (list || []).map(function (m) {
+      return {
+        key: String(m.key || ''),
+        label: String(m.label || ''),
+        icon: String(m.icon || ''),
+        multiplier: m.multiplier,
+      };
+    });
+  }
+
+  MeterForm.SETTINGS_ICONS = SETTINGS_ICONS;
+  MeterForm.settingsPayload = settingsPayload;
+  MeterForm.nextMeterKey = nextMeterKey;
+  MeterForm.renderSettings = renderSettings;
+  MeterForm.readSettings = readSettings;
+
   window.MeterForm = MeterForm;
 
   /**

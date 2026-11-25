@@ -434,79 +434,133 @@ function deleteAdminUser(uid) {
 }
 
 // ===== 电表设置 =====
+// ===== 电表设置(P2:按店,可增删表) =====
+//
+// 改造前:表集合写死 4 块,只能改名和倍率,而且写的是**全局** settings ——
+// 一家店改表名,全部门店跟着变。现在按当前门店读写 store.json,并支持增删表。
+
+/** 当前编辑中的表定义(渲染与增删共用一份,避免表单与状态不同步) */
+var _meterSettingsList = [];
+
+/** 表单里的输入 → _meterSettingsList(用户可能已经改过名字,增删前必须先同步) */
+function _syncMeterListFromForm(form) {
+  if (!form || !window.MeterForm) return;
+  _meterSettingsList = window.MeterForm.readSettings(form);
+}
+
+/** 渲染表定义单元格(实现在 MeterForm.renderSettings —— 与表单渲染同一处,便于测试) */
+function _renderMeterCells(form, list) {
+  if (!window.MeterForm) return;
+  window.MeterForm.renderSettings(form, list, function (key) {
+    _syncMeterListFromForm(form);
+    _meterSettingsList = _meterSettingsList.filter(function (m) { return m.key !== key; });
+    _renderMeterCells(form, _meterSettingsList);
+  });
+}
+
+/** 新增一块表:key 自动生成(m1/m2/…),避开已用 */
+function addMeterRow() {
+  var form = document.getElementById('meter-settings-form');
+  if (!form || !window.MeterForm) return;
+  _syncMeterListFromForm(form);
+
+  var used = _meterSettingsList.map(function (m) { return m.key; });
+  var icons = window.MeterForm.SETTINGS_ICONS;
+  _meterSettingsList.push({
+    key: window.MeterForm.nextMeterKey(used),
+    label: '新表' + (used.length + 1),
+    icon: icons[used.length % icons.length],
+    multiplier: 1,
+  });
+  _renderMeterCells(form, _meterSettingsList);
+}
+
+/** 当前正在编辑哪家店 —— 总部账号容易改错店,标题上写清楚 */
+function _renderMeterStoreName() {
+  var el = document.getElementById('meter-settings-store');
+  if (!el) return;
+  var name = '';
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) {
+      var sid = StoreContext.getStoreId();
+      var stores = StoreContext.getStores() || [];
+      for (var i = 0; i < stores.length; i++) {
+        if (String(stores[i].id) === String(sid)) { name = stores[i].name || sid; break; }
+      }
+      if (!name) name = sid || '';
+    }
+  } catch (e) { /* ignore */ }
+  el.textContent = name ? ('当前门店:' + name) : '';
+}
+
 function loadMeterSettings() {
-  Api.admin.meterSettings().then(function(res) {
-      const form = document.getElementById('meter-settings-form');
-      if (!form) return;
-      const meter = res.meter || {};
-      const config = res.config || {};
+  Api.admin.meterSettings().then(function (res) {
+    var form = document.getElementById('meter-settings-form');
+    if (!form) return;
 
-      // 填充配置
-      const elecPrice = document.getElementById('config-elec-price');
-      const waterPrice = document.getElementById('config-water-price');
-      const mainMult = document.getElementById('config-main-mult');
-      const subMult = document.getElementById('config-sub-mult');
-      if (elecPrice) elecPrice.value = config.electricity_price || 0.9;
-      if (waterPrice) waterPrice.value = config.water_price || 4.5;
-      if (mainMult) mainMult.value = config.main_mult != null ? config.main_mult : 50;
-      if (subMult) subMult.value = config.sub_mult != null ? config.sub_mult : 40;
+    var config = res.config || {};
+    var elecPrice = document.getElementById('config-elec-price');
+    var waterPrice = document.getElementById('config-water-price');
+    var mainMult = document.getElementById('config-main-mult');
+    var subMult = document.getElementById('config-sub-mult');
+    if (elecPrice) elecPrice.value = config.electricity_price || 0.9;
+    if (waterPrice) waterPrice.value = config.water_price || 4.5;
+    if (mainMult) mainMult.value = config.main_mult != null ? config.main_mult : 50;
+    if (subMult) subMult.value = config.sub_mult != null ? config.sub_mult : 40;
 
-      // 填充电表参数
-      const meterKeys = ['hall', 'fire', 'private_room', 'ac'];
-      const icons = { hall: '🎤', fire: '🧯', private_room: '🛋️', ac: '❄️' };
-      form.innerHTML = meterKeys.map(k => {
-        const m = meter[k] || {};
-        return `
-          <div class="meter-cell">
-            <div class="meter-cell-title">${icons[k]} ${m.label || k}</div>
-            <div class="meter-cell-row">
-              <label>倍率</label>
-              <input type="number" class="meter-input" data-key="${k}" data-field="multiplier" value="${m.multiplier || 1}">
-            </div>
-            <div class="meter-cell-row">
-              <label>表名</label>
-              <input type="text" class="meter-input" data-key="${k}" data-field="label" value="${m.label || ''}">
-            </div>
-          </div>
-        `;
-      }).join('');
-    }).catch(function(e) { showAlert('加载电表设置失败', 'error'); });
+    // 表定义:后端给的是**有序字典** {key: {...}}(JSON 对象保序)
+    var meters = res.meters || res.meter || {};
+    var list = Object.keys(meters).map(function (k) {
+      return Object.assign({ key: k }, meters[k] || {});
+    });
+    _meterSettingsList = list;
+    _renderMeterCells(form, _meterSettingsList);
+    _renderMeterStoreName();
+  }).catch(function (e) { showAlert('加载电表设置失败: ' + (e && e.message ? e.message : ''), 'error'); });
 }
 
 function saveMeterSettings() {
-  const meterInputs = document.querySelectorAll('.meter-input');
-  const meter = {};
-  meterInputs.forEach(inp => {
-    const k = inp.dataset.key;
-    const f = inp.dataset.field;
-    if (!meter[k]) meter[k] = {};
-    const v = f === 'multiplier' ? parseInt(inp.value, 10) : inp.value;
-    meter[k][f] = v;
-  });
+  var form = document.getElementById('meter-settings-form');
+  if (form) _syncMeterListFromForm(form);
+  if (!_meterSettingsList.length) { showAlert('至少要有 1 块表', 'error'); return; }
 
-  // 后端是整体替换 config，必须把全部字段都带上
-  const numOr = function(id, fallback) {
-    const el = document.getElementById(id);
-    const v = el ? parseFloat(el.value) : NaN;
+  // 后端要的是数组:key / label / icon / multiplier
+  var meters = window.MeterForm.settingsPayload(_meterSettingsList);
+
+  // 后端是整体替换 config,必须把全部字段都带上
+  var numOr = function (id, fallback) {
+    var el = document.getElementById(id);
+    var v = el ? parseFloat(el.value) : NaN;
     return isNaN(v) ? fallback : v;
   };
-  const config = {
+  var config = {
     electricity_price: numOr('config-elec-price', 0.9),
     water_price: numOr('config-water-price', 4.5),
     main_mult: Math.round(numOr('config-main-mult', 50)),
     sub_mult: Math.round(numOr('config-sub-mult', 40)),
   };
 
-  Api.admin.saveMeterSettings({ meter, config }).then(function(res) {
-    if (!res.ok) { showAlert('保存失败', 'error'); return; }
-    showAlert('电表参数已保存', 'success');
-    Object.keys(meter).forEach(k => {
-      if (window.MULTIPLIER) window.MULTIPLIER[k] = meter[k].multiplier;
-    });
-  }).catch(e => showAlert('网络错误: ' + e.message, 'error'));
+  Api.admin.saveMeterSettings({ meters: meters, config: config }).then(function (res) {
+    if (!res || res.ok === false) {
+      showAlert('保存失败: ' + ((res && res.error) || '未知错误'), 'error');
+      return;
+    }
+    showAlert('电表设置已保存', 'success');
+    // 保存后必须重载表元数据并重渲染表单/表头/报表 ——
+    // 否则「加了一块表」要刷新页面才看得见,用户会以为没保存上。
+    if (typeof loadMeterConfig === 'function') {
+      loadMeterConfig().then(function () {
+        if (typeof window.renderMeterUi === 'function') window.renderMeterUi();
+        if (typeof refreshAndRender === 'function') refreshAndRender();
+      }).catch(function () { /* 静默 */ });
+    }
+  }).catch(function (e) {
+    // 后端校验失败(0 块表 / 倍率非正整数 / key 非法)会返回 400 → 这里拿到可读原因
+    showAlert('保存失败: ' + (e && e.message ? e.message : '网络错误'), 'error');
+  });
 }
 
-// ===== 数据管理 =====
+// ===== 数据管理 =====// ===== 数据管理 =====
 
 // 加载备份目录配置
 function loadBackupDirConfig() {

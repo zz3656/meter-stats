@@ -665,19 +665,34 @@ git commit -m "feat(ui): 报表与图表按当前店表集合渲染"
 
 ### Task 6: 前端 —— 电表设置页（增删表 / 按店保存）
 
+> **状态:已完成**(2026-11-26)。新增 `tests/test_meter_settings_ui.py` 13 项;全量 **638** 项全绿;
+> ruff 269 / mypy 793 零新增。
+>
+> 与原计划的偏差:单元格渲染/收集没有写在 `admin.js` 里,而是收进
+> `MeterForm.renderSettings / readSettings / settingsPayload / nextMeterKey` ——
+> 与抄表表单同一处实现,既避免再造一份 4 表逻辑,也让这部分可被 node 测试覆盖
+> (`admin.js` 顶层会执行 `initAuth()`,直接加载到沙箱里测不稳)。
+>
+> 几个刻意的取舍:
+> - 只剩 1 块表时**不给**删除按钮(后端也会拒绝 0 块表)
+> - 倍率非法值(如 0)原样显示并交给后端拒绝,**不**静默改成 1
+> - 删除按钮用 `data-remove-key` + 事件委托,不用内联 onclick(免掉把 key 拼进 JS 字符串)
+> - 保存成功后重载 `loadMeterConfig()` + `renderMeterUi()` + `refreshAndRender()`,
+>   否则「加了一块表」要刷新页面才看得见
+
 **Files:**
 - Modify: `MeterStats/admin.js`（约 437-500 行 `loadMeterSettings` / `saveMeterSettings`）
 - Modify: `MeterStats/index.html`（`section-settings-meter`，约 852-880 行）
 - Create: `tests/test_meter_settings_ui.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 1. `loadMeterSettings()` 渲染出当前店表数对应的单元格（2 表 → 2 个 `.meter-cell`）。
 2. 点「新增表」后多一格，key 自动生成且不与已有重复、不与旧 4 表重名。
 3. 保存时 payload 里的 `meters` 是数组且含 `multiplier`。
 4. 页面上标明当前正在编辑**哪家店**（避免总部账号改错店）。
 
-- [ ] **Step 2: 改造设置页**
+- [x] **Step 2: 改造设置页**
 
 - `meterKeys` 硬编码（`admin.js:460`）→ 读 `loadMeterConfig()` 的结果
 - 每格加「删除」按钮（至少保留 1 块，删到 1 块时按钮禁用）
@@ -686,7 +701,7 @@ git commit -m "feat(ui): 报表与图表按当前店表集合渲染"
 - 顶部显示「当前门店：<店名>」
 - ⚠️ **XSS**：label 是自由文本，进 `innerHTML` 必须 `escapeHtml`；进 `value="..."` 必须 `escapeAttr`（全局只有 `utils.js` 一份强版，2026-11-26 已收口）
 
-- [ ] **Step 3: 运行测试 + 端到端**
+- [x] **Step 3: 运行测试 + 端到端**
 
 ```bash
 python3 -m unittest tests.test_meter_settings_ui -v
@@ -697,7 +712,7 @@ python3 -m unittest tests.test_meter_settings_ui -v
 3. 在 s002 录一条抄表（2 块表都有值）→ 报表只出这 2 块
 4. 清理：`kill -9`（SIGTERM 会死锁，见 AGENTS/CHANGELOG），`rm -rf` 临时目录
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add MeterStats/admin.js MeterStats/index.html tests/test_meter_settings_ui.py

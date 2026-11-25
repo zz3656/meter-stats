@@ -800,9 +800,15 @@
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">📝 电表命名</div>
-        <div class="settings-block-desc">4 块表的显示名称，改动会同步到所有报表、图例和复制内容</div>
+        <div class="settings-block-title">📝 电表设置
+          <span id="meter-settings-store" class="settings-unit" style="font-weight:400;margin-left:8px;"></span>
+        </div>
+        <div class="settings-block-desc">本店有几块电表、各自的名称 / 倍率 / 图标。改动会同步到所有报表、图例、抄表与充值表单</div>
         <div id="meter-settings-form" class="meter-grid"></div>
+        <div style="margin-top:10px;">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addMeterRow()">➕ 新增一块表</button>
+          <span class="settings-unit" style="margin-left:8px;">至少保留 1 块表</span>
+        </div>
       </div>
 
       <div class="settings-block">
