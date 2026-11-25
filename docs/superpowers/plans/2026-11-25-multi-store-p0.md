@@ -3074,6 +3074,35 @@ window.loadStores = loadStores;
 
 > `escapeHtml` **已经存在** —— `js/helpers/utils.js:12` 定义了 `window.escapeHtml`,
 > 全项目共用。直接调用,不要在本文件重复定义。
+>
+> ⚠️ **但这里有个陷阱,实现者必须知道(控制器核实过加载顺序):**
+>
+> **实际上有两份 `escapeHtml`,而且真正生效的是弱的那份。**
+>
+> | 位置 | 写法 | 转义范围 |
+> |---|---|---|
+> | `js/helpers/utils.js:12` | `window.escapeHtml = function(s){ ...replace(/[&<>"']/g, ...) }` | `&` `<` `>` `"` `'` —— **全 5 个** |
+> | `admin.js:922` | `function escapeHtml(str){ div.textContent = str; return div.innerHTML }` | `&` `<` `>` —— **不转义 `"` 和 `'`** |
+>
+> `index.html` 的加载顺序是 `js/helpers/utils.js`(**1544 行**)→ 各个 `js/modules/*.js`
+> (1554~1568)→ **`admin.js`(1569 行)**。`admin.js` 里那句顶层 `function escapeHtml(...)`
+> 是**全局函数声明**,会把 `window.escapeHtml` **覆盖成 admin.js 的弱版本**。
+> 所以页面跑起来之后,所有模块(含 `js/modules/*.js`)调用的都是 **admin.js 的弱版本**。
+>
+> **对本 Task 的要求**:
+> 1. **不要定义第三份** `escapeHtml`。
+> 2. 计划里的门店渲染代码(`<td>`、`<label>` 内容)用的是**元素内容**位置 ——
+>    弱版本转义了 `&` `<` `>`,**够用**。
+> 3. 但计划里有一处把值放进了**双引号属性**:
+>    `'<input type="checkbox" name="edit-store-ids" value="' + escapeHtml(s.id) + '"' ...>`
+>    —— 这里 `s.id` 是门店 ID,受 `[A-Za-z0-9_-]{1,32}` 约束,**不含引号,安全**。
+>    **但如果实现时把门店名称 / 地址 / 编号(自由文本)也放进属性值,弱版本就不够了** ——
+>    `"` 能直接打断属性、`'` 能打断单引号属性。
+>    → **自由文本一律只放元素内容位置;必须进属性值时,自己额外转义引号。**
+> 4. 控制器已核实:**现有代码的 30 处 `escapeHtml` 用法全部在元素内容位置**
+>    (`<td>` / `<p>` / `<strong>`),没有一处放进属性值 → **当前没有活跃的 XSS**,
+>    这是**潜在**风险,不是现存漏洞。**本 Task 不要顺手去改 `admin.js` 的 `escapeHtml`**
+>    (那是独立的重构,会改变现有页面的转义结果,回归面大;已记入待裁决项)。
 
 - [ ] **Step 5: 在 `index.html` 加侧栏入口并引入脚本**
 
