@@ -2092,6 +2092,18 @@ def handle_post_users(handler):
 
 把 `handle_get_users` 的返回值补上门店字段(其实密码以外的字段本来就全返回了,这里只需确认不泄露密码 —— 已满足,无需改动)。
 
+> ⚠️ **控制器预审:Task 6 有 2 处必须处理的缺陷,照抄会出事。**
+>
+> | # | 缺陷 | 后果 | 必须怎么改 |
+> |---|---|---|---|
+> | 1 | **`save_settings()` 写失败会被静默吞掉** —— `settings_handler._save()` 的 `except Exception` 里只 `print("[settings] [WARN] _save failed: ...")` 并**注释写明「不要 raise,避免中断用户操作」** | 新建用户 / 改门店归属时,写盘失败 → 接口照样返回 `{"ok": true}` → **管理员看到"分配成功",用户实际没落盘**。而 `registry.user_store_scope()` 是**实时读 settings.json** 的 → 用户登录后查不到自己的 `store_ids` → **门店闸直接 403,用户被锁在自己门店外面** | 写完必须**回读校验**(与 Task 2 的 `registry._persist()` 同一套思路:写 → 回读 settings.json → 比对 → 不通过就报错)。`handle_post_users` 与 `handle_put_users` **都要**校验。注意 `registry._verify_persisted()` 目前只比对 `stores[]` 签名,用户记录需要另外比对(比对目标用户是否存在 + `store_ids` / `all_stores` 是否一致) |
+> | 2 | **`store_ids` 不校验门店是否真的存在** | 分配一个不存在的门店 ID(手打错了、或门店已被删)→ 不报错 → 用户的 `store_ids` 里躺着一个永远匹配不上的 ID → **用户看不到任何数据**,且看不出原因 | 新增/修改用户时校验 `store_ids` 里的每个 ID 都在注册表里,不在就返回 `{"ok": false, "error": ...}`。注意:用户管理接口是 **`/api/admin/users`,仅管理员可访问**(鉴权闸已保证),所以这里不是越权风险,是**可用性/数据一致性**问题 |
+>
+> 另注:`update_user()` 改了 `role` 时**不重算 `all_stores`** —— 一个 admin 被降级成 employee 后,
+> `all_stores` 仍是 `True` → 他仍是"总部账号",能看全部门店。
+> 这在 Task 6 引入 `role` 与 `all_stores` 的组合后才会成为真问题,
+> **本轮要一并处理**:降级时把 `all_stores` 收敛为 `False`(除非显式传了 `all_stores`)。
+
 - [ ] **Step 5: 改 `auth_handler.create_session` 与登录返回**
 
 把 `MeterStats/modules/system/auth_handler.py:148-162` 的 `create_session` 整段替换为：
