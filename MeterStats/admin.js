@@ -46,7 +46,10 @@ function initAuth() {
     // 验证会话
     Api.system.me().then(function(res) {
         if (res.user) {
-          setLoggedIn(res.user);
+          // ⚠️ 单独 catch:不要 return 给外层的 catch(那会把用户踢出登录)
+          setLoggedIn(res.user).catch(function(e) {
+            console.warn('登录后初始化失败:', e);
+          });
         } else {
           clearAuth();
         }
@@ -73,7 +76,7 @@ function showLoginVersion() {
 }
 
 // 验证通过后: 隐藏登录页, 显示主应用
-function setLoggedIn(user) {
+async function setLoggedIn(user) {
   ADMIN_USER = user;
   document.getElementById('logout-btn').style.display = '';
   document.getElementById('login-page').style.display = 'none';
@@ -81,7 +84,35 @@ function setLoggedIn(user) {
   // 鉴权通过才允许加载业务数据（后端 /api/* 已强制 token）
   // 按角色隐藏进不去的设置页(数据管理要主管以上、用户管理仅管理员)
   applyRoleVisibility();
-  if (typeof window.loadAppData === 'function') window.loadAppData();
+  // ⚠️ 必须先引导门店上下文再拉数据:
+  //    数据请求要带 ?store=,门店没定下来时后端会落到默认店 ——
+  //    那样员工看到的就不是自己该看的那家店了。
+  var storeReady = true;
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) {
+      await StoreContext.init();
+      // 「当前店为空」有两种,必须分开处理:
+      //   - hasNoStore():账号被管理员取消了门店 → 让用户去联系管理员
+      //   - 有门店列表却没选出店(理论上不该发生)→ 让用户刷新重试
+      // 两种都不拉数据 —— 拉了就是满屏 403。
+      if (StoreContext.hasNoStore()) {
+        showAlert('账号未分配门店,请联系管理员', 'error');
+        storeReady = false;
+      } else if (!StoreContext.getStoreId()) {
+        showAlert('加载门店列表失败,请刷新重试', 'error');
+        storeReady = false;
+      }
+    }
+  } catch (e) {
+    console.warn('门店上下文引导失败:', e);
+  }
+  // 渲染门店切换器(可见性取决于 all_stores / 门店数量)
+  try {
+    if (typeof initStoreSwitcher === 'function') initStoreSwitcher();
+  } catch (e) {
+    console.warn('门店切换器初始化失败:', e);
+  }
+  if (storeReady && typeof window.loadAppData === 'function') window.loadAppData();
 }
 
 // 无权限时: 显示登录页
@@ -93,6 +124,10 @@ function clearAuth() {
   localStorage.removeItem('token');
   localStorage.removeItem('meter_admin_token');
   localStorage.removeItem('meter_token');
+  // 门店上下文也要清:换人登录不该继承上一个人选的门店。
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) StoreContext.reset();
+  } catch (e) { /* ignore */ }
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
   // 登出后管理类入口一律藏起来(不等下次登录)
@@ -133,7 +168,11 @@ async function doLogin() {
     }
     ADMIN_TOKEN = res.token;
     localStorage.setItem('token', ADMIN_TOKEN);
-    setLoggedIn(res.user);  // 内部会触发 loadAppData，不要再 renderAll() 一次
+    try {
+      await setLoggedIn(res.user);  // 内部会触发 loadAppData，不要再 renderAll() 一次
+    } catch (e) {
+      console.warn('登录后初始化失败:', e);
+    }
   } catch (e) {
     // 如果健康检查失败，显示更友好的错误提示
     if (retries === 0) {

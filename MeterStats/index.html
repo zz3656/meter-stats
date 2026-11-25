@@ -85,6 +85,12 @@
 
   <!-- ===== 侧栏导航 ===== -->
   <aside id="sidebar" class="sidebar">
+    <!-- 门店切换器(P1):仅总部/多店用户可见,由 js/modules/storeSwitcher.js 渲染 -->
+    <div class="store-switcher" id="store-switcher" style="display:none;">
+      <label class="store-switcher-label" for="store-select">🏪 当前门店</label>
+      <select id="store-select" class="store-select" title="切换门店"></select>
+    </div>
+
     <nav class="sidebar-nav">
 
       <!-- 数据记录(默认展开) -->
@@ -1554,6 +1560,7 @@
   <!-- 模块化加载 -->
   <script src="js/helpers/utils.js"></script>
   <script src="js/core/meterConfig.js"></script>
+  <script src="js/core/storeContext.js"></script>
   <script src="js/core/api.js"></script>
   <script src="js/core/state.js"></script>
   <script src="js/core/navigation.js"></script>
@@ -1577,6 +1584,7 @@
   <script src="js/modules/render_weekly.js"></script>
   <script src="js/modules/backup.js"></script>
   <script src="js/modules/stores.js"></script>
+  <script src="js/modules/storeSwitcher.js"></script>
   <script src="js/nas_sync.js"></script>
   <script src="admin.js?v=<TIMESTAMP>"></script>
   <script src="js/core/init.js"></script>
