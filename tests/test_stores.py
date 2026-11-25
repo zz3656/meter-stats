@@ -520,6 +520,148 @@ class TestStoreRegistry(StoreTestBase):
                       "enabled": True, "store_ids": ["s002"]})
         self.assertEqual(registry.user_store_scope(2, settings=settings), (False, ["s002"]))
 
+    # --- 复核修复轮 1:4 个 Important + 4 个 Minor ---
+
+    def _break_settings_write(self) -> None:
+        """把 settings.json 的写入打桩成静默失败。
+
+        settings_handler._save() 会吞掉所有异常(只打 stderr 警告),
+        正是这个行为让「写失败」在调用方看起来像「写成功」。
+        """
+        from modules.system import settings_handler
+        original = settings_handler.save_settings
+
+        def broken_save(data: dict[Any, Any]) -> Any:
+            return None
+
+        settings_handler.save_settings = broken_save
+        self.addCleanup(setattr, settings_handler, "save_settings", original)
+
+    def test_add_store_rejects_duplicate_default_store_id(self) -> None:
+        """新注册表上 add_store("main", ...) 不能产生两条 main。
+
+        重复检查必须排在 ensure_default_store() 之后 —— 否则默认店刚被补上,
+        前面的重复检查还没看到它,就会 append 出第二条 main。
+        """
+        settings = self._settings()
+        with self.assertRaises(ValueError):
+            registry.add_store("main", "总店分店", settings=settings)
+        ids = [s["id"] for s in registry.list_stores(settings)]
+        self.assertEqual(ids, ["main"])
+
+    def test_add_store_rejects_case_insensitive_duplicate_id(self) -> None:
+        """macOS/Windows 文件系统大小写不敏感 → MAIN 与 main 是同一个目录。
+
+        不挡的话,新建的"分店"会静默读写总店的数据 —— 正是本功能要消灭的串店。
+        """
+        settings = self._settings()
+        registry.ensure_default_store(settings)
+        with self.assertRaises(ValueError) as cm:
+            registry.add_store("MAIN", "国贸店", settings=settings)
+        msg = str(cm.exception)
+        self.assertIn("MAIN", msg)
+        self.assertIn("main", msg)
+        self.assertEqual([s["id"] for s in registry.list_stores(settings)], ["main"])
+
+    def test_add_store_rejects_case_insensitive_conflict_with_branch(self) -> None:
+        """分店之间同样不能只差大小写。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        with self.assertRaises(ValueError):
+            registry.add_store("S002", "国贸二店", settings=settings)
+        self.assertEqual(len(registry.list_stores(settings)), 2)
+
+    def test_add_store_allows_ids_differing_beyond_case(self) -> None:
+        """只有大小写相同的才算冲突 —— s002 与 s003、main 与 main2 都该放行。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        registry.add_store("s003", "南京店", settings=settings)
+        registry.add_store("main2", "二号总店", settings=settings)
+        ids = [s["id"] for s in registry.list_stores(settings)]
+        self.assertEqual(ids, ["main", "s002", "s003", "main2"])
+
+    def test_add_store_raises_when_settings_write_fails(self) -> None:
+        """写 settings.json 失败必须报错,不能报成功。
+
+        否则管理页显示"门店已创建",但这家店不在注册表里 ——
+        Task 4 的门店闸会拒掉它的每一个请求,还留下一个孤儿目录。
+        """
+        self._settings()
+        self._break_settings_write()
+        with self.assertRaises(RuntimeError) as cm:
+            registry.add_store("s002", "国贸店")
+        self.assertIn("settings.json", str(cm.exception))
+        # 注册表里不能有这家店
+        on_disk = json.loads((self.data_dir / "settings.json").read_text(encoding="utf-8"))
+        self.assertIsNone(on_disk.get("stores"))
+        # 也不能留下孤儿目录:注册表先落盘,目录后建 —— 写失败时目录根本没建
+        self.assertFalse((self.data_dir / "stores" / "s002").exists())
+
+    def test_add_store_rolls_back_when_store_files_cannot_be_created(self) -> None:
+        """建目录失败 → 把刚登记的门店撤掉,不留「有门店、没数据」的幻影店。"""
+        from unittest import mock
+
+        settings = self._settings()
+        patcher = mock.patch.object(registry, "_create_store_files",
+                                    side_effect=OSError("磁盘满了"))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        with self.assertRaises(OSError):
+            registry.add_store("s002", "国贸店", settings=settings)
+        self.assertIsNone(registry.get_store("s002", settings=settings))
+        self.assertIsNotNone(registry.get_store("main", settings=settings))
+
+    def test_update_store_raises_when_settings_write_fails(self) -> None:
+        self._settings()
+        registry.add_store("s002", "国贸店")
+        self._break_settings_write()
+        with self.assertRaises(RuntimeError):
+            registry.update_store("s002", {"name": "国贸分店"})
+
+    def test_delete_store_raises_when_settings_write_fails(self) -> None:
+        self._settings()
+        registry.add_store("s002", "国贸店")
+        self._break_settings_write()
+        with self.assertRaises(RuntimeError):
+            registry.delete_store("s002")
+        # 门店必须还在注册表里(删除没生效)
+        on_disk = json.loads((self.data_dir / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual([s["id"] for s in on_disk["stores"]], ["main", "s002"])
+
+    def test_is_valid_store_id_rejects_trailing_newline(self) -> None:
+        """正则的 $ 会匹配末尾换行之前 → "s002\\n" 能混进目录名。"""
+        self.assertFalse(registry.is_valid_store_id("s002\n"))
+        self.assertFalse(registry.is_valid_store_id("s002\n\n"))
+
+    def test_create_store_files_rejects_invalid_id(self) -> None:
+        """建目录前也要验一次 ID(防御纵深:别只靠入口那一道闸)。"""
+        with self.assertRaises(ValueError):
+            registry._create_store_files("../evil")
+        self.assertFalse((self.data_dir / "evil").exists())
+
+    def test_update_store_strips_name_and_coerces_active(self) -> None:
+        """改名要 strip、active 要转 bool —— 与 add_store() 保持一致。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        updated = registry.update_store(
+            "s002", {"name": "  国贸分店  ", "active": 0}, settings=settings
+        )
+        self.assertEqual(updated["name"], "国贸分店")
+        self.assertIs(updated["active"], False)
+
+    def test_list_stores_returns_copies(self) -> None:
+        """list_stores() 交出去的是副本 —— 调用方不能在内存里就地改坏注册表。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        stores = registry.list_stores(settings)
+        stores[0]["name"] = "被改坏了"
+        stores[1]["id"] = "hacked"
+        main = registry.get_store("main", settings=settings)
+        s002 = registry.get_store("s002", settings=settings)
+        assert main is not None and s002 is not None  # mypy:收窄
+        self.assertEqual(main["name"], "总店")
+        self.assertEqual(s002["name"], "国贸店")
+
 
 class TestStoreConfig(StoreTestBase):
     """门店配置 store.json。"""
@@ -564,3 +706,59 @@ class TestStoreConfig(StoreTestBase):
         self.assertEqual(prices["water_price"], 4.5)
         self.assertEqual(prices["main_mult"], 50)
         self.assertEqual(prices["sub_mult"], 40)
+
+    # --- 复核修复轮 1 ---
+
+    def test_store_config_goes_through_storage_layer(self) -> None:
+        """store.json 的读写必须走 storage.load_json / storage.save_json。
+
+        绕过存储层 = 绕过 LRU 缓存、绕过「文件损坏 → 从备份恢复」、
+        写的时候也不失效 storage 的缓存(将来别人读会拿到陈旧值)。
+        """
+        import storage
+
+        calls = []
+        original_save = storage.save_json
+        original_load = storage.load_json
+
+        def spy_save(path: Path, data: Any) -> None:
+            calls.append(("save", path))
+            original_save(path, data)
+
+        def spy_load(path: Path, default: Any = None) -> Any:
+            calls.append(("load", path))
+            return original_load(path, default)
+
+        storage.save_json = spy_save
+        storage.load_json = spy_load
+        try:
+            cfg = {"id": "s002", "name": "国贸店", "meters": config.DEFAULT_METERS, "config": {}}
+            config.write_store_config("s002", cfg)
+            read = config.read_store_config("s002")
+        finally:
+            storage.save_json = original_save
+            storage.load_json = original_load
+
+        self.assertEqual(read["name"], "国贸店")
+        kinds = [c[0] for c in calls]
+        self.assertIn("save", kinds)
+        self.assertIn("load", kinds)
+
+    def test_store_config_readable_through_storage_load_json(self) -> None:
+        """store.json 必须能被 storage.load_json 正常读出(格式与缓存路径通用)。"""
+        from storage import load_json
+
+        config.write_store_config("s002", {
+            "id": "s002", "name": "国贸店",
+            "meters": config.DEFAULT_METERS, "config": dict(config.DEFAULT_CONFIG),
+        })
+        data = load_json(config.store_config_path("s002"))
+        self.assertEqual(data["name"], "国贸店")
+        self.assertEqual(len(data["meters"]), 4)
+
+    def test_store_config_write_creates_parent_directory(self) -> None:
+        """save_json 不会建父目录 —— 写入前必须自己 mkdir。"""
+        path = config.store_config_path("s003")
+        self.assertFalse(path.parent.exists())
+        config.write_store_config("s003", {"id": "s003", "name": "南京店", "meters": [], "config": {}})
+        self.assertTrue(path.exists())

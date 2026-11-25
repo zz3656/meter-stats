@@ -11,10 +11,14 @@
 }
 
 P0 阶段:每店先复制一份默认表定义(与总店一致),P2 再开放自定义编辑。
+
+读写统一走 storage.load_json / storage.save_json:
+    - 吃存储层的 LRU 缓存(同一份配置不重复解析)
+    - 文件损坏时自动走「从备份恢复」,而不是静默降级成默认值
+    - 写的时候由存储层失效缓存,不会留下陈旧值
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
@@ -52,27 +56,32 @@ def store_config_path(store_id: str) -> Path:
 def read_store_config(store_id: str) -> dict[str, Any]:
     """读取门店配置。文件不存在或损坏时返回默认配置(不抛异常)。
 
+    走 storage.load_json —— 文件损坏时存储层会尝试从备份恢复,
+    恢复不了才回落到这里的默认配置。
+
     store_id 本身非法时抛 ValueError —— 那是调用方的错,不是「配置损坏」。
     """
+    from storage import load_json
+    default = {
+        "id": store_id, "name": "",
+        "meters": [dict(m) for m in DEFAULT_METERS],
+        "config": dict(DEFAULT_CONFIG),
+    }
     path = store_config_path(store_id)
-    try:
-        if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except (OSError, ValueError):
-        pass
-    return {"id": store_id, "name": "", "meters": [dict(m) for m in DEFAULT_METERS],
-            "config": dict(DEFAULT_CONFIG)}
+    data = load_json(path, default)
+    # 文件内容不是 dict(被人手改坏)→ 用默认配置
+    if not isinstance(data, dict):
+        return default
+    return dict(data)
 
 
 def write_store_config(store_id: str, cfg: dict[str, Any]) -> None:
-    """原子写入门店配置。"""
+    """原子写入门店配置(走 storage.save_json:tmp+rename,并失效存储层缓存)。"""
+    from storage import save_json
     path = store_config_path(store_id)
+    # save_json 不会建父目录 —— 写入前必须自己 mkdir
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
+    save_json(path, cfg)
 
 
 def get_store_settings() -> dict[str, Any]:
