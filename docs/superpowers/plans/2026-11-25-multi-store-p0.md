@@ -1789,6 +1789,21 @@ def _visible_store_ids(sess: dict) -> tuple:
         return (bool(sess.get("all_stores", True)), list(sess.get("store_ids") or []))
     return scope
 
+# ⚠️ 控制器预审:上面这个 _visible_store_ids() 有 1 处必须处理的缺陷
+#    (与 Task 4 的 _store_gate 是同一个病根)。
+#
+#    scope is None 时回退 bool(sess.get("all_stores", True)) —— 默认 True = 看全部门店。
+#      场景 A:账号被删除但会话未过期 → 旧会话带 all_stores=True → 被删账号仍能列全部门店
+#      场景 B:_current_session() 取不到会话时返回 {} → sess.get("all_stores", True) → True
+#              → GET /api/stores 把全部门店列表返回给没有有效会话的调用方。
+#              这不是理论风险:_current_session() 用的 _get_token(handler) 与
+#              routing._auth_gate() 是两次独立取 token,中间会话可能刚好过期。
+#
+#    必须 fail-closed:
+#      1. _visible_store_ids() 查不到用户记录 → 返回 (False, []),不要回退放行
+#      2. handle_get_stores() 里 _current_session() 返回空 dict → 直接 401,不要继续往下走
+#    口径与 Task 4 一致:查不到用户记录 = 拒绝,不是放行。
+
 
 def handle_get_stores(handler):
     """GET /api/stores → { ok, stores }"""
