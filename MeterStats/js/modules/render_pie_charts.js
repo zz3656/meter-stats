@@ -13,7 +13,7 @@ let monthlyPieChart = null;
 function calcMonthPie(monthReadings, charges) {
   if (!monthReadings || monthReadings.length < 2) return null;
   const first = monthReadings[0], last = monthReadings[monthReadings.length - 1];
-  const usage = ['hall', 'fire', 'private_room', 'ac'].map(k => {
+  const usage = (window.METER_KEYS || []).map(k => {
     const delta = realKwh(first[k] - last[k], k);
     const charged = sumChargesBetween(charges, k, first.date, last.date);
     return Math.max(delta + charged, 0);
@@ -28,7 +28,7 @@ function drawPieChart(canvasId, data, setChart) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
   const ctx = canvas.getContext('2d');
-  const labels = ['hall', 'fire', 'private_room', 'ac'].map((k, i) => {
+  const labels = (window.METER_KEYS || []).map((k, i) => {
     const pct = data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : 0;
     return `${LABELS(k)} (${pct}%)`;
   });
@@ -38,7 +38,7 @@ function drawPieChart(canvasId, data, setChart) {
       labels,
       datasets: [{
         data: data.usage,
-        backgroundColor: [COLORS('hall'), COLORS('fire'), COLORS('private_room'), COLORS('ac')],
+        backgroundColor: (window.METER_KEYS || []).map(k => COLORS(k)),
         borderWidth: 2,
         borderColor: 'rgba(0,0,0,0.08)',
       }],
@@ -70,7 +70,7 @@ function renderDailyPie(dateStr) {
   const summaryEl = document.getElementById('daily-pie-summary');
   if (!wrap || !summaryEl) return;
 
-  const readings = CURRENT_READINGS.filter(r => r.hall != null);
+  const readings = CURRENT_READINGS.filter(r => rowHasMeterValues(r));
   if (!dateStr || readings.length < 2) {
     wrap.style.display = 'none';
     return;
@@ -90,7 +90,7 @@ function renderDailyPie(dateStr) {
 
   // 计算 prev → next 区间,按天数均摊到 prev 日(与单天汇报口径一致)
   const days = Math.max(1, Math.round((new Date(next.date) - new Date(prev.date)) / 86400000));
-  const usage = ['hall', 'fire', 'private_room', 'ac'].map(k => {
+  const usage = (window.METER_KEYS || []).map(k => {
     const delta = realKwh(prev[k] - next[k], k);
     const charged = sumChargesBetween(CURRENT_CHARGES, k, prev.date, next.date);
     return Math.max((delta + charged) / days, 0);
@@ -122,7 +122,7 @@ function renderMonthlyPie(monthKey) {
   const summaryEl = document.getElementById('monthly-pie-summary');
   if (!wrap || !summaryEl) return;
 
-  const readings = CURRENT_READINGS.filter(r => r.hall != null);
+  const readings = CURRENT_READINGS.filter(r => rowHasMeterValues(r));
   const data = calcMonthPie(readings.filter(r => r.date.startsWith(monthKey)), CURRENT_CHARGES);
 
   if (!data) {

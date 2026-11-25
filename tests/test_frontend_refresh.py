@@ -191,6 +191,20 @@ D.reg['chart-trend'] = canvas;
 D.reg['trend-empty'] = emptyEl;
 D.reg['trend-stat-grid'] = statGrid;
 
+// P2:render_charts/alerts 用 rowHasMeterValues 判断「这行是不是只录了水电」。
+// 真实环境里由 meterConfig.js 提供;沙箱里给等价实现(不用 this —— 调用点是裸标识符)。
+const STUB_METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
+function stubRowHasMeterValues(row) {
+  if (!row || typeof row !== 'object') return false;
+  for (let i = 0; i < STUB_METER_KEYS.length; i++) {
+    const k = STUB_METER_KEYS[i];
+    const m = row.meters;
+    const v = (m && typeof m === 'object' && k in m) ? m[k] : row[k];
+    if (v != null) return true;
+  }
+  return false;
+}
+
 const charts = [];
 function FakeChart(ctx, cfg) { charts.push(cfg); this.destroy = () => {}; }
 
@@ -214,6 +228,10 @@ const sandbox = {
   formatDate: (d) => d.toISOString().slice(0, 10),
   COLORS: () => '#123456',
   LABELS: (k) => k,
+  // P2:表集合由 meterConfig.js 提供,render_charts/alerts 用它判断
+  // 「这行是不是只录了水电」。沙箱里给等价实现。
+  METER_KEYS: STUB_METER_KEYS,
+  rowHasMeterValues: stubRowHasMeterValues,
 };
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);

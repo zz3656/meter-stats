@@ -604,6 +604,21 @@ git commit -m "feat(ui): 抄表与充值表单按当前店表集合动态渲染"
 
 ### Task 5: 前端 —— 报表 / 图表 / 告警动态化
 
+> **状态:已完成**(2026-11-26)。新增 `tests/test_dynamic_render.py` 8 项;全量 **625** 项全绿;
+> ruff 269 / mypy 793 零新增。
+>
+> 改动面:`reports.js`(24 处,含月报/年报表、合计行、CSV 导出、年柱状图)、
+> `render_charts.js` / `render_pie_charts.js` / `render_weekly.js` /
+> `render_weekly_trend.js` / `alerts.js`,外加 `index.html` 月报表头。
+>
+> 关键一处不是列数,而是 `r.hall != null` 这个过滤:全项目用它判断「这行是不是
+> 只录了水电、要跳过」。2 表门店没有 hall → **整月读数被全部跳过** → 报表 0 度、
+> 图表空白,还不报错。统一换成 `rowHasMeterValues()`(对应后端 `row_has_any_value`)。
+>
+> 踩坑:`render_charts.js` 等模块是**裸标识符**调用这些全局的,加载顺序错就是整页
+> ReferenceError(`rowHasMeterValues is not defined`)。已加「meterConfig.js 必须
+> 排在使用者之前」的加载顺序护栏。
+
 **Files:**
 - Modify: `MeterStats/js/modules/reports.js`（14 处）
 - Modify: `MeterStats/js/modules/render_charts.js`（5 处）
@@ -612,7 +627,7 @@ git commit -m "feat(ui): 抄表与充值表单按当前店表集合动态渲染"
 - Modify: `MeterStats/js/modules/alerts.js`（5 处）
 - Create: `tests/test_dynamic_render.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 node 沙箱，喂「2 表」报表数据：
 1. `reports.js` 渲染出的表格**不含** `private_room` / `ac` 这类该店没有的表。
@@ -620,7 +635,7 @@ node 沙箱，喂「2 表」报表数据：
 3. `alerts.js` 的告警项数 = 表数量（每表一条），不出现「第 3 块表」。
 4. **反向**：默认 4 表时输出与改造前一致（把改造前的输出快照进测试）。
 
-- [ ] **Step 2: 逐个文件改**
+- [x] **Step 2: 逐个文件改**
 
 统一改法：`['hall','fire','private_room','ac']` → `window.METER_KEYS`，
 `METER_META(k).label/color` 取元数据，`by_meter[k]` 遍历。
@@ -628,7 +643,7 @@ node 沙箱，喂「2 表」报表数据：
 ⚠️ **小心 `reports.js` 里的「合计行」与「日均」**：表数变化后列数跟着变，
 `colspan`、表头与数据行的列数必须一致（这类错不抛异常，只是错位）。
 
-- [ ] **Step 3: 运行测试 + 人工核对一次**
+- [x] **Step 3: 运行测试 + 人工核对一次**
 
 ```bash
 python3 -m unittest tests.test_dynamic_render -v
@@ -636,7 +651,7 @@ python3 -m unittest tests.test_dynamic_render -v
 再起本地实例（**直接用 `python3 server.py`，不要用 `run.sh`** —— 它的 `DATA_DIR` 是写死的），
 用默认 4 表配置打开报表页，肉眼确认数字与改造前一致。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add MeterStats/js/modules/reports.js MeterStats/js/modules/render_charts.js \

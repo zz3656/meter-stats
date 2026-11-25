@@ -19,7 +19,7 @@ function populateWeeklyWeekSelector() {
   // 收集有数据的周
   const weekSet = new Set();
   (CURRENT_READINGS || []).forEach(r => {
-    if (r.hall != null) weekSet.add(weekKey(r.date));
+    if (rowHasMeterValues(r)) weekSet.add(weekKey(r.date));
   });
   const sortedWeeks = [...weekSet].sort().reverse();
 
@@ -57,7 +57,7 @@ function loadWeeklyReport() {
 
   const readings = CURRENT_READINGS || [];
   const charges = CURRENT_CHARGES || [];
-  const mKeys = ['hall', 'fire', 'private_room', 'ac'];
+  const mKeys = window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'];
 
   const emptyEl = document.getElementById('weekly-report-empty');
   const headlineEl = document.getElementById('weekly-headline');
@@ -185,7 +185,7 @@ function copyWeeklyReport() {
 
   const readings = CURRENT_READINGS || [];
   const charges = CURRENT_CHARGES || [];
-  const mKeys = ['hall', 'fire', 'private_room', 'ac'];
+  const mKeys = window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'];
 
   const lines = [`【${weekStr} 每周汇报】`, `目标周: ${range.start} ~ ${range.end}`, `对比周: ${prevStart} ~ ${prevEnd}`, ''];
 

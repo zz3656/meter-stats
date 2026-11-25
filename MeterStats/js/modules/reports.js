@@ -133,6 +133,23 @@ function getSnapshot(params) {
     return Api.reports.snapshot(params);
 }
 
+// ==================== 表集合辅助(P2) ====================
+// 报表的列 / 合计 / 图表数据集都跟着当前门店的表集合走。
+// 写死 4 表时,2 表门店会多出两列恒为「—」的空列,年度合计还会按 4 表累加。
+
+/** 当前门店的表 key 列表 */
+function _reportMeterKeys() {
+    var ks = window.METER_KEYS;
+    return (ks && ks.length) ? ks.slice() : ['hall', 'fire', 'private_room', 'ac'];
+}
+
+/** {key: 0} —— 按店表集合初始化的累加器 */
+function _zeroByMeter() {
+    var o = {};
+    _reportMeterKeys().forEach(function(k) { o[k] = 0; });
+    return o;
+}
+
 // ==================== 表格渲染 ====================
 
 function renderMonthlyReportTable(report) {
@@ -151,8 +168,18 @@ function renderMonthlyReportTable(report) {
     if (reportEmpty) reportEmpty.style.display = 'none';
     if (tableWrap) tableWrap.style.display = 'block';
 
-    var KEYS = ['hall', 'fire', 'private_room', 'ac'];
-    var sums = { hall: 0, fire: 0, private_room: 0, ac: 0, total: 0 };
+    var KEYS = _reportMeterKeys();
+    // 表头跟着表集合走(index.html 里那个 <tr> 是空的)
+    var theadRow = document.getElementById('report-thead-row');
+    if (theadRow) {
+        theadRow.innerHTML = '<th class="col-date">日期</th>' +
+            KEYS.map(function(k, i) {
+                return '<th>' + escapeHtml((i + 1) + '#' + LABELS(k)) + '</th>';
+            }).join('') +
+            '<th class="col-total">合计</th>';
+    }
+    var sums = _zeroByMeter();
+    sums.total = 0;
     var peak = { date: '', total: -1 };
 
     var html = '';
@@ -163,18 +190,15 @@ function renderMonthlyReportTable(report) {
         if ((dd.total || 0) > peak.total) { peak = { date: dd.date, total: dd.total || 0 }; }
 
         html += '<tr><td class="col-date">' + shortDate(dd.date) + '</td>';
-        html += '<td>' + (dd.hall != null ? dd.hall.toFixed(2) : '—') + '</td>';
-        html += '<td>' + (dd.fire != null ? dd.fire.toFixed(2) : '—') + '</td>';
-        html += '<td>' + (dd.private_room != null ? dd.private_room.toFixed(2) : '—') + '</td>';
-        html += '<td>' + (dd.ac != null ? dd.ac.toFixed(2) : '—') + '</td>';
+        KEYS.forEach(function(k) {
+            var v = dd[k];
+            html += '<td>' + (v != null ? v.toFixed(2) : '—') + '</td>';
+        });
         html += '<td class="col-total">' + (dd.total != null ? dd.total.toFixed(2) : '—') + '</td></tr>';
     }
     // 合计行
     html += '<tr class="yearly-total-row"><td class="col-date">合计</td>' +
-            '<td>' + sums.hall.toFixed(2) + '</td>' +
-            '<td>' + sums.fire.toFixed(2) + '</td>' +
-            '<td>' + sums.private_room.toFixed(2) + '</td>' +
-            '<td>' + sums.ac.toFixed(2) + '</td>' +
+            KEYS.map(function(k) { return '<td>' + sums[k].toFixed(2) + '</td>'; }).join('') +
             '<td class="col-total">' + sums.total.toFixed(2) + '</td></tr>';
     if (reportBody) reportBody.innerHTML = html;
 
@@ -222,7 +246,7 @@ function renderYearlyResult(yearData) {
     var yuan = function(v) { return v == null ? '—' : '¥ ' + fmtN(v, 2); };
 
     // ---- 年度合计 ----
-    var tKwh = 0, tCost = 0, tByMeter = { hall: 0, fire: 0, private_room: 0, ac: 0 };
+    var tKwh = 0, tCost = 0, tByMeter = _zeroByMeter();
     var peakMonth = null, peakKwh = -1;
     yearData.months.forEach(function(m) {
         var k = m.total_kwh || 0;
@@ -266,23 +290,20 @@ function renderYearlyResult(yearData) {
     // ---- 用电明细表 ----
     html += '<h3 class="yearly-section-title">⚡ 各月用电</h3>';
     html += '<div class="table-container"><table class="history-table yearly-table"><thead><tr>' +
-            '<th>月份</th><th>1#大厅</th><th>2#消防</th><th>3#包厢</th><th>4#空调</th>' +
+            '<th>月份</th>' +
+            _reportMeterKeys().map(function(k, i) {
+                return '<th>' + escapeHtml((i + 1) + '#' + LABELS(k)) + '</th>';
+            }).join('') +
             '<th class="col-total">合计(度)</th><th>电费(元)</th></tr></thead><tbody>';
     yearData.months.forEach(function(m) {
         var bm = m.by_meter || {};
         html += '<tr><td>' + m.month + '</td>' +
-                '<td>' + fmtN(bm.hall, 0) + '</td>' +
-                '<td>' + fmtN(bm.fire, 1) + '</td>' +
-                '<td>' + fmtN(bm.private_room, 0) + '</td>' +
-                '<td>' + fmtN(bm.ac, 0) + '</td>' +
+                _reportMeterKeys().map(function(k) { return '<td>' + fmtN(bm[k], 1) + '</td>'; }).join('') +
                 '<td class="col-total">' + fmtN(m.total_kwh, 1) + '</td>' +
                 '<td>' + fmtN(m.total_cost, 2) + '</td></tr>';
     });
     html += '<tr class="yearly-total-row"><td>合计</td>' +
-            '<td>' + fmtN(tByMeter.hall, 0) + '</td>' +
-            '<td>' + fmtN(tByMeter.fire, 1) + '</td>' +
-            '<td>' + fmtN(tByMeter.private_room, 0) + '</td>' +
-            '<td>' + fmtN(tByMeter.ac, 0) + '</td>' +
+            _reportMeterKeys().map(function(k) { return '<td>' + fmtN(tByMeter[k], 1) + '</td>'; }).join('') +
             '<td class="col-total">' + fmtN(tKwh, 1) + '</td>' +
             '<td>' + fmtN(tCost, 2) + '</td></tr>';
     html += '</tbody></table></div>';
@@ -340,7 +361,7 @@ function renderYearlyResult(yearData) {
 function drawYearlyBarChart(yearData) {
     var cv = document.getElementById('chart-yearly-bar');
     if (!cv) return;
-    var KEYS = ['hall', 'fire', 'private_room', 'ac'];
+    var KEYS = _reportMeterKeys();
     var labels = yearData.months.map(function(m) { return String(m.month).slice(5) + '月'; });
     var datasets = KEYS.map(function(k) {
         return {
@@ -415,7 +436,7 @@ function renderUtilitiesHTML(data) {
 function refreshDayCopySelect(readings, charges) {
     var sel = document.getElementById('day-copy-date');
     if (!sel) return;
-    var rs = (readings || []).filter(function(r) { return r.hall != null; }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+    var rs = (readings || []).filter(function(r) { return rowHasMeterValues(r); }).sort(function(a, b) { return a.date.localeCompare(b.date); });
     if (rs.length < 2) { sel.innerHTML = '<option value="">(需至少两次抄表)</option>'; return; }
     var first = new Date(rs[0].date);
     var last = new Date(rs[rs.length - 1].date);
@@ -426,7 +447,7 @@ function refreshDayCopySelect(readings, charges) {
 }
 
 function calcDayUsage(readings, charges, day) {
-    var rs = (readings || []).filter(function(r) { return r.hall != null; }).sort(function(a, b) { return a.date.localeCompare(b.date); });
+    var rs = (readings || []).filter(function(r) { return rowHasMeterValues(r); }).sort(function(a, b) { return a.date.localeCompare(b.date); });
     var a = null, b = null;
     for (var i = 0; i < rs.length - 1; i++) {
         if (day >= rs[i].date && day < rs[i + 1].date) { a = rs[i]; b = rs[i + 1]; break; }
@@ -452,7 +473,7 @@ function calcDayUsage(readings, charges, day) {
 
 /** 更新底部状态栏 */
 function updateStatusBar(readings, charges) {
-    readings = (readings || []).filter(function(r) { return r.hall != null; });
+    readings = (readings || []).filter(function(r) { return rowHasMeterValues(r); });
     var bar = document.getElementById('status-bar');
     if (!bar) return;
     if (!readings || readings.length === 0) { bar.style.display = 'none'; return; }
@@ -479,7 +500,7 @@ function updateStatusBar(readings, charges) {
     var kwh = 0;
     if (monthRs.length >= 2) {
         var f = monthRs[0], l = monthRs[monthRs.length - 1];
-        var keys = ['hall', 'fire', 'private_room', 'ac'];
+        var keys = _reportMeterKeys();
         for (var ki = 0; ki < keys.length; ki++) {
             var k = keys[ki];
             kwh += realKwh(f[k] - l[k], k) + sumChargesBetween(charges, k, f.date, l.date);
@@ -759,16 +780,17 @@ function copyMonthlyReportTSV() {
     };
     // 日期只留 月-日（用顶层 shortDate，见文件开头）
     // 电表列名不带 "1#" "2#" 序号
-    var headers = ['日期', '大厅', '消防', '包厢', '空调', '合计(度)'];
+    var KEYS = _reportMeterKeys();
+    var headers = ['日期'].concat(KEYS.map(function(k) { return LABELS(k); }), ['合计(度)']);
     var rows = [];
     d.days.forEach(function(x) {
-        rows.push([shortDate(x.date), n(x.hall), n(x.fire), n(x.private_room), n(x.ac), n(x.total)]);
+        rows.push([shortDate(x.date)].concat(KEYS.map(function(k) { return n(x[k]); }), [n(x.total)]));
     });
     var s = d.summary || {};
     var bm = s.by_meter || {};
-    rows.push(['各表合计', n(bm.hall, 1), n(bm.fire, 1), n(bm.private_room, 1), n(bm.ac, 1), n(s.total_kwh, 1)]);
+    rows.push(['各表合计'].concat(KEYS.map(function(k) { return n(bm[k], 1); }), [n(s.total_kwh, 1)]));
     var price = (typeof ELECTRICITY_PRICE !== 'undefined' ? ELECTRICITY_PRICE : 0.9);
-    rows.push(['本月电费', '', '', '', '', n((s.total_kwh || 0) * price, 2)]);
+    rows.push(['本月电费'].concat(KEYS.map(function() { return ''; }), [n((s.total_kwh || 0) * price, 2)]));
 
     // 只复制抄表数据；水电用「💧 水电用量」旁的独立复制按钮，两者不混在一起
     copyRichText(_tsvTable(headers, rows), _htmlTable(headers, rows), '✓ 抄表数据已复制');
@@ -822,19 +844,20 @@ function copyYearlyTSV() {
     var f2 = function(v) { return v == null ? '' : Number(v).toFixed(2); };
 
     // 列名不带 "1#" 序号，与月度报告复制的格式保持一致
-    var headers = ['月份', '大厅', '消防', '包厢', '空调', '合计(度)', '电费(元)'];
+    var KEYS = _reportMeterKeys();
+    var headers = ['月份'].concat(KEYS.map(function(k) { return LABELS(k); }), ['合计(度)', '电费(元)']);
     var rows = d.months.map(function(m) {
         var bm = m.by_meter || {};
-        return [m.month, f0(bm.hall), f1(bm.fire), f0(bm.private_room), f0(bm.ac), f1(m.total_kwh), f2(m.total_cost)];
+        return [m.month].concat(KEYS.map(function(k) { return f1(bm[k]); }), [f1(m.total_kwh), f2(m.total_cost)]);
     });
-    var tKwh = 0, tCost = 0, tb = { hall: 0, fire: 0, private_room: 0, ac: 0 };
+    var tKwh = 0, tCost = 0, tb = _zeroByMeter();
     d.months.forEach(function(m) {
         tKwh += m.total_kwh || 0;
         tCost += m.total_cost || 0;
         var bm = m.by_meter || {};
         Object.keys(tb).forEach(function(k) { tb[k] += bm[k] || 0; });
     });
-    rows.push(['合计', f0(tb.hall), f1(tb.fire), f0(tb.private_room), f0(tb.ac), f1(tKwh), f2(tCost)]);
+    rows.push(['合计'].concat(KEYS.map(function(k) { return f1(tb[k]); }), [f1(tKwh), f2(tCost)]));
 
     var tsv = _tsvTable(headers, rows);
     var html = _htmlTable(headers, rows);

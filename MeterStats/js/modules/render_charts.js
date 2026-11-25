@@ -6,7 +6,7 @@ let trendChart = null;
 function refreshDayCopySelect(readings, charges) {
   const sel = document.getElementById('day-copy-date');
   if (!sel) return;
-  const rs = (readings || []).filter(r => r.hall != null).sort((a, b) => a.date.localeCompare(b.date));
+  const rs = (readings || []).filter(r => rowHasMeterValues(r)).sort((a, b) => a.date.localeCompare(b.date));
   if (rs.length < 2) {
     sel.innerHTML = '<option value="">(需至少两次抄表)</option>';
     return;
@@ -27,7 +27,7 @@ function refreshDayCopySelect(readings, charges) {
 // 用电 = (a读数-b读数)×倍率+充值 均摊到区间每一天(日均,与每日用电图一致)
 // 同时返回"昨日"(前一天)各区域用电,用于对比
 function calcDayUsage(readings, charges, day) {
-  const rs = (readings || []).filter(r => r.hall != null).sort((a, b) => a.date.localeCompare(b.date));
+  const rs = (readings || []).filter(r => rowHasMeterValues(r)).sort((a, b) => a.date.localeCompare(b.date));
   // 找区间:day 属于 [rs[i].date, rs[i+1].date)
   let a = null, b = null;
   for (let i = 0; i < rs.length - 1; i++) {
@@ -187,7 +187,7 @@ function copyTextWithFallback(text, successMsg) {
 
 // 每日用电折线图 — 4 块表各自折线 + 充电叠加
 function renderTrendChart(readings, charges) {
-  readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
+  readings = (readings || []).filter(r => rowHasMeterValues(r));  // 跳过只录水电的行
   // ⚠ 这里曾经用 `ctx.canvas.parentElement.innerHTML = ...` 渲染空态，
   // 那会把整个 <canvas id="chart-trend"> 从 DOM 里删掉。之后每次调用都在
   // 下面 getContext 处抛 TypeError(null.getContext)，而调用方
@@ -247,7 +247,7 @@ function renderTrendChart(readings, charges) {
   // 语义:今天(a)抄表后,到下次抄表(b)之间的用电,属于今天及中间各天
   // (与单天复制口径一致:区间 (a→b) 的用电 = a 日的用电)
   const dailyUsage = {};
-  for (const key of ['hall', 'fire', 'private_room', 'ac']) {
+  for (const key of (window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'])) {
     dailyUsage[key] = new Array(dayCount).fill(null); // 用 null 让线断开
   }
 
@@ -259,7 +259,7 @@ function renderTrendChart(readings, charges) {
     if (aIdx < 0 || bIdx < 0 || bIdx <= aIdx) continue;
     const days = bIdx - aIdx;
     if (days <= 0) continue;
-    for (const key of ['hall', 'fire', 'private_room', 'ac']) {
+    for (const key of (window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'])) {
       const delta = realKwh(a[key] - b[key], key);
       const charged = sumChargesBetween(charges, key, a.date, b.date);
       const perDay = (delta + charged) / days;
@@ -283,7 +283,7 @@ function renderTrendChart(readings, charges) {
   // 整月日均水平线:每块表一条,虚线显示,作为波动参照
   const totalDays = dayCount; // first→last 的天数(已含两端)
   const avgLines = {};
-  for (const key of ['hall', 'fire', 'private_room', 'ac']) {
+  for (const key of (window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'])) {
     // 复用饼图公式:实际用电 = (first - last)*倍率 + 期间充值
     const f = sorted[0], l = sorted[sorted.length - 1];
     const totalKwh = realKwh(f[key] - l[key], key) + sumChargesBetween(charges, key, f.date, l.date);

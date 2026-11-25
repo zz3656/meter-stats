@@ -6,7 +6,7 @@ function addDaysToDate(dateStr, days) {
 }
 
 function renderChargeAlert(readings, charges) {
-  readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
+  readings = (readings || []).filter(r => rowHasMeterValues(r));  // 跳过只录水电的行
 
   // 共用:三个容器的 HTML 渲染逻辑(独立预警页 / 抄表录入页内联 / 抄表记录页表格上方)
   const renderInto = (container) => {
@@ -85,7 +85,7 @@ function renderChargeAlert(readings, charges) {
 }
 
 function renderStats(readings, charges) {
-  readings = (readings || []).filter(r => r.hall != null);  // 跳过只录水电的行
+  readings = (readings || []).filter(r => rowHasMeterValues(r));  // 跳过只录水电的行
   const grid = document.getElementById('stat-grid');
 
   if (!readings || readings.length === 0) {
@@ -123,7 +123,7 @@ function renderStats(readings, charges) {
   let html = '';
   // 复制每月用电用的数据(当前月 + 上月,各区域度数/金额/日均)
   _monthCopyData = { monthKey, per: {}, prev: {}, monthDays, monthTotal: 0, prevTotal: 0, hasPrev: false };
-  for (const key of ['hall', 'fire', 'private_room', 'ac']) {
+  for (const key of (window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'])) {
     // 当月用电 = 读数差(月初 - 月末)+ 期间充值
     const monthUsage = monthData.length > 1
       ? realKwh(monthFirst[key] - monthLast[key], key) + sumChargesBetween(charges, key, monthFirst.date, monthLast.date)

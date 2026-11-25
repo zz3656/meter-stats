@@ -61,6 +61,23 @@ window.meterValue = function meterValue(row, key) {
 };
 
 /**
+ * 这一行有没有**任意一块**表的读数 —— 替代写死的 `row.hall != null`。
+ *
+ * 各处(图表/告警/报表/周趋势)都用 `r.hall != null` 来判断「这行是不是只录了水电」,
+ * 好跳过它不参与用电计算。门店没有 hall 表时(2 表门店),这个判断会把
+ * **整月读数全部跳过** → 报表 0 度、图表空白,而且不报错。
+ *
+ * 返回 true 表示至少一块表有值。注意 0 也算有值(表底真到 0 了)。
+ */
+window.rowHasMeterValues = function rowHasMeterValues(row) {
+  var ks = window.METER_KEYS || [];
+  for (var i = 0; i < ks.length; i++) {
+    if (window.meterValue(row, ks[i]) != null) return true;
+  }
+  return false;
+};
+
+/**
  * 重置成默认 4 表 —— 切门店 / 登出时调用。
  *
  * 宁可先回到默认值再重新加载，也不能留着上一家店的表集合：

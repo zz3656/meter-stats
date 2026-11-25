@@ -15,7 +15,7 @@ function renderWeeklyMeterTrend(targetStart, targetEnd, prevStart, prevEnd) {
 
   const readings = CURRENT_READINGS || [];
   const charges = CURRENT_CHARGES || [];
-  const mKeys = ['hall', 'fire', 'private_room', 'ac'];
+  const mKeys = window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'];
 
   // 数据不足(整体空场景)直接隐藏
   if (readings.length < 2) {
@@ -113,7 +113,7 @@ function _buildMeterTrendCard(meterKey, readings, charges, targetStart, targetEn
  * 构造整体趋势汇总行(放在 4 张卡片下方)
  */
 function _buildMeterTrendOverallSummary(readings, charges, targetStart, targetEnd, prevStart, prevEnd) {
-  const mKeys = ['hall', 'fire', 'private_room', 'ac'];
+  const mKeys = window.METER_KEYS || ['hall', 'fire', 'private_room', 'ac'];
   let totalT = 0, totalP = 0, totalCostT = 0, totalCostP = 0;
   const perMeter = mKeys.map(k => {
     const t = calcPeriodUsage(readings, charges, k, targetStart, targetEnd);
