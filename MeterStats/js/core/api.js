@@ -142,7 +142,9 @@ var Api = (() => {
         // 用户 ID 走 query —— 后端 handle_put_users 从 query 取 id(?id=),
         // 路径形式(/api/admin/users/3)会被判「无效的用户ID」。
         updateUser: function(uid, data) { return _request('PUT', '/api/admin/users?id=' + encodeURIComponent(uid), data); },
-        deleteUser: function(username) { return _request('DELETE', '/api/admin/users/' + username); },
+        // 用户 ID 同样走 query —— 后端 handle_delete_users 也只从 query 取 id(?id=)。
+        // 路径形式(/api/admin/users/3)会被判「无效的用户ID」,删除用户功能整个是坏的。
+        deleteUser: function(uid) { return _request('DELETE', '/api/admin/users?id=' + encodeURIComponent(uid)); },
         // 角色管理 (1个)
         roles: function() { return _request('GET', '/api/admin/roles'); },
         // 电表设置 (3个)

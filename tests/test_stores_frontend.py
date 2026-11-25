@@ -110,6 +110,23 @@ class TestStoresFrontendWiring(unittest.TestCase):
         src = API_JS.read_text(encoding="utf-8")
         self.assertIn("/api/admin/users?id=", src)
 
+    def test_admin_delete_user_sends_id_as_query_param(self) -> None:
+        """删除用户也必须走 query —— 后端 handle_delete_users 同样只从 query 取 id。
+
+        回归背景:原来前端是路径形式 DELETE /api/admin/users/<name>,
+        而后端只认 ?id=<uid> → **删除用户功能整个是坏的**,永远返回「无效的用户ID」。
+        """
+        src = API_JS.read_text(encoding="utf-8")
+        line = next(
+            (ln for ln in src.splitlines() if "deleteUser:" in ln and "function" in ln),
+            "",
+        )
+        self.assertTrue(line, "api.js 里找不到 deleteUser 的定义")
+        self.assertIn("/api/admin/users?id=", line)
+        # 旧的路径形式不能再出现
+        self.assertNotIn("/api/admin/users/' +", line)
+        self.assertNotIn("/api/admin/users/\" +", line)
+
 
 # ============ 行为验证(需要 node) ============
 
