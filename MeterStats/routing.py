@@ -178,7 +178,9 @@ def _store_gate(sess: Dict[str, Any], handler: Any) -> bool:
         - 范围优先取 settings.json 里的用户记录(改权限即时生效,不必重新登录)
         - all_stores=True(总部账号)→ 允许任意**已注册**门店
         - 否则请求的门店必须在该用户的 store_ids 里 → 否则 403
-        - 不带 store 参数时:取该用户第一个 store_ids;总部账号取默认店 main
+        - 不带 store 参数时:取该用户第一个**仍存在**的 store_ids
+          (管理员删店后用户记录里的 store_ids 不会自动清理,直接取 [0] 会 404 锁死);
+          有权访问的店全被删了 → 403;总部账号 store_ids 为空 → 取默认店 main
         - 请求的门店没在注册表里 → 404(与「没权限」区分开)
 
     门店闸是「拦越权」的闸,不是新的 500 来源:判不出布局/权限时一律 403,
@@ -220,7 +222,27 @@ def _store_gate(sess: Dict[str, Any], handler: Any) -> bool:
 
     requested = _requested_store(handler)
     if not requested:
-        requested = store_ids[0] if store_ids else DEFAULT_STORE_ID
+        # 没指定门店 → 落到「他有权访问的、且仍然存在的」第一个门店。
+        #
+        # 为什么要跳过已删除的门店:管理员删店只摘掉注册表条目,用户记录里的
+        # store_ids 仍留着那个 ID。直接取 store_ids[0] 会撞上 404「门店不存在」
+        # → 员工的每个请求都是 404(看不出原因);多店员工连还存在的另一个店
+        # 都访问不到 —— 等于被锁死。
+        #
+        # 显式 ?store= 不走这条路径:用户点名要哪个店,那个店不存在就是不存在
+        # (404 仍然正确,见下面的存在性检查)。
+        picked = _first_existing_store(store_ids, registry)
+        if picked is None:
+            if not all_stores:
+                # 有权访问的店全被删了 → 403 并说清去找管理员重新分配。
+                # 比 404「门店不存在」清楚得多:账号还在,只是没分到有效的店。
+                send_json(handler, 403, {"error": "账号未分配有效门店,请联系管理员"})
+                return False
+            # 总部账号可访问任意**已注册**门店 → 落回默认店
+            # (main 不可删,永远存在)。总部账号有 store_ids 时仍落 store_ids[0],
+            # 只是跳过已删除的那个 —— 与修复前语义一致。
+            picked = DEFAULT_STORE_ID
+        requested = picked
 
     # 权限先判、存在性后判:分店员工探测别的门店 ID 时只能拿到 403,
     # 不会从 403/404 的差别里摸到别家门店存不存在。
@@ -273,6 +295,18 @@ def _store_exists(store_id: str, registry: Any) -> bool:
         from storage import log
         log(f"[WARN] [store_gate] 读门店注册表失败: {e}")
         return False
+
+
+def _first_existing_store(store_ids: List[str], registry: Any) -> Optional[str]:
+    """store_ids 里第一个**仍然存在**的门店 ID。都不存在(或列表为空)时返回 None。
+
+    门店被管理员删掉后,用户记录里的 store_ids 不会跟着清理 ——
+    这里跳过已删除的,让默认门店落到员工仍有权访问的另一个店。
+    """
+    for store_id in store_ids:
+        if _store_exists(store_id, registry):
+            return store_id
+    return None
 
 
 _GET_ROUTES = {

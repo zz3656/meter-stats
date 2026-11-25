@@ -323,5 +323,177 @@ class TestStoreGateFailSafe(StoreGateBase):
         self.assertEqual(context.get_current_store(), "s002")
 
 
+class TestStoreGateDeletedStore(StoreGateBase):
+    """管理员删掉门店后,员工不该被锁死。
+
+    删店只摘掉注册表条目,用户记录里的 store_ids 仍留着那个 ID。
+    修复前:默认门店 = store_ids[0] → 撞上 404「门店不存在」→ 员工每个请求都 404。
+    修复后:默认门店 = 「他有权访问的、且仍然存在的」第一个门店;
+            一个都不剩 → 403「账号未分配有效门店,请联系管理员」。
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._enable_three_stores()
+
+    def _enable_three_stores(self) -> None:
+        """总店 main + 分店 s002 + 分店 s003,登记 3 个账号。"""
+        for sid in ("main", "s002", "s003"):
+            (self.data_dir / "stores" / sid).mkdir(parents=True, exist_ok=True)
+        from modules.system.settings_handler import get_settings, save_settings
+        settings = get_settings()
+        settings["stores"] = [
+            {"id": "main", "name": "总店", "active": True},
+            {"id": "s002", "name": "国贸店", "active": True},
+            {"id": "s003", "name": "太古里店", "active": True},
+        ]
+        settings["users"][0]["all_stores"] = True
+        settings["users"][0]["store_ids"] = []
+        settings["users"].append({
+            "id": 99, "username": "branch", "password": "x", "role": "employee",
+            "name": "分店员工", "enabled": True,
+            "store_ids": ["s002"], "all_stores": False,
+        })
+        settings["users"].append({
+            "id": 97, "username": "multi", "password": "x", "role": "employee",
+            "name": "多分店员工", "enabled": True,
+            "store_ids": ["s002", "s003"], "all_stores": False,
+        })
+        settings["users"].append({
+            "id": 96, "username": "hq", "password": "x", "role": "supervisor",
+            "name": "总部账号", "enabled": True,
+            "store_ids": ["s002"], "all_stores": True,
+        })
+        save_settings(settings)
+
+    def _delete_store(self, store_id: str) -> None:
+        """模拟管理员删店:只摘注册表条目,用户记录里的 store_ids 原样不动。"""
+        from modules.stores import registry
+        self.assertTrue(registry.delete_store(store_id))
+
+    # ---- 1. 有权访问的店被删了 → 不许 404 锁死 ----
+
+    def test_deleted_store_does_not_lock_out_employee(self) -> None:
+        """员工唯一的店被删 → 不是 404「门店不存在」,而是能看懂的 403。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(99, store_ids=["s002"]), h)
+        self.assertFalse(ok)
+        self.assertNotEqual(h.response_status, 404)
+        self.assertEqual(h.response_status, 403)
+
+    def test_employee_falls_back_to_another_still_existing_store(self) -> None:
+        """员工的第一个店被删 → 落到他仍有权访问的另一个店(不是 404)。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(97, store_ids=["s002", "s003"]), h)
+        self.assertTrue(ok)
+        self.assertEqual(h.response_status, None)
+        self.assertEqual(context.get_current_store(), "s003")
+
+    # ---- 2. 店全被删了 → 403,文案要说清找管理员 ----
+
+    def test_all_assigned_stores_deleted_gives_clear_403(self) -> None:
+        """有权访问的店全被删 → 403 + 文案提到「门店」和「联系管理员」。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(99, store_ids=["s002"]), h)
+        self.assertFalse(ok)
+        self.assertEqual(h.response_status, 403)
+        err = h.parsed["error"]
+        self.assertIn("门店", err)
+        self.assertIn("联系管理员", err)
+
+    # ---- 3. 显式 ?store= 已删除的店 → 仍然 404 ----
+
+    def test_explicit_deleted_store_still_404(self) -> None:
+        """用户点名问那个店 → 店不存在就是不存在,仍然 404。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings?store=s002")
+        ok = _store_gate(self._session(97, store_ids=["s002", "s003"]), h)
+        self.assertFalse(ok)
+        self.assertEqual(h.response_status, 404)
+        self.assertIn("门店不存在", h.parsed["error"])
+
+    def test_explicit_deleted_store_404_for_single_store_employee(self) -> None:
+        """只有 s002 的员工显式点名 s002(已删)→ 404,不是 403。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings?store=s002")
+        ok = _store_gate(self._session(99, store_ids=["s002"]), h)
+        self.assertFalse(ok)
+        self.assertEqual(h.response_status, 404)
+
+    # ---- 4. 总部账号行为不变 ----
+
+    def test_headquarters_without_store_ids_lands_on_main(self) -> None:
+        """总部账号 store_ids 为空 → 落默认店 main(行为不变)。"""
+        from routing import _store_gate
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(1, "admin", True, []), h)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "main")
+
+    def test_headquarters_with_store_ids_lands_on_first_store(self) -> None:
+        """总部账号 store_ids 非空且第一个存在 → 仍落 store_ids[0](行为不变)。"""
+        from routing import _store_gate
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(96, "supervisor", True, ["s002"]), h)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "s002")
+
+    def test_headquarters_skips_deleted_store_but_keeps_store_ids_order(self) -> None:
+        """总部账号 store_ids[0] 被删 → 跳到下一个仍存在的(store_ids 顺序不变)。"""
+        from routing import _store_gate
+        self._delete_store("s002")
+        from modules.system.settings_handler import get_settings, save_settings
+        settings = get_settings()
+        for u in settings["users"]:
+            if u.get("id") == 96:
+                u["store_ids"] = ["s002", "s003"]
+        save_settings(settings)
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(96, "supervisor", True, ["s002", "s003"]), h)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "s003")
+
+    # ---- 5. 回归护栏:正常场景行为完全不变 ----
+
+    def test_normal_case_unchanged_single_store_employee(self) -> None:
+        """店都在 → 仍落第一个有权访问的店。"""
+        from routing import _store_gate
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(99, store_ids=["s002"]), h)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "s002")
+
+    def test_normal_case_unchanged_multi_store_employee(self) -> None:
+        """店都在 → 多店员工仍落 store_ids[0](不是 store_ids[-1])。"""
+        from routing import _store_gate
+        h = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(97, store_ids=["s002", "s003"]), h)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "s002")
+
+    def test_recreated_store_restores_access(self) -> None:
+        """删店后用同样的 ID 重新建店 → 访问恢复(不变式不能被破坏)。"""
+        from modules.stores import registry
+
+        from routing import _store_gate
+        self._delete_store("s002")
+        h = _FakeHandler("/api/readings")
+        self.assertFalse(_store_gate(self._session(99, store_ids=["s002"]), h))
+
+        registry.add_store("s002", "国贸店(重建)")
+        h2 = _FakeHandler("/api/readings")
+        ok = _store_gate(self._session(99, store_ids=["s002"]), h2)
+        self.assertTrue(ok)
+        self.assertEqual(context.get_current_store(), "s002")
+
+
 if __name__ == "__main__":
     unittest.main()
