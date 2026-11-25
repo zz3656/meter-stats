@@ -22,23 +22,15 @@ var STORE_LOAD_ERROR = '';      // 列表加载失败的提示(渲染在页面�
 var DEFAULT_STORE_ID = 'main';  // 默认店(总店)不可删
 
 /**
- * 属性值转义 —— 把值安全地放进双引号/单引号属性里。
+ * 属性值转义用 escapeAttr —— 它定义在 js/helpers/utils.js(与 escapeHtml 同居)。
+ * 这里**不要再定义一份**:admin.js 也在调用 escapeAttr,重复定义会互相覆盖,
+ * 而且 admin.js 不该依赖 stores.js 才能工作。
  *
- * 不能直接用 escapeHtml:admin.js 的全局 escapeHtml 覆盖了 utils.js 的强版本,
- * 而那份弱版本只转义 & < >,不转义 " 和 '。
+ * 为什么不能直接用 escapeHtml:admin.js 有一份同名函数(顶层函数声明),
+ * 加载顺序在 utils.js 之后 → **运行时真正生效的是 admin.js 那份弱版本**,
+ * 只转义 & < >,不转义 " 和 '。
  * 自由文本(门店名称/地址/编号)一旦进了属性值,弱版本就能被引号打断。
  */
-window.escapeAttr = function escapeAttr(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;',
-        }[c];
-    });
-};
 
 /** 当前登录用户是不是管理员(门店的增删改仅 admin)。 */
 function isStoreAdmin() {

@@ -26,6 +26,7 @@ METERSTATS = REPO / "MeterStats"
 INDEX_HTML = METERSTATS / "index.html"
 API_JS = METERSTATS / "js" / "core" / "api.js"
 STORES_JS = METERSTATS / "js" / "modules" / "stores.js"
+UTILS_JS = METERSTATS / "js" / "helpers" / "utils.js"
 NAV_JS = METERSTATS / "js" / "core" / "navigation.js"
 ADMIN_JS = METERSTATS / "admin.js"
 
@@ -99,6 +100,21 @@ class TestStoresFrontendWiring(unittest.TestCase):
             self.assertTrue(markup, f"没找到 {box_name} 的勾选框")
             for line in markup:
                 self.assertIn("escapeAttr(", line, f"{box_name} 的 value 未转义")
+
+    def test_escape_attr_is_defined_only_in_utils_js(self) -> None:
+        """escapeAttr 只能有一份,且必须住在 js/helpers/utils.js。
+
+        为什么:admin.js(用户管理页)也在调用 escapeAttr,
+        如果它定义在 stores.js(门店管理页)里,就是「用户管理页依赖门店管理页」的隐式耦合 ——
+        哪��天单独加载 admin.js,用户表单的门店勾选框会直接抛 ReferenceError。
+        工具函数按项目既有约定统一放 js/helpers/utils.js(与 escapeHtml 同居)。
+        """
+        utils = UTILS_JS.read_text(encoding="utf-8")
+        self.assertIn("window.escapeAttr", utils, "escapeAttr 应定义在 js/helpers/utils.js")
+        for name, path in (("stores.js", STORES_JS), ("admin.js", ADMIN_JS)):
+            src = path.read_text(encoding="utf-8")
+            self.assertNotIn("window.escapeAttr", src, f"{name} 不该再定义 escapeAttr")
+            self.assertNotRegex(src, r"function\s+escapeAttr")
 
     def test_delete_confirm_mentions_data_dir_is_kept(self) -> None:
         """删门店只删登记信息,数据目录保留 —— 确认文案必须写明。"""
@@ -187,13 +203,17 @@ const sandbox = {
 sandbox.window = sandbox; sandbox.globalThis = sandbox;
 vm.createContext(sandbox);
 
-// ① 真实运行时生效的是 admin.js 那份弱 escapeHtml(顶层函数声明会覆盖 utils.js 的)
+// ① 先加载 utils.js(浏览器里它加载得最早)—— 提供 escapeHtml(强版)与 escapeAttr
+vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/helpers/utils.js'), 'utf8'),
+                sandbox, { filename: 'utils.js' });
+
+// ② 真实运行时生效的是 admin.js 那份弱 escapeHtml(顶层函数声明会覆盖 utils.js 的)
 const adminSrc = fs.readFileSync(path.join(ROOT, 'admin.js'), 'utf8');
 const m = adminSrc.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/);
 if (!m) { console.log(JSON.stringify({ error: 'admin.js 里找不到 escapeHtml' })); process.exit(0); }
 vm.runInContext(m[0], sandbox, { filename: 'admin-escapeHtml.js' });
 
-// ② 再加载 stores.js
+// ③ 再加载 stores.js
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/stores.js'), 'utf8'),
                 sandbox, { filename: 'stores.js' });
 

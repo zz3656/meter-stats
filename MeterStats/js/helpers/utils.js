@@ -20,6 +20,28 @@ window.escapeHtml = function escapeHtml(s) {
 };
 
 /**
+ * 属性值转义 —— 把值安全地放进双引号/单引号属性里。
+ *
+ * 为什么不能直接用 escapeHtml:admin.js 里有一份同名函数(顶层函数声明),
+ * 加载顺序在 utils.js 之后 → **运行时真正生效的是 admin.js 那份弱版本**,
+ * 只转义 & < >,**不转义 " 和 '**。
+ * 自由文本(门店名称/地址/编号)一旦进了属性值,弱版本就能被引号打断。
+ *
+ * 所以:元素内容位置用 escapeHtml,属性值位置一律用 escapeAttr。
+ */
+window.escapeAttr = function escapeAttr(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[c];
+  });
+};
+
+/**
  * 本地时间 YYYY-MM-DD 字符串(避免 toISOString 的 UTC 坑)。
  */
 window.formatDate = function formatDate(d) {
