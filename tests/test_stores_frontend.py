@@ -185,6 +185,73 @@ class TestStoresFrontendWiring(unittest.TestCase):
         # mypy strict:assertIsNotNone 不做类型收窄 → 取值处显式兜底
         self.assertIn("store=", fn.group(0) if fn else "")
 
+    # ---------- 本轮的静态护栏:防止上面的修复被无声回退 ----------
+
+    def test_removed_duty_image_methods_stay_removed(self) -> None:
+        """Api.duty.image / imageUpload 打的 /api/duty/<id>/image 后端不存在
+        (routing.py 只特判精确的 /api/duty/image),且两方法零调用点 → 已删。
+        复活它们 = 重新暴露一个「看起来能用但打错路由」的 API。"""
+        src = API_JS.read_text(encoding="utf-8")
+        # 只看代码,不看注释 —— 注释里可以解释「为什么删」
+        code = re.sub(r"//[^\n]*", "", src)
+        self.assertNotIn("imageUpload", code, "Api.duty.imageUpload 被复活了")
+        self.assertNotIn("image:", code, "Api.duty.image 被复活了")
+        # 任何 /api/duty/<id>/image 形态都不得出现。
+        # (精确的 /api/duty/image 是合法的 —— 后端唯一存在的 multipart 图片端点)
+        self.assertNotIn("/image'", code, "出现了 /api/duty/<id>/image 形态的路径")
+        self.assertNotIn('/image"', code, "出现了 /api/duty/<id>/image 形态的路径")
+
+    def test_utils_js_uses_current_auth_token(self) -> None:
+        """AGENTS.md:前端只能通过 admin.js 的 currentAuthToken() 取 token。
+
+        localStorage 里有三套历史键名(token / meter_admin_token / meter_token),
+        后两个是死键 —— 直读 localStorage 就是「又开一套 token 真相源」。
+        """
+        src = UTILS_JS.read_text(encoding="utf-8")
+        self.assertIn("currentAuthToken", src)
+        self.assertNotIn("localStorage.getItem('token')", src)
+
+    def test_store_free_rules_are_identical_in_all_three_places(self) -> None:
+        """三份 store-free 实现(真规则 + 两份兜底)必须含同样的 4 个守卫。
+
+        兜底分支存在的意义是「StoreContext 还没加载时也能工作」
+        (Task 4 把 <script> 加进 index.html 之前)。Task 4 之后兜底是死代码,
+        但在那之前它得是对的 —— 三份实现必须一致,否则改一份漏一份,
+        就会出现「api.js 认为该带 store、accessibility.js 认为不该带」的分叉。
+        """
+        guards = ("/api/health", "/api/version", "/api/auth/", "/api/stores")
+
+        def _body(src: str, pattern: str, label: str) -> str:
+            fn = re.search(pattern, src)
+            self.assertIsNotNone(fn, "%s 里找不到实现" % label)
+            return fn.group(0) if fn else ""
+
+        # ① 真规则:js/core/storeContext.js::isStoreFreePath
+        real = _body(
+            STORE_CONTEXT_JS.read_text(encoding="utf-8"),
+            r"function isStoreFreePath\(path\)\s*\{[\s\S]*?\n  \}",
+            "storeContext.js",
+        )
+        # ② 兜底:api.js::_isStoreFree
+        api_fallback = _body(
+            API_JS.read_text(encoding="utf-8"),
+            r"function _isStoreFree\(path\)\s*\{[\s\S]*?\n    \}",
+            "api.js",
+        )
+        # ③ 兜底:accessibility.js::isStoreFreePath
+        acc_fallback = _body(
+            ACCESSIBILITY_JS.read_text(encoding="utf-8"),
+            r"function isStoreFreePath\(path\)\s*\{[\s\S]*?\n\}",
+            "accessibility.js",
+        )
+        for label, body in (
+            ("真规则(storeContext.js)", real),
+            ("兜底(api.js)", api_fallback),
+            ("兜底(accessibility.js)", acc_fallback),
+        ):
+            for guard in guards:
+                self.assertIn(guard, body, "%s 少了 %s" % (label, guard))
+
 
 # ============ 行为验证:api.js 的 store 贯通(需要 node) ============
 

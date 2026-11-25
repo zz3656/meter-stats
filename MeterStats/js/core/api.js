@@ -12,10 +12,11 @@ var Api = (() => {
      * (js/core/storeContext.js —— 门店参数规则的唯一真相源),
      * 这里只做转发 + 兜底,别再抄一份规则。
      *
-     * 兜底只守住「绝不能带 store」的两类(引导端点 + 身份端点):
-     * 多带一个失效的 store 到引导端点 → 404 → 用户永久锁死。
-     * (/api/health 与 /api/version 带不带 store 都无害 —— 后端对公开端点
-     *  跳过门店闸,多余的 query 参数没人读。)
+     * 兜底的 4 个守卫与真规则**逐字一致**(测试会盯住):
+     * 兜底存在的意义是「StoreContext 还没加载时也能工作」
+     * (Task 4 把 <script> 加进 index.html 之前)。Task 4 之后兜底是死代码,
+     * 但在那之前它得是对的 —— 三份实现必须一致,否则改一份漏一份,
+     * 就会出现「api.js 认为该带 store、accessibility.js 认为不该带」的分叉。
      */
     function _isStoreFree(path) {
         try {
@@ -25,6 +26,7 @@ var Api = (() => {
             }
         } catch (e) { /* StoreContext 没加载 */ }
         var p = String(path || '').split('?')[0];
+        if (p === '/api/health' || p === '/api/version') return true;
         if (p.indexOf('/api/auth/') === 0) return true;
         if (p === '/api/stores' || p.indexOf('/api/stores/') === 0) return true;
         return false;
