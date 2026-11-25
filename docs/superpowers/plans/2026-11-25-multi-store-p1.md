@@ -1879,7 +1879,7 @@ git commit -m "feat(ui): 侧栏门店切换器,切店后自动重拉数据"
 
 ## 收尾验收（控制器执行，不派 worker）
 
-- [ ] **Step A: 全量测试**
+- [x] **Step A: 全量测试** ✅ 549 项全绿(要求 ≥503)
 
 ```bash
 cd /Users/ceasar/Documents/GitHub/meter-stats
@@ -1888,7 +1888,7 @@ python3 -m unittest discover -s tests -v 2>&1 | tail -5
 
 Expected: `OK`，用例数 ≥ 484 + 9（Task 1）+ 3（Task 2）+ 3（Task 3 接线）+ 4（Task 4 接线）= **≥ 503**。
 
-- [ ] **Step B: 静态检查**
+- [x] **Step B: 静态检查** ✅ ruff 273 / mypy 793,与 P0 收尾基线持平,新增文件零错误
 
 ```bash
 cd /Users/ceasar/Documents/GitHub/meter-stats
@@ -1898,7 +1898,7 @@ cd /Users/ceasar/Documents/GitHub/meter-stats
 
 Expected: ruff ≤ 273；mypy ≤ 793，**新增文件零错误**。
 
-- [ ] **Step C: 口径回归**
+- [x] **Step C: 口径回归** ✅ 71226.1 度断言通过(18 项)
 
 ```bash
 cd /Users/ceasar/Documents/GitHub/meter-stats
@@ -1907,7 +1907,24 @@ python3 -m unittest tests.test_monthly_report -v 2>&1 | tail -5
 
 Expected: `71226.1 度` 断言通过（`tests/test_monthly_report.py:313`）。**P1 不许动任何计算口径。**
 
-- [ ] **Step D: 真实会话端到端验证**
+- [x] **Step D: 真实会话端到端验证** ✅ 5/5 通过
+
+> ⚠️ **实操修正**:上面那条 `METER_DATA_DIR=... ./MeterStats/run.sh start` **不生效** ——
+> `run.sh` 里 `DATA_DIR="$SCRIPT_DIR/.data"` 是写死的,并在启动时用
+> `METER_DATA_DIR="$DATA_DIR"` 覆盖掉外部传入的值,会跑在开发数据目录上。
+> 正确的做法是直接起 `server.py`:
+> ```bash
+> cd MeterStats && METER_PORT=8767 METER_DATA_DIR=/tmp/meter-p1-test \
+>   METER_BIND=127.0.0.1 METER_INITIAL_PASS=admin123 python3 server.py
+> ```
+> 验证结果:① `GET /api/stores` 与 `/api/stores/current` 均带 `all_stores: true` 与门店列表;
+> ② 两店各写一条抄表后,`?store=main` / `?store=s002` 各自只看到自己的行,不带参数落到默认店;
+> ③ `?store=nope999` → 404「门店不存在」;
+> ④ 仅属 s002 的员工 `?store=main` → 403「无权访问门店: main」,`?store=s002` → 200,
+>    不带参数落到 s002,且 `/api/stores` 返回 `all_stores: false`。
+>
+> ⚠️ **收尾清理注意**:`kill`(SIGTERM)后进程会**卡住不退出**(见下方已知问题),
+> 必须 `kill -9`。
 
 起一个临时实例（**不要用生产数据目录**）：
 
@@ -1925,7 +1942,7 @@ METER_PORT=8767 METER_DATA_DIR=/tmp/meter-p1-test ./MeterStats/run.sh start
 
 验证完清理：`./MeterStats/run.sh stop` + `rm -rf /tmp/meter-p1-test`。
 
-- [ ] **Step E: 更新 CHANGELOG**
+- [x] **Step E: 更新 CHANGELOG** ✅
 
 在 `CHANGELOG.md` 的 **0.5.0** 章节里补一条 P1 小节（不递增版本号 —— 0.5.0 尚未发布到 GitHub）：
 
@@ -1939,7 +1956,7 @@ METER_PORT=8767 METER_DATA_DIR=/tmp/meter-p1-test ./MeterStats/run.sh start
 - 已知问题:`/api/admin/dir-listing` 前端传的是 `?dir=`,后端读的是 `?path=` —— 目录列举功能是坏的(P1 未修,与分店无关)
 ```
 
-- [ ] **Step F: 提交**
+- [x] **Step F: 提交** ✅
 
 ```bash
 cd /Users/ceasar/Documents/GitHub/meter-stats
@@ -1956,5 +1973,6 @@ git commit -m "docs: 0.5.0 补 P1 门店切换器更新日志"
 - `X-Store` 头兜底 → 本期只走 query（D1）
 - `admin.js` 的备份下载/删除带 `store` → 全局操作，不按店过滤（D6）
 - `/api/admin/dir-listing` 的 `?dir=` vs `?path=` 参数不一致 → **P1 只记录不修**，与分店无关
-- `escapeHtml` 重复定义（admin.js 弱版本覆盖 utils.js 强版本）→ 沿用 P0 决定，列 P2
-- `modules/_base.py` 缓存别名地雷 → 沿用 P0 决定，列 P2
+- ~~`escapeHtml` 重复定义（admin.js 弱版本覆盖 utils.js 强版本）~~ → **P1 收尾轮已修**（删除 admin.js 弱版）
+- ~~`modules/_base.py` 缓存别名地雷~~ → **P1 收尾轮已修**（失效挪进 `finally`）
+- SIGTERM 死锁（`_shutdown` 在主线程调 `server.shutdown()`，与 `serve_forever()` 互锁）→ 既存问题，列 P2
