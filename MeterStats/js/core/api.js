@@ -183,6 +183,9 @@ var Api = (() => {
             var formData = new FormData();
             formData.append('image', file);
             var opts = { method: 'POST', headers: {} };
+            // ⚠️ body 必须挂上:只 new + append 的话请求发出去不带任何数据
+            //   (历史上 6 处 FormData 全都漏了这一行 → 上传功能整个是坏的)
+            opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             var path = _appendStore('/api/duty/' + id + '/image');
@@ -257,15 +260,22 @@ var Api = (() => {
         restore: function(file) { return restoreUpload(file); },
     };
 
-    // 恢复要 FormData,不走 _request(那里只发 JSON)。
-    // store 参数照样要带:恢复是「按门店写数据」的操作,后端门店闸靠它定作用域。
+    // 恢复走 /api/admin/restore-upload(与 Api.adminRestore.upload 同款):
+    // POST /api/restore 要的是 JSON {zip_path: 服务器磁盘上的路径}
+    // (后端 modules/backup/handler.py:551)—— 浏览器手里只有 File,走不通那条路;
+    // 只有把文件本身 multipart 送上去才是浏览器能走通的恢复方式。
+    //
+    // ⚠️ multipart 的文件名必须以 .zip 结尾:后端按 filename="([^"]+\.zip)" 提取。
+    // ⚠️ body 必须挂上:只 new + append 的话请求发出去不带任何数据。
+    // store 参数照样要带:恢复会写门店数据,门店闸靠 ?store= 定作用域。
     function restoreUpload(file) {
         var formData = new FormData();
-        formData.append('file', file);
+        formData.append('zip_file', file);
         var opts = { method: 'POST', headers: {} };
+        opts.body = formData;
         var token = _authToken();
         if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-        var path = _appendStore('/api/restore');
+        var path = _appendStore('/api/admin/restore-upload');
         var sep = path.indexOf('?') !== -1 ? '&' : '?';
         if (token) path = path + sep + 'token=' + encodeURIComponent(token);
         return fetch(path, opts).then(function(res) { return res.json(); });
@@ -278,6 +288,7 @@ var Api = (() => {
             formData.append('model', model);
             formData.append('file', file);
             var opts = { method: 'POST', headers: {} };
+            opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             var path = _appendStore('/api/import');
@@ -296,6 +307,7 @@ var Api = (() => {
             formData.append('file', file);
             if (category) formData.append('category', category);
             var opts = { method: 'POST', headers: {} };
+            opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             var path = _appendStore('/api/upload');
@@ -306,18 +318,9 @@ var Api = (() => {
     };
 
     // Admin 恢复上传 API (1个端点)
+    // 与 Api.backup.doRestore / restore 共用同一个实现(别留两份)。
     var adminRestore = {
-        upload: function(file) {
-            var formData = new FormData();
-            formData.append('zip_file', file);
-            var opts = { method: 'POST', headers: {} };
-            var token = _authToken();
-            if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-            var path = _appendStore('/api/admin/restore-upload');
-            var sep = path.indexOf('?') !== -1 ? '&' : '?';
-            if (token) path = path + sep + 'token=' + encodeURIComponent(token);
-            return fetch(path, opts).then(function(res) { return res.json(); });
-        },
+        upload: function(file) { return restoreUpload(file); },
     };
 
     // Admin 导入 API (1个端点)
@@ -327,6 +330,7 @@ var Api = (() => {
             formData.append('model', model);
             formData.append('file', file);
             var opts = { method: 'POST', headers: {} };
+            opts.body = formData;
             var token = _authToken();
             if (token) opts.headers['Authorization'] = 'Bearer ' + token;
             var path = _appendStore('/api/import');

@@ -171,6 +171,200 @@ class TestStoresFrontendWiring(unittest.TestCase):
         self.assertIn("store=", fn.group(0) if fn else "")
 
 
+# ============ 行为验证:api.js 的 store 贯通(需要 node) ============
+
+# Task 3 的核心契约是「普通端点带 store、引导端点不带 store」——
+# 而 tests/test_store_switch_frontend.py 的 api.js harness 只调了
+# Api.stores.list() / Api.stores.current(),**两个都是 store-free 端点**。
+# 也就是说:如果 _appendStore() 对普通端点是个彻底的 no-op,整个测试套件照样全绿。
+# 这张网专门补上那个方向。
+#
+# 关键设计:沙箱里门店 ID 的**两个来源给不同的值** ——
+#   StoreContext.getStoreId() → 's002'(正确来源)
+#   localStorage['meter_current_store'] → 's999'(错误来源)
+# 断言 store 参数等于 's002',就同时约束了「带 store」和「ID 从哪来」。
+_API_STORE_HARNESS = r"""
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = process.env.MS_ROOT;
+// api.js 的路径可被 MS_API_JS 覆盖 —— 变异验证时用副本,绝不碰仓库里的真文件
+const API_FILE = process.env.MS_API_JS || path.join(ROOT, 'js/core/api.js');
+
+const fetched = [];
+
+// 假 FormData:只记 append 过的字段,够断言「body 挂上没」用
+class FakeFormData {
+  constructor() { this.fields = []; }
+  append(name, value) { this.fields.push([name, value]); }
+}
+
+const sandbox = {
+  console, setTimeout, clearTimeout, JSON, Date, Number, String, Array, Object,
+  Promise, RegExp, Error, isNaN, parseInt, parseFloat, URLSearchParams,
+  FormData: FakeFormData,
+  localStorage: (function () {
+    const map = {};
+    return {
+      getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+      setItem: (k, v) => { map[k] = String(v); },
+      removeItem: (k) => { delete map[k]; },
+    };
+  })(),
+  document: { getElementById: () => null },
+  window: null,
+};
+sandbox.window = sandbox;
+sandbox.globalThis = sandbox;
+// 门店 ID 的两个来源给**不同的值**:只有问 StoreContext 才会拿到 s002
+sandbox.StoreContext = { getStoreId: () => 's002' };
+sandbox.localStorage.setItem('meter_current_store', 's999');
+sandbox.fetch = function (url, opts) {
+  fetched.push({
+    url: String(url),
+    path: String(url).split('?')[0],
+    method: (opts && opts.method) || 'GET',
+    hasBody: !!(opts && opts.body !== undefined && opts.body !== null),
+  });
+  return Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ ok: true, stores: [], items: [], charges: [], readings: [] }),
+  });
+};
+vm.createContext(sandbox);
+vm.runInContext(fs.readFileSync(API_FILE, 'utf8'), sandbox, { filename: 'api.js' });
+
+function storeParam(url) {
+  const query = String(url).split('?')[1] || '';
+  for (const kv of query.split('&')) {
+    const parts = kv.split('=');
+    if (parts[0] === 'store') return decodeURIComponent(parts[1] || '');
+  }
+  return null;
+}
+
+(async () => {
+  // 普通端点(必须带 store)
+  await sandbox.Api.readings.list();
+  await sandbox.Api.charges.list();
+  await sandbox.Api.items.list();
+  // 引导端点(必须不带 store)
+  await sandbox.Api.stores.list();
+  await sandbox.Api.stores.current();
+  // 上传类端点(必须带 store **且** 真的把 FormData 挂到请求体上)
+  await sandbox.Api.duty.imageUpload(7, { name: 'a.png' });
+  await sandbox.Api.upload.doUpload({ name: 'b.zip' });
+  await sandbox.Api.adminRestore.upload({ name: 'c.zip' });
+  await sandbox.Api.dataimport.import('readings', { name: 'd.csv' });
+  await sandbox.Api.adminImport.doImport('readings', { name: 'e.csv' });
+  // 备份恢复(浏览器手里的 File 走 /api/admin/restore-upload)
+  await sandbox.Api.backup.restore({ name: 'f.zip' });
+  await sandbox.Api.backup.doRestore({ name: 'g.zip' });
+
+  console.log(JSON.stringify({
+    fetched: fetched.map((c) => ({
+      url: c.url, path: c.path, method: c.method,
+      hasBody: c.hasBody, store: storeParam(c.url),
+    })),
+  }));
+})();
+"""
+
+
+class TestApiStoreWiring(unittest.TestCase):
+    """用真实的 js/core/api.js 跑一遍,验证 store 参数贯通的两个方向。"""
+
+    def setUp(self) -> None:
+        if not shutil.which("node"):
+            self.skipTest("未安装 node,跳过前端行为验证")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _run(self) -> dict[str, Any]:
+        hp = Path(self.tmp.name) / "harness.js"
+        hp.write_text(_API_STORE_HARNESS, encoding="utf-8")
+        env = dict(**os.environ)
+        env.update(MS_ROOT=str(METERSTATS))
+        override = os.environ.get("MS_API_JS")
+        if override:
+            env["MS_API_JS"] = override
+        proc = subprocess.run(
+            ["node", str(hp)], capture_output=True, text=True, env=env, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, msg="node 执行失败:\n%s" % proc.stderr)
+        out: dict[str, Any] = json.loads(proc.stdout.strip().splitlines()[-1])
+        return out
+
+    def _calls(self, out: dict[str, Any], path: str) -> list[Any]:
+        return [c for c in out["fetched"] if c["path"] == path]
+
+    def test_normal_endpoints_carry_store_from_store_context(self) -> None:
+        """普通端点必须带 store,且门店 ID 取自 StoreContext(不是 localStorage)。
+
+        这条是 Task 3 的核心契约 —— 之前一条断言都没有:
+        引导端点恰好是 store-free 的,全绿也证明不了「普通端点带了 store」。
+        """
+        out = self._run()
+        for path in ("/api/readings", "/api/charges", "/api/items"):
+            calls = self._calls(out, path)
+            self.assertTrue(calls, "%s 没发请求" % path)
+            for call in calls:
+                self.assertEqual(
+                    call["store"], "s002",
+                    "%s 的 store 参数是 %r,期望 's002'(取自 StoreContext;"
+                    "读 localStorage 的 s999 就是错的)" % (path, call["store"]),
+                )
+
+    def test_bootstrap_endpoints_do_not_carry_store(self) -> None:
+        """引导端点不许带 store —— 否则删店后用户永久锁死。"""
+        out = self._run()
+        for path in ("/api/stores", "/api/stores/current"):
+            calls = self._calls(out, path)
+            self.assertTrue(calls, "%s 没发请求" % path)
+            for call in calls:
+                self.assertIsNone(
+                    call["store"], "引导端点带了 store: %s" % call["url"],
+                )
+
+    def test_formdata_uploads_send_body_and_store(self) -> None:
+        """上传类请求:带 store **且** 真的把 FormData 挂到请求体上。
+
+        body 没挂 = 请求发出去不带任何数据 = 上传功能整个是坏的
+        (历史上 6 处 FormData 全都只 new + append,没有一处 opts.body = formData)。
+        """
+        out = self._run()
+        upload_paths = (
+            "/api/duty/7/image", "/api/upload",
+            "/api/admin/restore-upload", "/api/import",
+        )
+        seen = False
+        for path in upload_paths:
+            for call in self._calls(out, path):
+                seen = True
+                self.assertEqual(
+                    call["store"], "s002",
+                    "%s 的 store 参数是 %r,期望 's002'" % (path, call["store"]),
+                )
+                self.assertTrue(
+                    call["hasBody"],
+                    "%s 没把 FormData 挂到请求体上(请求发出去不带任何数据): %s"
+                    % (path, call["url"]),
+                )
+        self.assertTrue(seen, "一个上传类请求都没发出去")
+
+    def test_backup_restore_uses_the_upload_endpoint(self) -> None:
+        """浏览器手里的 File 只能走 /api/admin/restore-upload。
+
+        POST /api/restore 要的是 JSON {zip_path: 服务器磁盘路径} ——
+        浏览器手里只有 File,走不通那条路(后端 modules/backup/handler.py:551)。
+        """
+        out = self._run()
+        paths = [c["path"] for c in out["fetched"]]
+        self.assertIn("/api/admin/restore-upload", paths, "备份恢复没走上传端点")
+        self.assertNotIn(
+            "/api/restore", paths,
+            "备份恢复还在打 /api/restore(JSON zip_path —— 浏览器走不通)",
+        )
+
+
 # ============ 行为验证(需要 node) ============
 
 # 用真实的 stores.js 跑一遍:先装上 admin.js 的那份弱 escapeHtml(页面运行时它会覆盖
