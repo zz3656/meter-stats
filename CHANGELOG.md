@@ -55,6 +55,43 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
 - **写盘失败后内存里留下幻影数据**:`storage.load_json()` 命中缓存时返回的是**缓存对象本身**(不是副本),而 `modules/_base.py` 的 `handle_post` / `handle_put` 是**原地改**再存盘。原来「失效缓存」写在 `save_json()` 成功路径的最后一行 —— 写盘失败(磁盘满 / 权限)时根本不会执行,而失败的写入又**没有改变磁盘 mtime**,`load_json()` 的 mtime 校验拦不住 → GET 继续返回多出来的那行,重启才消失。现在失效挪进 `finally`,成功与失败都失效。新增 `tests/test_storage_cache.py` 4 项(含「退回旧实现必须失败」的反向验证)
 - **`escapeHtml` 有两份、运行时生效的是弱版**:`admin.js` 顶层的函数声明加载顺序在 `js/helpers/utils.js` 之后,会覆盖 `utils.js` 的强版本,而弱版只转义 `& < >`、**不转义引号** —— 自由文本(门店名 / 物品名)一旦进到属性值位置,就能用引号把属性打断。现在删除 `admin.js` 那份,全局 `escapeHtml` 只剩 `utils.js` 的强版(连引号一起转义);属性值位置仍**一律要求**走 `escapeAttr`,作为纵深防御
 
+### P2 表计自定义(0.5.0 内补齐)
+
+每店**自己的表集合**:几块表、各自的名称 / 图标 / 倍率,以及电价水价与水电表倍率。
+
+- **后端表定义参数化**:`report.py` 不再读模块级 `TABLES`,改由调用方按当前店传入;
+  新增 `modules/stores/meters.py` 作为表定义与表值读取的唯一入口(`row_values` /
+  `row_has_any_value` / key 规则 / 归一化与校验)
+- **三个配置端点改为按店**:`GET /api/meters`、`GET /api/admin/meter`、`PUT /api/admin/meter`
+  从全局 `settings.json` 改到 `stores/<id>/store.json`。改造前一家店改表名会污染全部门店
+- **抄表 / 充值接受自定义表**:旧 4 表继续写记录**顶层字段**(历史数据零迁移),
+  自定义表写 `meters` 字典;门店没有的表 key 一律 400
+- **报表按店口径**:电价 / 水价 / 总表倍率 / 分表倍率都从 `store.json` 取
+- **前端表集合动态化**:`METER_CONFIG` / `METER_KEYS` / `CHARGE_METERS` 由当前店重建;
+  新增 `js/core/meterForm.js` 统一渲染 6 组表单(抄表/充值的 录入·新增·编辑)与两个记录表表头;
+  报表、图表、周趋势、告警全部按表集合遍历
+- **电表设置页支持增删表**,按当前店保存,标题旁显示「当前门店:xxx」
+- **切门店先重载表配置再拉数据**(顺序反了就是「按上一家店的表渲染、填新店的数据」)
+
+#### 一并修掉的坑
+
+- **`r.get("hall")` 硬编码共 6 处**(后端)+ `r.hall != null` 若干处(前端):
+  门店没有 hall 表时,整月读数会被当成「只录了水电的行」**全部跳过** →
+  月报 0 度、图表空白、告警不触发,而且**不报错**。统一换成按表集合判断
+- **报表缓存键要带表集合签名**:表定义变成函数参数后,同店同月换表集合会命中
+  同一份缓存 → 2 表门店看到 4 表的数字
+- **PUT 的「空值清空」语义**(抄表与充值):传 `{"fire": ""}` 应当清成 null,
+  「没传这个字段」才保留旧值。两者合并会静默丢掉「清空某块表」这个操作
+- **设置页默认 4 表一保存就 400**:校验里曾禁止表定义复用旧 4 表 key,
+  而默认门店的表集合**就是**这 4 个 key。旧 4 表 key 在表定义里是合法的
+  (写入时固定走顶层字段,不存在两处存值)
+
+#### 已知问题(本轮新增)
+
+- **`dataimport` 仍按旧 4 表列名校验**:默认 4 表门店导入行为不变;
+  自定义表门店导入时,自定义表那几列**不会进库**(现有行为是静默忽略,
+  尚未改成明确报错),列后续单期
+
 ### 已知问题
 
 - **值班照片仍然没有自动备份**。改造前照片就没进过备份包(既存缺口,不是分店引入的)。这次刻意**不只做一半**:若把照片收进备份,恢复侧必须同步扩展,否则会变成「包里有照片、恢复时静默丢弃」这种更糟的状态。**照片需要另外手工备份**
@@ -66,7 +103,8 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
 
 ### 文档
 
-- 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`、`test_store_switch_frontend.py`、`test_store_switcher_ui.py`、`test_storage_cache.py`,全量 **549 项**(存量 349 + 分店 200)
+- 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`、`test_store_switch_frontend.py`、`test_store_switcher_ui.py`、`test_storage_cache.py`
+- P2 新增 `tests/test_meter_tables.py`、`test_meter_config_api.py`、`test_meter_config_frontend.py`、`test_dynamic_forms.py`、`test_dynamic_render.py`、`test_meter_settings_ui.py`,全量 **638 项**(存量 349 + 分店 289)
 
 ## [0.4.3] — 2026-11-12
 

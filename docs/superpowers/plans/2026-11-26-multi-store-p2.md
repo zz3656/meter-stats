@@ -723,14 +723,34 @@ git commit -m "feat(ui): 电表设置页支持增删表并按当前店保存"
 
 ## 收尾验收（控制器执行，不派 worker）
 
-- [ ] **Step A: 全量测试**
+> **状态:全部完成**(2026-11-26)。
+> - A 全量 **638** 项全绿
+> - B ruff **269** / mypy **793**(基线 273 / 793,**零新增**)
+> - C 口径回归 71226.1 度通过(默认 4 表数字与改造前逐字节一致)
+> - D 端到端 5 组全部通过(见下)
+> - E/F CHANGELOG 与提交
+
+**D 端到端实测结果**(临时实例 + 临时数据目录,`main` 保持 4 表、`s002` 配 2 表):
+1. `main` 4 表(电价 0.9)与 `s002` 2 表(电价 1.5)**互不影响**
+2. 给 s002 录 2 天抄表 → 行里是 `meters: {m1, m2}`,顶层无 hall
+3. s002 月报 `by_meter={m1:20, m2:30}`、`total_kwh=50.0`、`price=1.5`、`cost=75.0`;
+   `days` 的键是 `date/m1/m2/total/is_reading_day`(跟着表集合走)
+4. `main` 月报仍是 4 表、0 度 —— 与 s002 互不串
+5. 非法配置一律 400:0 块表 / 倍率 0 / 倍率非数字 / key 大写 / key 重复
+6. 默认 4 表在 main 保存 → **200**(验证了之前那个「一保存就 400」的回归)
+7. s002 员工:读 `?store=main` → 403、读 `?store=s002` → 200、改配置 → 403、
+   报 main 月报 → 403
+8. `POST readings` 写不存在的表 key(`zzz`)→ 400「该门店没有这些表」
+
+
+- [x] **Step A: 全量测试**
 
 ```bash
 python3 -m unittest discover -s tests 2>&1 | tail -5
 ```
 Expected: `OK`，用例数 ≥ 549 + 各 Task 新增。
 
-- [ ] **Step B: 静态检查**
+- [x] **Step B: 静态检查**
 
 ```bash
 /private/tmp/lintvenv/bin/ruff check . 2>&1 | tail -3
@@ -738,14 +758,14 @@ Expected: `OK`，用例数 ≥ 549 + 各 Task 新增。
 ```
 Expected: ruff ≤ 273；mypy ≤ 793，**新增文件零错误**。
 
-- [ ] **Step C: 口径回归（本期最关键的一步）**
+- [x] **Step C: 口径回归（本期最关键的一步）**
 
 ```bash
 python3 -m unittest tests.test_monthly_report tests.test_charge_consistency -v 2>&1 | tail -5
 ```
 Expected: `71226.1 度` 断言通过。**P2 动了 `report.py` 的表遍历，这条是唯一能证明「默认 4 表数字没变」的硬断言。**
 
-- [ ] **Step D: 真实会话端到端（2 表门店 vs 4 表门店）**
+- [x] **Step D: 真实会话端到端（2 表门店 vs 4 表门店）**
 
 直接起服务（`run.sh` 的 `DATA_DIR` 写死，不能用）：
 
@@ -762,11 +782,11 @@ cd MeterStats && METER_PORT=8767 METER_DATA_DIR=/tmp/meter-p2-test \
 5. 拒绝路径：0 块表 / 倍率 0 / key 重名 → 400
 6. 清理：`kill -9` + `rm -rf /tmp/meter-p2-test`
 
-- [ ] **Step E: 更新 CHANGELOG**
+- [x] **Step E: 更新 CHANGELOG**
 
 在 `CHANGELOG.md` 的 **0.5.0** 章节补 P2 小节（**不递增版本号**）。
 
-- [ ] **Step F: 提交**
+- [x] **Step F: 提交**
 
 ```bash
 git add CHANGELOG.md docs/superpowers/plans/2026-11-26-multi-store-p2.md
