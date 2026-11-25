@@ -46,6 +46,9 @@
   };
 
   var listeners = [];
+  // init() 重入保护:引导期间再调 init() 复用同一次 Promise,
+  // 不重复打后端、也不让两次引导的选店结果互相覆盖。
+  var initPromise = null;
 
   // ===== 基础工具 =====
 
@@ -163,13 +166,11 @@
       try { ls.removeItem(keys.charges); } catch (e) { /* 忽略 */ }
     }
     // 4. 报表缓存
+    //    变量(_currentReport / _currentYearly / _currentUtilities)归 state.js 所有,
+    //    由它导出的 resetReportCaches() 清 —— 这里不伸手碰别人的变量。
     try {
       if (typeof resetReportCaches === 'function') resetReportCaches();
-      else {
-        window._currentReport = null;
-        window._currentYearly = null;
-        window._currentUtilities = null;
-      }
+      else console.warn('resetReportCaches 不可用,报表缓存可能残留');
     } catch (e) { console.warn('清理报表缓存失败:', e); }
     // 5. 充值归属缓存
     try {
@@ -213,12 +214,15 @@
      *
      * 选店规则(优先级从高到低):
      *   1. localStorage 里记住的店 —— 但必须在可见列表里,否则作废
-     *   2. 后端 /api/stores/current 给的默认店(按用户权限解析出来的)
-     *   3. 都没有 → 当前店为空(账号未分配门店)
+     *   2. 后端 /api/stores/current 给的默认店(也要在可见列表里)
+     *   3. 兜底:可见列表第一家(后端默认店拿不到时,口径与后端
+     *      routing.py::_store_gate 的默认解析一致 —— 它也落到「有权访问的第一家」)
+     *   4. 都没有 → 当前店为空(账号未分配门店)
      */
     init: function (reason) {
-      var self = this;
-      return (async function () {
+      // 已在引导中 → 复用同一次,不重复打后端
+      if (initPromise) return initPromise;
+      var p = (async function () {
         var listRes = null, curRes = null, listErr = null, curErr = null;
         try { listRes = await Api.stores.list(); } catch (e) { listErr = e; }
         try { curRes = await Api.stores.current(); } catch (e) { curErr = e; }
@@ -244,8 +248,15 @@
         var remembered = _readPersisted();
         if (isValidStoreId(remembered) && _hasStore(remembered)) {
           picked = remembered;
-        } else if (curRes && curRes.ok !== false && isValidStoreId(String(curRes.store_id || ''))) {
+        } else if (curRes && curRes.ok !== false
+                   && isValidStoreId(String(curRes.store_id || ''))
+                   && _hasStore(String(curRes.store_id))) {
           picked = String(curRes.store_id);
+        } else if (state.stores.length > 0
+                   && isValidStoreId(String(state.stores[0].id || ''))) {
+          // 后端默认店拿不到(current() 失败)→ 兜底到可见列表第一家。
+          // 不兜底的话 storeId 为空而 noStore=false → 第三种状态,UI 无从显示。
+          picked = String(state.stores[0].id);
         }
         state.storeId = picked;
         _persist(picked);
@@ -253,6 +264,10 @@
         _notify(reason || 'init');
         return picked;
       })();
+      initPromise = p;
+      var done = function () { if (initPromise === p) initPromise = null; };
+      p.then(done, done);
+      return p;
     },
 
     /**
@@ -263,7 +278,9 @@
      * 避免这里和 UI 各刷一次。
      */
     switchTo: function (id) {
-      var sid = String(id == null ? '' : id).trim();
+      // ⚠️ 不做 trim:trim 完 's002\n' 会变成合法的 's002' 被放行,
+      // 而 isValidStoreId('s002\n') 是 false —— 两处口径必须一致。
+      var sid = String(id == null ? '' : id);
       if (!isValidStoreId(sid)) return Promise.resolve(false);
       if (!_hasStore(sid)) return Promise.resolve(false);
       if (sid === state.storeId) return Promise.resolve(true);
@@ -274,15 +291,26 @@
       return Promise.resolve(true);
     },
 
-    /** 登出时清空本地状态(门店选择也清掉 —— 换人登录不该继承上一家店) */
+    /**
+     * 登出时清空本地状态(门店选择也清掉 —— 换人登录不该继承上一家店)。
+     *
+     * 必须连 5 类缓存一起清:admin.js 的 clearAuth() 只隐藏按钮、清 token、显示登录页,
+     * **不刷新页面** —— 内存里的数据与 localStorage 里的离线缓存都还在。
+     * 用户 B 登入后若后端不可用,accessibility.js 会回退去读 meter_readings_v1 /
+     * meter_charges_v1 → 把用户 A 的抄表记录显示给用户 B。
+     */
     reset: function () {
+      clearCaches();
       state.storeId = '';
       state.stores = [];
       state.allStores = false;
       state.ready = false;
       state.noStore = false;
       _persist('');
+      // 先通知再退订:让还挂着的订阅者知道「登出了」,然后把订阅清空 ——
+      // 登出再登入时 UI 会重新订阅 onChange,不退订会重复注册 → 同一次切店刷两遍数据。
       _notify('reset');
+      listeners = [];
     },
 
     /** 清缓存(对外暴露,便于测试与特殊场景) */
@@ -293,7 +321,7 @@
      *
      * 两种情况要分开处理:
      *   - 「无权访问门店」/「门店不存在」:当前选中的店没了或权限被收回了
-     *     → 退回后端默认店,重新引导,重新拉数据。
+     *     → 清干净旧店的数据,退回后端默认店,重新引导,重新拉数据。
      *   - 「未分配门店」:账号被管理员取消了门店,不是「切错店」
      *     → 置空态,不重试。
      */
@@ -301,6 +329,9 @@
       var msg = String(text || '');
       if (state.recovering) return;
       if (_isNoStoreMessage(msg)) {
+        // 账号已经没有门店了 → 旧店的数据(尤其 localStorage 离线缓存)必须清,
+        // 不然用户会继续看着一个自己已经无权访问的门店的数据。
+        clearCaches();
         state.storeId = '';
         state.stores = [];
         state.allStores = false;
@@ -316,7 +347,12 @@
       state.recovering = true;
       state.storeId = '';
       _persist('');
-      this.init('recovered').then(function () {
+      // 恢复前必须清缓存:当前店已经失效(被删 / 权限被收回),
+      // 旧店的数据留着就是跨店串数据 —— 尤其离线缓存,后端此刻不可用时
+      // accessibility.js 会把它当成新门店的数据兜底显示出来。
+      clearCaches();
+      // 用闭包里的 StoreContext 而不是 this —— 被解构调用时 this 会是 undefined。
+      StoreContext.init('recovered').then(function () {
         state.recovering = false;
       }, function () {
         state.recovering = false;

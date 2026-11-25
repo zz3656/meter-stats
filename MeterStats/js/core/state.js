@@ -19,6 +19,20 @@ var _currentReport = null;    // 当前月份报表缓存（供「复制表格�
 var _currentYearly = null;    // 当前年份汇总缓存（供「复制」使用）
 var _currentUtilities = null; // 当前月份水电缓存（供月度报告复制使用）
 
+/**
+ * 清空报表缓存。
+ *
+ * 这三个变量归 state.js 所有 —— 别的文件不要伸手碰它们的变量，统一走这个函数。
+ * 切门店时 storeContext.js 的 clearCaches() 会调它：
+ * 不清 → 切店后「复制表格」复制的是上一家店的月报/年报/水电数字。
+ */
+function resetReportCaches() {
+    _currentReport = null;
+    _currentYearly = null;
+    _currentUtilities = null;
+}
+window.resetReportCaches = resetReportCaches;
+
 /** 设置防重复提交状态 */
 function setSubmitting(val) {
     _submitting = val;
@@ -58,9 +72,10 @@ const State = (() => {
 
         /** 初始化所有数据为 [] */
         init: function() {
-            // "water" 必须在列表里:renderAll() 会 State.set("water", …),
-            // 漏了它 → State.get("water") 初始是 undefined,
-            // 渲染水电表时 .sort() 直接抛 TypeError。
+            // "water" 与其它业务数据同属 State，放进列表让初始状态一致。
+            // （现有消费方都写了 `|| []` 兜底，所以补这个键不改变现有行为；
+            //   但漏了它 State.get("water") 就是 undefined，谁再加一个不兜底的
+            //   消费点就会在 .sort() 上炸掉。）
             var keys = ["readings", "charges", "water", "items", "purchases", "duty", "settings"];
             for (var i = 0; i < keys.length; i++) {
                 if (data[keys[i]] === undefined) data[keys[i]] = [];
@@ -72,16 +87,14 @@ const State = (() => {
          *
          * 必须连报表缓存一起清:_currentReport / _currentYearly / _currentUtilities
          * 存的是上一个门店的月报/年报/水电报表,不清 → 切店后「复制表格」复制的是
-         * 上一家店的数字。
+         * 上一家店的数字。变量归 state.js 所有,清理由 resetReportCaches() 做。
          */
         reset: function() {
             data = {};
             // ⚠️ 不能写 init():仓库里没有全局 init 函数,那是 ReferenceError。
             // State.init() 是同一个闭包里的方法,等价于重新初始化所有键。
             State.init();
-            _currentReport = null;
-            _currentYearly = null;
-            _currentUtilities = null;
+            resetReportCaches();
         },
 
         /** 获取所有数据 */
