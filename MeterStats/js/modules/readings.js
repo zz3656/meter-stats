@@ -104,13 +104,15 @@ function renderReadingTable(readings) {
         if (r.rehearsal) tags.push('<span class="tag tag-rehearsal" title="排练">排练</span>');
         if (r.programming) tags.push('<span class="tag tag-programming" title="编程">编程</span>');
         var tagsHtml = tags.length ? tags.join(' ') : '';
+        // 表值按当前门店的表集合出列(P2),读值走 meterValue —— 自定义表在 meters 字典里
+        var meterCells = (window.METER_KEYS || []).map(function(k) {
+            var v = (typeof meterValue === 'function') ? meterValue(r, k) : r[k];
+            return '<td>' + (v == null ? '—' : Number(v).toFixed(2)) + '</td>';
+        }).join('');
         return (
             '<tr data-date="' + r.date + '" data-type="reading">' +
                 '<td>' + r.date + '</td>' +
-                '<td>' + (r.hall == null ? '—' : r.hall.toFixed(2)) + '</td>' +
-                '<td>' + (r.fire == null ? '—' : r.fire.toFixed(2)) + '</td>' +
-                '<td>' + (r.private_room == null ? '—' : r.private_room.toFixed(2)) + '</td>' +
-                '<td>' + (r.ac == null ? '—' : r.ac.toFixed(2)) + '</td>' +
+                meterCells +
                 '<td style="color:var(--text-muted);font-size:12px;">' + (r.note ? escapeHtml(r.note) : '—') + tagsHtml + '</td>' +
                 '<td>' +
                     '<button class="edit-btn" data-action="edit-reading" data-date="' + r.date + '">编辑</button> ' +
@@ -227,10 +229,8 @@ function enterEditMode(date, type) {
 
         var setVal = function(elId, val) { var el = document.getElementById(elId); if (el) el.value = val; };
         setVal('reading-edit-date', row.date);
-        setVal('reading-edit-hall', row.hall != null ? row.hall : '');
-        setVal('reading-edit-fire', row.fire != null ? row.fire : '');
-        setVal('reading-edit-private_room', row.private_room != null ? row.private_room : '');
-        setVal('reading-edit-ac', row.ac != null ? row.ac : '');
+        // 表值按当前门店的表集合回填(P2)—— 自定义表的值在 meters 字典里,fill 内部走 meterValue
+        window.MeterForm.fill(row, 'reading-edit-');
         var rehEl = document.getElementById('reading-edit-rehearsal');
         if (rehEl) rehEl.checked = !!row.rehearsal;
         var progEl = document.getElementById('reading-edit-programming');
@@ -243,13 +243,12 @@ function enterEditMode(date, type) {
 
         var doSave = function() {
             if (_submitting) return;
-            var ids = { date: 'reading-edit-date', hall: 'reading-edit-hall', fire: 'reading-edit-fire',
-                        private_room: 'reading-edit-private_room', ac: 'reading-edit-ac', note: 'reading-edit-note' };
-            var num = function(id) { var v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
-            var hallV = num(ids.hall), fireV = num(ids.fire), prV = num(ids.private_room), acV = num(ids.ac);
-            var allVals = [hallV, fireV, prV, acV];
-            if (allVals.every(function(v) { return v === null; })) { showAlert('请至少填写一块表的读数', 'error'); return; }
-            if (allVals.some(function(v) { return v !== null && isNaN(v); })) { showAlert('读数必须是数字', 'error'); return; }
+            var ids = { date: 'reading-edit-date', note: 'reading-edit-note' };
+            var picked = window.MeterForm.collect('reading-edit-');
+            if (picked.hasNaN) { showAlert('读数必须是数字', 'error'); return; }
+            if (!picked.keys.some(function(k) { return picked.all[k] !== null; })) {
+                showAlert('请至少填写一块表的读数', 'error'); return;
+            }
 
             var newDate = document.getElementById(ids.date).value;
             if (!newDate) { showAlert('请选择日期', 'error'); return; }
@@ -275,16 +274,15 @@ function enterEditMode(date, type) {
 
             function saveNewReading() {
                 setSubmitting(true);
-                Api.readings.update(date, {
-                    date: newDate,
-                    hall: hallV === null ? undefined : hallV,
-                    fire: fireV === null ? undefined : fireV,
-                    private_room: prV === null ? undefined : prV,
-                    ac: acV === null ? undefined : acV,
-                    note: document.getElementById(ids.note).value.trim(),
-                    rehearsal: document.getElementById('reading-edit-rehearsal').checked,
-                    programming: document.getElementById('reading-edit-programming').checked,
-                }).then(function() {
+                Api.readings.update(date, Object.assign(
+                    { date: newDate },
+                    window.MeterForm.toPayload(picked),   // 只带填了的表(空 = 不动旧值)
+                    {
+                        note: document.getElementById(ids.note).value.trim(),
+                        rehearsal: document.getElementById('reading-edit-rehearsal').checked,
+                        programming: document.getElementById('reading-edit-programming').checked,
+                    }
+                )).then(function() {
                     showAlert('✓ ' + date + ' 抄表已更新为 ' + newDate, 'success');
                     closeReadingEditModal();
                     refreshAndRender();
@@ -307,7 +305,9 @@ function enterEditMode(date, type) {
         });
 
         modalEl.classList.add('show');
-        document.getElementById('reading-edit-hall')?.focus();
+        // 聚焦第一块表(门店可能有 2 块,也可能 5 块)
+        var firstK = (window.MeterForm.keys() || [])[0];
+        if (firstK) document.getElementById('reading-edit-' + firstK)?.focus();
     });
 }
 
@@ -422,13 +422,13 @@ function renderChargeTable(charges) {
         var totalKwh = 0;
         for (var i = 0; i < CHARGE_METERS.length; i++) {
             var m = CHARGE_METERS[i];
-            totalKwh += realKwh(c[m.key] || 0, m.key);
+            totalKwh += realKwh(meterValue(c, m.key) || 0, m.key);
         }
         var totalYuan = totalKwh * ELECTRICITY_PRICE;
         var cells = '';
         for (var i = 0; i < CHARGE_METERS.length; i++) {
             var m = CHARGE_METERS[i];
-            var v = c[m.key] || 0;
+            var v = meterValue(c, m.key) || 0;
             cells += '<td>' + (v > 0 ? v.toFixed(1) : '—') + '</td>';
         }
         var noteCell = c.note ? escapeHtml(c.note) : '—';
@@ -526,10 +526,8 @@ function enterChargeEditMode(id) {
 
             var setVal = function(elId, val) { var el = document.getElementById(elId); if (el) el.value = val; };
             setVal('charge-edit-date', c.date);
-            setVal('charge-edit-hall', c.hall || '');
-            setVal('charge-edit-fire', c.fire || '');
-            setVal('charge-edit-private_room', c.private_room || '');
-            setVal('charge-edit-ac', c.ac || '');
+            // 表值按当前门店的表集合回填(P2)
+            window.MeterForm.fill(c, 'charge-edit-');
             setVal('charge-edit-note', c.note || '');
 
             var modalEl = document.getElementById('charge-edit-modal-backdrop');
@@ -541,21 +539,19 @@ function enterChargeEditMode(id) {
                 var date = document.getElementById('charge-edit-date').value;
                 if (!date) { showAlert('请选择日期', 'error'); return; }
 
-                var num = function(id) { var v = document.getElementById(id).value; return v === '' ? 0 : parseFloat(v); };
-
-                var updated = {
-                    date: date,
-                    hall: num('charge-edit-hall'),
-                    fire: num('charge-edit-fire'),
-                    private_room: num('charge-edit-private_room'),
-                    ac: num('charge-edit-ac'),
-                    note: document.getElementById('charge-edit-note').value.trim(),
-                };
-
+                // 充值表单的空输入语义是 0(不是"没填"),与改造前一致
+                var picked = window.MeterForm.collect('charge-edit-');
+                if (picked.hasNaN) { showAlert('充值度数必须是数字', 'error'); return; }
+                var updated = { date: date, meters: {} };
                 var allZero = true;
-                for (var i = 0; i < CHARGE_METERS.length; i++) {
-                    if (updated[CHARGE_METERS[i].key] !== 0) { allZero = false; break; }
-                }
+                picked.keys.forEach(function(k) {
+                    var v = (picked.all[k] === null) ? 0 : picked.all[k];
+                    if (v !== 0) allZero = false;
+                    if (window.MeterForm.LEGACY_KEYS.indexOf(k) >= 0) updated[k] = v;
+                    else updated.meters[k] = v;
+                });
+                if (!Object.keys(updated.meters).length) delete updated.meters;
+                updated.note = document.getElementById('charge-edit-note').value.trim();
                 if (allZero) { showAlert('至少填写一块表的充值度数', 'error'); return; }
 
                 setSubmitting(true);
@@ -580,7 +576,8 @@ function enterChargeEditMode(id) {
             });
 
             modalEl.classList.add('show');
-            document.getElementById('charge-edit-hall')?.focus();
+            var firstCh = (window.MeterForm.keys() || [])[0];
+            if (firstCh) document.getElementById('charge-edit-' + firstCh)?.focus();
         });
     });
 }

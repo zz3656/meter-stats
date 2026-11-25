@@ -518,13 +518,29 @@ git commit -m "feat(ui): meterConfig 按当前店重建表集合,切店后重载
 
 ### Task 4: 前端 —— 抄表 / 充值表单动态化
 
+> **状态:已完成**(2026-11-26)。新增 `tests/test_dynamic_forms.py` 14 项;全量 **617** 项全绿;
+> ruff 269 / mypy 793 零新增。
+>
+> **与原计划的偏差(都是必要的)**:
+> 1. 没有把渲染逻辑分别写进 `readings.js` / `charges.js` —— 新建 `js/core/meterForm.js`
+>    作为唯一渲染器。两处各写一遍 4 表逻辑正是本轮要消灭的东西。
+> 2. 计划文件地图漏了 `admin.js`:`submitReadingAdd`(抄表提交 + 表数上升提醒 +
+>    覆盖确认弹窗)和 `prefillChargeFromRise` 都住在那里,不改就是「表单动态了、
+>    提交还按 4 表」。
+> 3. 还改了 `init.js`(渲染时机)与 `storeSwitcher.js`(切店后先重载表配置再拉数据 ——
+>    原注释写着「重新加载电表配置」但代码从来没做,切店会继续用上一家店的表)。
+>
+> **实施中发现**:除渲染外还有一批 `getElementById('reading-add-hall')` 这类
+> **写死的表 id 取值/聚焦/清空**(readings.js 2 处、admin.js 2 处)—— 门店没有那块表时
+> 静默返回 null,表现为「点新增没反应」「清空没清掉」。已全部改为按表集合取,并加静态护栏。
+
 **Files:**
 - Modify: `MeterStats/index.html`
 - Modify: `MeterStats/js/modules/readings.js`
 - Modify: `MeterStats/js/modules/charges.js`
 - Create: `tests/test_dynamic_forms.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 node 沙箱，喂「2 表」配置：
 1. 生成抄表新增表单的 DOM 片段后，包含 2 个 `<input>`，`data-key` 是那 2 个 key。
@@ -535,7 +551,7 @@ node 沙箱，喂「2 表」配置：
 5. **6 组都要覆盖**：录入 / 新增 / 编辑 × 抄表 / 充值 —— 逐组断言，
    漏改一组就是「新增对了、编辑还是老的」。测试里用循环跑 6 组，别只测 1 组。
 
-- [ ] **Step 2: `index.html` 静态项换成容器**
+- [x] **Step 2: `index.html` 静态项换成容器**
 
 现状是 **6 组 × 4 表 = 24 个静态 `<input>`**，每组只出现一处 `private_room` 但整组 4 块表都写死：
 
@@ -562,7 +578,7 @@ node 沙箱，喂「2 表」配置：
 
 保留 `date` / `note` 等**非表**字段的静态结构。
 
-- [ ] **Step 3: `readings.js` / `charges.js` 改为按集合渲染**
+- [x] **Step 3: `readings.js` / `charges.js` 改为按集合渲染**
 
 - 渲染：遍历 `METER_KEYS`（抄表）/ `CHARGE_METERS`（充值）生成 input，
   `id` 用 `reading-add-<key>`、`charge-add-<key>` 等**与现状一致**的命名，减少下游改动。
@@ -570,13 +586,13 @@ node 沙箱，喂「2 表」配置：
   旧 4 表仍按顶层字段提交，自定义表放 `meters` 字典（与 Task 2 后端一致）。
 - 渲染表格表头/单元格：按 `METER_KEYS` 生成 `<th>` 与 `<td>`，不再固定 4 列。
 
-- [ ] **Step 4: 运行测试**
+- [x] **Step 4: 运行测试**
 
 ```bash
 python3 -m unittest tests.test_dynamic_forms -v
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add MeterStats/index.html MeterStats/js/modules/readings.js MeterStats/js/modules/charges.js \

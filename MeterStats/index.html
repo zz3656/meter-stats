@@ -161,25 +161,7 @@
             <input type="date" id="date" required />
           </div>
 
-          <div class="form-row reading">
-            <label>1#大厅 <span class="hint">读数 × 160</span></label>
-            <input type="number" id="hall" step="0.01" placeholder="例如 65.30" />
-          </div>
-
-          <div class="form-row reading">
-            <label>2#消防 <span class="hint">读数即实际电量</span></label>
-            <input type="number" id="fire" step="0.01" placeholder="例如 1305.20" />
-          </div>
-
-          <div class="form-row reading">
-            <label>3#包厢 <span class="hint">读数 × 160</span></label>
-            <input type="number" id="private_room" step="0.01" placeholder="例如 79.80" />
-          </div>
-
-          <div class="form-row reading">
-            <label>4#空调 <span class="hint">读数 × 160</span></label>
-            <input type="number" id="ac" step="0.01" placeholder="例如 52.10" />
-          </div>
+          <div id="mf-reading-entry"></div>
 
           <div class="form-row">
             <label>标签 <span class="hint">选填</span></label>
@@ -216,22 +198,7 @@
             <label>充值日期</label>
             <input type="date" id="charge-date" required />
           </div>
-          <div class="form-row reading">
-            <label>1#大厅 <span class="hint">表读数 ×160</span></label>
-            <input type="number" id="charge-hall" step="0.01" placeholder="没充就留空" min="0" />
-          </div>
-          <div class="form-row reading">
-            <label>2#消防 <span class="hint">表读数</span></label>
-            <input type="number" id="charge-fire" step="0.01" placeholder="没充就留空" min="0" />
-          </div>
-          <div class="form-row reading">
-            <label>3#包厢 <span class="hint">表读数 ×160</span></label>
-            <input type="number" id="charge-private_room" step="0.01" placeholder="没充就留空" min="0" />
-          </div>
-          <div class="form-row reading">
-            <label>4#空调 <span class="hint">表读数 ×160</span></label>
-            <input type="number" id="charge-ac" step="0.01" placeholder="没充就留空" min="0" />
-          </div>
+          <div id="mf-charge-entry"></div>
           <div class="form-row">
             <label>备注 <span class="hint">选填</span></label>
             <input type="text" id="charge-note" placeholder="例如:晚上 10 点充的" maxlength="100" />
@@ -311,15 +278,7 @@
           <div style="overflow-x:auto">
             <table class="history-table" id="history-table">
               <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>1#大厅</th>
-                  <th>2#消防</th>
-                  <th>3#包厢</th>
-                  <th>4#空调</th>
-                  <th>备注</th>
-                  <th></th>
-                </tr>
+                <tr id="reading-thead-row"></tr>
               </thead>
               <tbody></tbody>
             </table>
@@ -332,16 +291,7 @@
           <div style="overflow-x:auto">
             <table class="history-table" id="charge-table">
               <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>1#大厅</th>
-                  <th>2#消防</th>
-                  <th>3#包厢</th>
-                  <th>4#空调</th>
-                  <th>金额</th>
-                  <th>备注</th>
-                  <th></th>
-                </tr>
+                <tr id="charge-thead-row"></tr>
               </thead>
               <tbody></tbody>
             </table>
@@ -1326,22 +1276,7 @@
           <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
           <input type="date" id="reading-add-date" style="width:100%;" />
         </div>
-        <div style="margin-bottom:12px;">
-          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">读数 ×160</span></label>
-          <input type="number" id="reading-add-hall" step="0.01" placeholder="例如 65.30" style="width:100%;" />
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">读数即实际电量</span></label>
-          <input type="number" id="reading-add-fire" step="0.01" placeholder="例如 1305.20" style="width:100%;" />
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">读数 ×160</span></label>
-          <input type="number" id="reading-add-private_room" step="0.01" placeholder="例如 79.80" style="width:100%;" />
-        </div>
-        <div style="margin-bottom:12px;">
-          <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">读数 ×160</span></label>
-          <input type="number" id="reading-add-ac" step="0.01" placeholder="例如 52.10" style="width:100%;" />
-        </div>
+        <div id="mf-reading-add"></div>
         <div style="margin-bottom:12px;">
           <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">标签 <span class="hint">选填</span></label>
           <div style="display:flex;gap:16px;align-items:center;">
@@ -1398,22 +1333,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
         <input type="date" id="charge-add-date" style="width:100%;" />
       </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-add-hall" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">表读数</span></label>
-        <input type="number" id="charge-add-fire" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-add-private_room" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-add-ac" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
+      <div id="mf-charge-add"></div>
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
         <input type="text" id="charge-add-note" placeholder="例如:晚上 10 点充的" maxlength="100" style="width:100%;" />
@@ -1448,22 +1368,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
         <input type="date" id="reading-edit-date" style="width:100%;" />
       </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">读数 ×160</span></label>
-        <input type="number" id="reading-edit-hall" step="0.01" placeholder="例如 65.30" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">读数即实际电量</span></label>
-        <input type="number" id="reading-edit-fire" step="0.01" placeholder="例如 1305.20" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">读数 ×160</span></label>
-        <input type="number" id="reading-edit-private_room" step="0.01" placeholder="例如 79.80" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">读数 ×160</span></label>
-        <input type="number" id="reading-edit-ac" step="0.01" placeholder="例如 52.10" style="width:100%;" />
-      </div>
+      <div id="mf-reading-edit"></div>
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">标签 <span class="hint">选填</span></label>
         <div style="display:flex;gap:16px;align-items:center;">
@@ -1529,22 +1434,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
         <input type="date" id="charge-edit-date" style="width:100%;" />
       </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">1#大厅 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-edit-hall" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">2#消防 <span class="hint">表读数</span></label>
-        <input type="number" id="charge-edit-fire" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">3#包厢 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-edit-private_room" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
-      <div style="margin-bottom:12px;">
-        <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">4#空调 <span class="hint">表读数 ×160</span></label>
-        <input type="number" id="charge-edit-ac" step="0.01" placeholder="没充就留空" min="0" style="width:100%;" />
-      </div>
+      <div id="mf-charge-edit"></div>
       <div style="margin-bottom:0;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填</span></label>
         <input type="text" id="charge-edit-note" placeholder="例如:晚上 10 点充的" maxlength="100" style="width:100%;" />
@@ -1560,6 +1450,7 @@
   <!-- 模块化加载 -->
   <script src="js/helpers/utils.js"></script>
   <script src="js/core/meterConfig.js"></script>
+  <script src="js/core/meterForm.js"></script>
   <script src="js/core/storeContext.js"></script>
   <script src="js/core/api.js"></script>
   <script src="js/core/state.js"></script>

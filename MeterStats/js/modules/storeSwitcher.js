@@ -81,11 +81,19 @@ async function switchStoreTo(storeId) {
 }
 
 /** 门店上下文变化 → 渲染切换器;需要重拉数据时统一重拉 */
-function onStoreContextChanged(state, reason) {
+async function onStoreContextChanged(state, reason) {
   renderStoreSwitcher(state);
   if (reason === 'switch' || reason === 'recovered') {
-    // 切店后要重新拉全量数据 + 重新加载电表配置 + 重画报表。
-    // 门店上下文已经清过缓存,这里拉回来的就是新门店的数据。
+    // 切店后要重新加载电表配置(每店自己的表集合)+ 重新拉全量数据 + 重画报表。
+    // ⚠️ 顺序不能反:先 loadMeterConfig 再 renderMeterUi 再 loadAppData。
+    // 反了就是「按上一家店的表渲染表单,填进去的却是新店的数据」——
+    // 而且不会报错,只会让度数算错。
+    try {
+      if (typeof loadMeterConfig === 'function') await loadMeterConfig();
+      if (typeof window.renderMeterUi === 'function') window.renderMeterUi();
+    } catch (e) {
+      console.warn('切店后重载表配置失败:', e);
+    }
     try {
       if (typeof window.loadAppData === 'function') window.loadAppData();
     } catch (e) {

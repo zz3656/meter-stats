@@ -1128,23 +1128,33 @@ initAuth();
 // ==================== 表单提交 (从旧 forms_submit.js 迁移) ====================
 
 // 抄表录入侧栏/弹窗共用提交函数
+// 一行抄表/充值的表值摘要(「1#大厅 12.3 · 2#消防 —」)—— 覆盖确认弹窗用。
+// 按当前门店的表集合生成(P2):门店可能是 2 块表,也可能 5 块。
+function meterSummaryText(row) {
+  return (window.MeterForm.keys() || []).map(function(k, i) {
+    var meta = (typeof METER_META === 'function') ? METER_META(k) : { label: k };
+    var v = (typeof meterValue === 'function') ? meterValue(row, k) : row[k];
+    return (i + 1) + '#' + (meta.label || k) + ' ' + (v == null ? '—' : v);
+  }).join(' · ');
+}
+
 function submitReadingAdd(source) {
   if (_submitting) return;
-  var ids = source === 'sidebar'
-    ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
-    : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
-  var num = function(id) { var v = document.getElementById(id).value; return v === '' ? null : parseFloat(v); };
-  var hallV = num(ids.hall), fireV = num(ids.fire), prV = num(ids.private_room), acV = num(ids.ac);
-  var allVals = [hallV, fireV, prV, acV];
-  if (allVals.every(function(v) { return v === null; })) { showAlert('请至少填写一块表的读数', 'error'); return; }
-  if (allVals.some(function(v) { return v !== null && isNaN(v); })) { showAlert('读数必须是数字', 'error'); return; }
-  var row = {
-    date: document.getElementById(ids.date).value,
-    hall: hallV, fire: fireV, private_room: prV, ac: acV,
-    note: document.getElementById(ids.note).value.trim(),
-    rehearsal: ids.rehearsal ? document.getElementById(ids.rehearsal).checked : false,
-    programming: ids.programming ? document.getElementById(ids.programming).checked : false,
-  };
+  var ctx = source === 'sidebar'
+    ? { date: 'date', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming', prefix: '' }
+    : { date: 'reading-add-date', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming', prefix: 'reading-add-' };
+  // 表值按当前门店的表集合收集(P2);旧 4 表走顶层字段,自定义表走 meters 字典
+  var picked = window.MeterForm.collect(ctx.prefix);
+  if (picked.hasNaN) { showAlert('读数必须是数字', 'error'); return; }
+  if (!picked.keys.some(function(k) { return picked.all[k] !== null; })) {
+    showAlert('请至少填写一块表的读数', 'error'); return;
+  }
+  var row = { date: document.getElementById(ctx.date).value };
+  var payload = window.MeterForm.toPayload(picked, { keepNullLegacy: true });
+  Object.keys(payload).forEach(function(k) { row[k] = payload[k]; });
+  row.note = document.getElementById(ctx.note).value.trim();
+  row.rehearsal = ctx.rehearsal ? document.getElementById(ctx.rehearsal).checked : false;
+  row.programming = ctx.programming ? document.getElementById(ctx.programming).checked : false;
   if (!row.date) { showAlert('请选择日期', 'error'); return; }
 
   // 检查是否已有该日期的抄表记录
@@ -1157,10 +1167,11 @@ function submitReadingAdd(source) {
     });
     var rises = [];   // { key, label, deltaMeter } —— 保留数值，后面估算充值数要用
     if (prev) {
-      [['hall', '大厅'], ['fire', '消防'], ['private_room', '包厢'], ['ac', '空调']].forEach(function(m) {
-        var nv = row[m[0]], pv = prev[m[0]];
-        if (nv !== null && typeof pv === 'number' && nv > pv) {
-          rises.push({ key: m[0], label: m[1], deltaMeter: nv - pv });
+      window.MeterForm.keys().forEach(function(k) {
+        var nv = meterValue(row, k), pv = meterValue(prev, k);
+        if (nv != null && typeof pv === 'number' && nv > pv) {
+          var lab = (typeof METER_META === 'function') ? METER_META(k).label : k;
+          rises.push({ key: k, label: lab, deltaMeter: nv - pv });
         }
       });
     }
@@ -1172,8 +1183,8 @@ function submitReadingAdd(source) {
       if (existing) {
         showModal({ title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
           body: '<strong>' + row.date + '</strong> 已存在数据,是否覆盖?<br><br>' +
-            '<span style="opacity:0.7">现有:</span> 大厅 ' + existing.hall + ' · 消防 ' + existing.fire + ' · 包厢 ' + existing.private_room + ' · 空调 ' + existing.ac + '<br>' +
-            '<span style="opacity:0.7">新数据:</span> 大厅 ' + row.hall + ' · 消防 ' + row.fire + ' · 包厢 ' + row.private_room + ' · 空调 ' + row.ac,
+            '<span style="opacity:0.7">现有:</span> ' + meterSummaryText(existing) + '<br>' +
+            '<span style="opacity:0.7">新数据:</span> ' + meterSummaryText(row),
           confirmText: '覆盖', confirmKind: 'primary' }).then(function(overOK) {
             if (!overOK) return; doSaveReading();
           });
@@ -1198,12 +1209,10 @@ function submitReadingAdd(source) {
       setSubmitting(true);
       saveReadingRemote(row).then(function() {
         showAlert('✓ ' + row.date + ' 已保存', 'success');
-        var paths = source === 'sidebar'
-          ? { date: 'date', hall: 'hall', fire: 'fire', private_room: 'private_room', ac: 'ac', note: 'entry-note', rehearsal: 'entry-rehearsal', programming: 'entry-programming' }
-          : { date: 'reading-add-date', hall: 'reading-add-hall', fire: 'reading-add-fire', private_room: 'reading-add-private_room', ac: 'reading-add-ac', note: 'reading-add-note', rehearsal: 'reading-add-rehearsal', programming: 'reading-add-programming' };
-        ['hall', 'fire', 'private_room', 'ac', 'note'].forEach(function(k) { document.getElementById(paths[k]).value = ''; });
-        if (paths.rehearsal) document.getElementById(paths.rehearsal).checked = false;
-        if (paths.programming) document.getElementById(paths.programming).checked = false;
+        window.MeterForm.clear(ctx.prefix);
+        var noteEl = document.getElementById(ctx.note); if (noteEl) noteEl.value = '';
+        if (ctx.rehearsal) document.getElementById(ctx.rehearsal).checked = false;
+        if (ctx.programming) document.getElementById(ctx.programming).checked = false;
         if (source === 'modal') closeReadingAddModal();
         refreshAndRender();
         // 抄表已保存；若表底上升却找不到对应充值记录，再追问一句，避免"忘了录充值"导致统计失真
@@ -1263,11 +1272,8 @@ function gotoChargeTab() {
 // 按表底上升量 + 日均估算各表充值数（表字，取整到十位），预填进「新增充值」表单
 function prefillChargeFromRise(row, prev, rises) {
   gotoChargeTab();
-  var ids = { hall: 'charge-add-hall', fire: 'charge-add-fire', private_room: 'charge-add-private_room', ac: 'charge-add-ac' };
-  Object.keys(ids).forEach(function(k) {
-    var el = document.getElementById(ids[k]);
-    if (el) el.value = '';
-  });
+  // 按当前门店的表集合清空(P2)—— 只清旧 4 表会把自定义表上一次的值留着
+  window.MeterForm.clear('charge-add-');
 
   var days = (new Date(row.date) - new Date(prev.date)) / 86400000;
   if (!(days > 0)) days = 1;
@@ -1281,7 +1287,7 @@ function prefillChargeFromRise(row, prev, rises) {
     var dailyKwh = usage ? usage.daily : 0;
     var est = r.deltaMeter + (dailyKwh * days) / mult;      // 上升量 + 这段用掉的
     var v = est >= 10 ? Math.round(est / 10) * 10 : Math.round(est);  // 充值都是整数，不存在个位
-    var el = document.getElementById(ids[r.key]);
+    var el = document.getElementById('charge-add-' + r.key);
     if (el) el.value = v;
     filled.push(r.label + ' ' + v);
   });
@@ -1317,7 +1323,8 @@ function openReadingAddModal(mode) {
   if (dateEl && !dateEl.value) dateEl.value = todayStr();
 
   document.getElementById('reading-add-modal-backdrop').classList.add('show');
-  const focusEl = document.getElementById(m === 'utility' ? 'utility-add-main_meter' : 'reading-add-hall');
+  const firstMeterKey = (window.MeterForm.keys() || ['hall'])[0];
+  const focusEl = document.getElementById(m === 'utility' ? 'utility-add-main_meter' : 'reading-add-' + firstMeterKey);
   if (focusEl) focusEl.focus();
 }
 function closeReadingAddModal() {

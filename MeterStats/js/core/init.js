@@ -76,6 +76,10 @@ window.loadAppData = async function loadAppData() {
   // 加载电表配置（电价 / 倍率 / 水价）—— ELECTRICITY_PRICE 依赖它取后端值
   try { await loadMeterConfig(); } catch (e) { console.warn('loadMeterConfig 失败:', e); }
 
+  // 表数量/名称/倍率可能因门店而变 → 重渲染 6 组表单与两个记录表的表头。
+  // 必须在 loadMeterConfig() **之后**,否则渲染的还是默认 4 表。
+  try { window.renderMeterUi(); } catch (e) { console.warn('表表单渲染失败:', e); }
+
   // 预加载默认月份的报表（与旧版 DOMContentLoaded 行为一致）
   try { if (typeof loadMonthlyReport === 'function') await loadMonthlyReport(); } catch (e) { console.warn('默认月报加载失败:', e); }
 };
@@ -91,6 +95,10 @@ window.loadAppData = async function loadAppData() {
   // ⚠️ 必须显示默认页面：所有 .content-section 默认 display:none，
   // 不调用 switchSection 的话登录后主内容区是全空白。
   if (typeof switchSection === 'function') switchSection('reading-record');
+
+  // 先按默认 4 表把表单/表头渲染出来 —— 登录前 DOM 里就要有输入框,
+  // 否则加载失败或未登录时页面是一片空白。
+  try { if (typeof window.renderMeterUi === 'function') window.renderMeterUi(); } catch (e) { /* ignore */ }
 })();
 
 // ===== 报表/记录页的下拉与按钮事件绑定 =====
