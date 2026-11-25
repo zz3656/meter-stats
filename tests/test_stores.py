@@ -14,10 +14,11 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
-from modules.stores import context  # noqa: E402
+from modules.stores import config, context, registry  # noqa: E402
 
 import app_handler  # noqa: E402
 import routing  # noqa: E402
@@ -383,3 +384,183 @@ class TestReportCacheStoreScoping(StoreTestBase):
         self.assertEqual(stats["size"], 1)
         self.assertEqual(stats["entries"][0]["store"], "s002")
         self.assertEqual(stats["entries"][0]["month"], "2026-06")
+
+
+class TestStoreRegistry(StoreTestBase):
+    """门店注册表。"""
+
+    def _settings(self) -> dict[str, Any]:
+        from modules.system.settings_handler import get_settings, init_settings
+        init_settings(self.data_dir)
+        return get_settings()
+
+    def test_ensure_default_store_creates_main(self) -> None:
+        settings = self._settings()
+        store = registry.ensure_default_store(settings)
+        self.assertEqual(store["id"], "main")
+        self.assertEqual(store["name"], "总店")
+        self.assertEqual(len(registry.list_stores(settings)), 1)
+
+    def test_ensure_default_store_is_idempotent(self) -> None:
+        settings = self._settings()
+        registry.ensure_default_store(settings)
+        registry.ensure_default_store(settings)
+        self.assertEqual(len(registry.list_stores(settings)), 1)
+
+    def test_add_store_registers_and_creates_directory(self) -> None:
+        settings = self._settings()
+        store = registry.add_store("s002", "国贸店", code="B002", settings=settings)
+        self.assertEqual(store["name"], "国贸店")
+        self.assertTrue((self.data_dir / "stores" / "s002").is_dir())
+        self.assertEqual(len(registry.list_stores(settings)), 2)
+
+    def test_add_store_rejects_duplicate_id(self) -> None:
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        with self.assertRaises(ValueError):
+            registry.add_store("s002", "重复店", settings=settings)
+
+    def test_add_store_rejects_invalid_id(self) -> None:
+        settings = self._settings()
+        with self.assertRaises(ValueError):
+            registry.add_store("../evil", "越权店", settings=settings)
+
+    def test_delete_store_cannot_delete_default(self) -> None:
+        settings = self._settings()
+        registry.ensure_default_store(settings)
+        self.assertFalse(registry.delete_store("main", settings=settings))
+        self.assertIsNotNone(registry.get_store("main", settings=settings))
+
+    def test_delete_store_removes_branch(self) -> None:
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        self.assertTrue(registry.delete_store("s002", settings=settings))
+        self.assertIsNone(registry.get_store("s002", settings=settings))
+
+    def test_update_store_changes_name(self) -> None:
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        updated = registry.update_store("s002", {"name": "国贸分店"}, settings=settings)
+        self.assertEqual(updated["name"], "国贸分店")
+
+    def test_update_store_rejects_empty_name(self) -> None:
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        with self.assertRaises(ValueError):
+            registry.update_store("s002", {"name": "   "}, settings=settings)
+
+    def test_user_store_scope_reads_all_stores_flag(self) -> None:
+        settings = self._settings()
+        users = settings.get("users", [])
+        users[0]["all_stores"] = True
+        scope = registry.user_store_scope(users[0]["id"], settings=settings)
+        self.assertIsNotNone(scope)
+        assert scope is not None  # mypy:assertIsNotNone 不做类型收窄
+        self.assertTrue(scope[0])
+
+    def test_user_store_scope_returns_none_for_unknown_user(self) -> None:
+        settings = self._settings()
+        self.assertIsNone(registry.user_store_scope(999999, settings=settings))
+
+    # --- 以下为简报用例未覆盖、但属于本任务明确要求的行为 ---
+
+    def test_add_store_creates_data_files_and_store_json(self) -> None:
+        """分店建好就要能用:6 个空数据文件 + 默认 store.json 都要落盘。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        store_dir = self.data_dir / "stores" / "s002"
+        for fname in DATA_FILES.values():
+            p = store_dir / fname
+            self.assertTrue(p.exists(), fname)
+            self.assertEqual(json.loads(p.read_text(encoding="utf-8")), [])
+        cfg = json.loads((store_dir / "store.json").read_text(encoding="utf-8"))
+        self.assertEqual(cfg["id"], "s002")
+        self.assertEqual(cfg["name"], "国贸店")
+        self.assertEqual(len(cfg["meters"]), 4)
+
+    def test_add_store_persists_to_settings_file(self) -> None:
+        """不传 settings 时,改动必须落回全局 settings.json。"""
+        self._settings()
+        registry.add_store("s002", "国贸店")
+        on_disk = json.loads((self.data_dir / "settings.json").read_text(encoding="utf-8"))
+        self.assertEqual([s["id"] for s in on_disk["stores"]], ["main", "s002"])
+
+    def test_add_store_rejects_empty_name(self) -> None:
+        settings = self._settings()
+        with self.assertRaises(ValueError):
+            registry.add_store("s002", "   ", settings=settings)
+
+    def test_add_store_always_registers_default_store(self) -> None:
+        """总店必须始终在注册表里 —— 挂分店不能把总店挤掉。"""
+        settings = self._settings()
+        registry.add_store("s002", "国贸店", settings=settings)
+        self.assertIsNotNone(registry.get_store("main", settings=settings))
+        self.assertEqual(registry.list_stores(settings)[0]["id"], "main")
+
+    def test_is_valid_store_id_blocks_path_traversal(self) -> None:
+        self.assertTrue(registry.is_valid_store_id("s002"))
+        self.assertTrue(registry.is_valid_store_id("Main_Store-1"))
+        self.assertFalse(registry.is_valid_store_id("../evil"))
+        self.assertFalse(registry.is_valid_store_id("a/b"))
+        self.assertFalse(registry.is_valid_store_id(""))
+        self.assertFalse(registry.is_valid_store_id("x" * 33))
+
+    def test_user_store_scope_defaults_admin_to_all_stores(self) -> None:
+        """没有 all_stores 字段时:admin 默认 True,其它角色默认 False。"""
+        settings = self._settings()
+        users = settings["users"]
+        users.append({"id": 2, "username": "staff", "role": "employee", "enabled": True})
+        self.assertEqual(registry.user_store_scope(users[0]["id"], settings=settings), (True, []))
+        self.assertEqual(registry.user_store_scope(2, settings=settings), (False, []))
+
+    def test_user_store_scope_returns_assigned_store_ids(self) -> None:
+        settings = self._settings()
+        users = settings["users"]
+        users.append({"id": 2, "username": "staff", "role": "employee",
+                      "enabled": True, "store_ids": ["s002"]})
+        self.assertEqual(registry.user_store_scope(2, settings=settings), (False, ["s002"]))
+
+
+class TestStoreConfig(StoreTestBase):
+    """门店配置 store.json。"""
+
+    def test_default_meters_are_four_tables(self) -> None:
+        self.assertEqual(len(config.DEFAULT_METERS), 4)
+        self.assertEqual(config.DEFAULT_METERS[0]["key"], "hall")
+
+    def test_write_and_read_store_config(self) -> None:
+        cfg = {"id": "s002", "name": "国贸店", "meters": config.DEFAULT_METERS, "config": {}}
+        config.write_store_config("s002", cfg)
+        read = config.read_store_config("s002")
+        self.assertEqual(read["name"], "国贸店")
+        self.assertEqual(len(read["meters"]), 4)
+
+    def test_get_store_settings_falls_back_to_defaults(self) -> None:
+        """门店还没有 store.json 时返回默认表定义,不抛异常。"""
+        cfg = config.get_store_settings()
+        self.assertEqual(len(cfg.get("meters", [])), 4)
+
+    def test_get_store_meters_returns_list(self) -> None:
+        self.assertIsInstance(config.get_store_meters(), list)
+
+    # --- 以下为简报用例未覆盖、但属于本任务明确要求的行为 ---
+
+    def test_store_config_path_rejects_path_traversal(self) -> None:
+        """门店 ID 会拼进路径 —— 非法 ID 必须报错,不能落到 stores/ 外面。"""
+        with self.assertRaises(ValueError):
+            config.store_config_path("../evil")
+
+    def test_read_store_config_returns_defaults_when_corrupted(self) -> None:
+        """store.json 损坏 → 返回默认配置,不抛异常。"""
+        p = config.store_config_path("s002")
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("{损坏", encoding="utf-8")
+        cfg = config.read_store_config("s002")
+        self.assertEqual(len(cfg["meters"]), 4)
+
+    def test_get_store_prices_returns_defaults(self) -> None:
+        prices = config.get_store_prices()
+        self.assertEqual(prices["electricity_price"], 0.9)
+        self.assertEqual(prices["water_price"], 4.5)
+        self.assertEqual(prices["main_mult"], 50)
+        self.assertEqual(prices["sub_mult"], 40)
