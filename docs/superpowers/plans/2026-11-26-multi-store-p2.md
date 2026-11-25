@@ -415,12 +415,20 @@ git commit -m "feat(api): 表计配置与数据接口改为按店,P2 表集合�
 
 ### Task 3: 前端 —— `meterConfig.js` 动态化
 
+> **状态:已完成**(2026-11-26)。新增 `tests/test_meter_config_frontend.py` 12 项
+> (含静态护栏 + node 行为验证);全量 **603** 项全绿;ruff 269 / mypy 793 零新增。
+> 实施中多做了一件事:`meterConfig.js` 里 **26 处** `row[key]` 直读全部换成 `meterValue()`
+> —— 自定义表的值在 `meters` 字典里,直读得到 undefined,充值归属与冲突判定会
+> 静默整段失效(与后端 5 处 `.get(key)` 是同一类坑)。`meterValue` 缺失时返回
+> **undefined** 而不是 null:多处是裸算术,`undefined - x = NaN` 是「缺了就跳过」的
+> 依据,换成 null 会算出负数再被充值额抵消成正数。
+
 **Files:**
 - Modify: `MeterStats/js/core/meterConfig.js`
 - Modify: `MeterStats/js/core/storeContext.js`
 - Create: `tests/test_meter_config_frontend.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 node 沙箱（沿用 `tests/test_stores_frontend.py` 的 vm 范式）：
 1. 喂一个「2 块表」的 `/api/meters` 响应 → `METER_KEYS` 必须恰好 2 个、顺序一致；
@@ -430,9 +438,9 @@ node 沙箱（沿用 `tests/test_stores_frontend.py` 的 vm 范式）：
 4. `resetMeterConfig()` 之后 `METER_KEYS` 回到默认 4 表。
 5. **切店重载**：`StoreContext.switchTo()` 后必须调用 `resetMeterConfig()` + 重新 `loadMeterConfig()`。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
-- [ ] **Step 3: 重写 `loadMeterConfig()`**
+- [x] **Step 3: 重写 `loadMeterConfig()`**
 
 ```javascript
 async function loadMeterConfig() {
@@ -480,7 +488,7 @@ window.resetMeterConfig = function resetMeterConfig() {
 是原地改，改成整体替换后，**任何持有旧引用的地方都会读到旧值**。全仓搜
 `METER_CONFIG` 的引用确认都与 `window.` 同步读（当前都是），不要缓存局部引用。
 
-- [ ] **Step 4: 接上切店重载（D7）**
+- [x] **Step 4: 接上切店重载（D7）**
 
 `storeContext.js` 的 `clearCaches()` 里追加：
 
@@ -491,14 +499,14 @@ try { if (typeof resetMeterConfig === 'function') resetMeterConfig(); } catch (e
 并在 `switcher` 切店成功后由 UI 层重新 `loadMeterConfig()`（与 `loadAppData()` 同一处，
 顺序必须是**先 `loadMeterConfig()` 再 `loadAppData()`** —— 否则表单按旧表集合渲染）。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```bash
 python3 -m unittest tests.test_meter_config_frontend -v
 ```
 （需 node；缺失会自动 skip，那样不算通过 —— 本机是 **node v26.11.1**，必须实跑。）
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add MeterStats/js/core/meterConfig.js MeterStats/js/core/storeContext.js \

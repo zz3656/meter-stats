@@ -245,6 +245,13 @@
     try {
       if (typeof resetChargeAttrCache === 'function') resetChargeAttrCache();
     } catch (e) { console.warn('清理充值归属缓存失败:', e); }
+    // 6. 表元数据(每店自己的表集合)
+    //    不清这一项 = 切到 B 店还按 A 店的表渲染抄表表单,数据却提交到 B 店;
+    //    倍率也是 A 店的,度数直接算错。重新加载由 UI 层调 loadMeterConfig() 完成
+    //    (这里只负责回到默认值,不发起网络请求)。
+    try {
+      if (typeof resetMeterConfig === 'function') resetMeterConfig();
+    } catch (e) { console.warn('清理表元数据失败:', e); }
   }
 
   // ===== 对外 API =====

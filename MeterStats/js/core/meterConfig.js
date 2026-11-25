@@ -1,24 +1,79 @@
-// ===== 元数据（从 /api/meters 动态获取，含 fallback 默认值）=====
-window.METER_CONFIG = {
+// ===== 元数据（按当前门店动态获取，含 fallback 默认值）=====
+//
+// P2「每店自己的表数量与倍率」:下面三个全局必须由 loadMeterConfig() **一起**重建 ——
+// METER_CONFIG(元数据) / METER_KEYS(顺序) / CHARGE_METERS(充值表单与序号)。
+// 只重建其中一个,另一处仍按 4 表走,2 表门店就会显示/提交一块不存在的表,
+// 而且**不会报错**,只是数字悄悄错掉。
+//
+// 默认 4 表与后端 constants.DEFAULT_TABLES / store.json 的 DEFAULT_METERS 同源。
+const DEFAULT_METER_CONFIG = {
   hall:   { label: '大厅',   icon: '🎤', multiplier: 160, color: '#2563eb' },
   fire:   { label: '消防',   icon: '🧯', multiplier: 1,   color: '#dc2626' },
   private_room: { label: '包厢', icon: '🛋️', multiplier: 160, color: '#059669' },
   ac:     { label: '空调',   icon: '❄️', multiplier: 160, color: '#d97706' },
 };
+const DEFAULT_METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
+
+/** 由 key 列表生成充值用表配置（序号按顺序 1# 2# …） */
+function _chargeMetersFor(keys, cfg) {
+  return keys.map(function (k, i) {
+    var meta = (cfg && cfg[k]) || {};
+    return { key: k, label: meta.label || k, icon: meta.icon || '', meterNo: (i + 1) + '#' };
+  });
+}
+
+window.METER_CONFIG = JSON.parse(JSON.stringify(DEFAULT_METER_CONFIG));
+window.METER_KEYS = DEFAULT_METER_KEYS.slice();
 
 // ===== 电费单价（元/度）=====
 // ⚠️ 必须挂在 window 上：readings.js / reports.js / admin.js 都直接引用裸标识符
 // ELECTRICITY_PRICE。模块化重构时该常量丢失，导致 "ELECTRICITY_PRICE is not defined"。
-// 后端 constants.py / settings.json 同名字段为权威值，loadMeterConfig() 会用
+// 后端 store.json 的 config.electricity_price 为权威值，loadMeterConfig() 会用
 // /api/meters 返回的 config.electricity_price 覆盖这里（此处仅为不依赖后端时的兜底）。
 window.ELECTRICITY_PRICE = 0.9;
 
-// 快捷访问数组（保持顺序不变）
-window.METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
 window.METER_META = (key) => window.METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
 window.MULTIPLIER = (key) => window.METER_META(key).multiplier;
 window.LABELS = (key) => window.METER_META(key).label;
 window.COLORS = (key) => window.METER_META(key).color;
+
+/**
+ * 读一条记录里某块表的表底值 —— 对应后端 `report.row_values()`。
+ *
+ * 旧 4 表在记录**顶层**字段，门店自定义的表在 `meters` 字典里。
+ * 直接用 `row[key]` 读自定义表只会得到 undefined，表现为「这块表没抄过表」：
+ * 充值归属整段失效、冲突判定静默跳过，而且不报错。
+ * 所以本文件里所有读表值的地方都必须走这个函数（有静态护栏锁着）。
+ *
+ * ⚠️ 缺失时返回 **undefined**、不是 null：下面多处是裸算术（`a - b`），
+ * 旧代码里缺失值得到 NaN，`NaN > 0` 恒假 —— 那段"缺了就跳过"的行为是**对的**。
+ * 换成 null 会变成 `null - 5 = -5`，配上充值额就可能算出正数，
+ * 把「这块表没抄」的区间当成有效用电。null 与 undefined 在 `== null` 下等价，
+ * 所以判断处不受影响。
+ */
+window.meterValue = function meterValue(row, key) {
+  if (!row || typeof row !== 'object') return undefined;
+  var m = row.meters;
+  if (m && typeof m === 'object' && Object.prototype.hasOwnProperty.call(m, key)) {
+    return m[key];
+  }
+  return row[key];
+};
+
+/**
+ * 重置成默认 4 表 —— 切门店 / 登出时调用。
+ *
+ * 宁可先回到默认值再重新加载，也不能留着上一家店的表集合：
+ * 那样抄表表单会按 A 店的表渲染，数据却提交到 B 店。
+ */
+window.resetMeterConfig = function resetMeterConfig() {
+  window.METER_CONFIG = JSON.parse(JSON.stringify(DEFAULT_METER_CONFIG));
+  window.METER_KEYS = DEFAULT_METER_KEYS.slice();
+  window.CHARGE_METERS = _chargeMetersFor(window.METER_KEYS, window.METER_CONFIG);
+};
+
+// 初始化（=默认 4 表）
+window.resetMeterConfig();
 
 // 加载元数据（异步，不阻塞页面加载）
 async function loadMeterConfig() {
@@ -27,11 +82,38 @@ async function loadMeterConfig() {
     // 1. metersPublic 在 Api.admin 下，不是 Api.system
     // 2. _request 已经返回解析好的 JSON 对象，不能再 .json()
     const data = await Api.admin.metersPublic();
-    if (data && data.meters) {
-      for (const [key, val] of Object.entries(data.meters)) {
-        METER_CONFIG[key] = { ...METER_CONFIG[key], ...val };
+
+    // 后端返回的是**有序字典** {key: {...}}（JSON 对象保序，表定义顺序靠它）；
+    // 同时兼容数组形状，免得将来改形状时前端炸在 Object.keys 上。
+    let list = [];
+    if (data && Array.isArray(data.meters)) {
+      list = data.meters;
+    } else if (data && data.meters && typeof data.meters === 'object') {
+      list = Object.keys(data.meters).map(function (k) {
+        return Object.assign({ key: k }, data.meters[k] || {});
+      });
+    }
+
+    if (list.length) {
+      const cfg = {};
+      const keys = [];
+      for (const m of list) {
+        if (!m || !m.key) continue;
+        cfg[m.key] = {
+          label: m.label || m.key,
+          icon: m.icon || '',
+          multiplier: Number(m.multiplier) || 1,
+          color: m.color || '#888',
+        };
+        keys.push(m.key);
+      }
+      if (keys.length) {
+        window.METER_CONFIG = cfg;
+        window.METER_KEYS = keys;
+        window.CHARGE_METERS = _chargeMetersFor(keys, cfg);
       }
     }
+
     // 电价/水价以后端设置为权威值
     if (data && data.config && typeof data.config.electricity_price === 'number') {
       window.ELECTRICITY_PRICE = data.config.electricity_price;
@@ -45,14 +127,6 @@ async function loadMeterConfig() {
 }
 
 // ===== 充值计算辅助函数 (从旧版 app.js 迁移) =====
-
-/** 充值用表配置（按固定顺序） */
-window.CHARGE_METERS = [
-  { key: 'hall', label: '大厅', icon: '🎤', meterNo: '1#' },
-  { key: 'fire', label: '消防', icon: '🧯', meterNo: '2#' },
-  { key: 'private_room', label: '包厢', icon: '🛋️', meterNo: '3#' },
-  { key: 'ac', label: '空调', icon: '❄️', meterNo: '4#' },
-];
 
 /** 实际度数 = 表底差 × 倍率 */
 function realKwh(value, key) {
@@ -122,7 +196,7 @@ function _chargeDailyCapKwh(rows, key) {
   for (let i = 0; i < rows.length - 1; i++) {
     const days = _chargeDaysBetween(rows[i].date, rows[i + 1].date);
     if (days <= 0) continue;
-    const d = (rows[i][key] - rows[i + 1][key]) * mult;
+    const d = (meterValue(rows[i], key) - meterValue(rows[i + 1], key)) * mult;
     if (d > 0 && d / days > best) best = d / days;
   }
   return best;
@@ -132,8 +206,8 @@ function _chargeDailyCapKwh(rows, key) {
 function _chargeSegment(rows, key, cdate) {
   const idx = rows.findIndex(r => r.date === cdate);
   if (idx >= 0) {
-    const cur = rows[idx][key];
-    const prev = idx >= 1 ? rows[idx - 1][key] : null;
+    const cur = meterValue(rows[idx], key);
+    const prev = idx >= 1 ? meterValue(rows[idx - 1], key) : null;
     if (idx >= 1 && cur != null && prev != null && cur > prev) return [idx - 1, idx]; // 规则 1
     if (idx + 1 < rows.length) return [idx, idx + 1];                                   // 规则 2
     return null;                                                                       // 规则 4
@@ -149,7 +223,7 @@ function _chargeSegment(rows, key, cdate) {
 /** 从 fromIdx 起找第一个"表底上升"的读数区间 —— 充值真正进表的地方 */
 function _chargeLandingTransition(rows, key, fromIdx) {
   for (let j = fromIdx; j < rows.length - 1; j++) {
-    const a = rows[j][key], b = rows[j + 1][key];
+    const a = meterValue(rows[j], key), b = meterValue(rows[j + 1], key);
     if (a == null || b == null) continue;
     if (b > a) return [j, j + 1];
   }
@@ -159,10 +233,10 @@ function _chargeLandingTransition(rows, key, fromIdx) {
 /** 这个区间"若这笔钱真的到账",用电量是否还算合理 */
 function _chargeSegmentPlausible(rows, key, seg, amt, mult, cap) {
   const s = rows[seg[0]], e = rows[seg[1]];
-  if (s[key] == null || e[key] == null) return { implied: 0, threshold: 0, ok: true };
+  if (meterValue(s, key) == null || meterValue(e, key) == null) return { implied: 0, threshold: 0, ok: true };
   const days = _chargeDaysBetween(s.date, e.date);
   if (days <= 0) return { implied: 0, threshold: 0, ok: true };
-  const implied = (s[key] + amt - e[key]) * mult;
+  const implied = (meterValue(s, key) + amt - meterValue(e, key)) * mult;
   const threshold = Math.max(cap * days * CHARGE_CONFLICT_FACTOR, CHARGE_CONFLICT_FLOOR_KWH);
   return { implied: implied, threshold: threshold, ok: implied <= threshold };
 }
@@ -175,8 +249,8 @@ function _resolveCharge(rows, key, cdate, amt, mult, cap) {
   const seg = _chargeSegment(rows, key, cdate);
   if (!seg) return { seg: null, conflict: null };
   const s = rows[seg[0]], e = rows[seg[1]];
-  if (s[key] == null || e[key] == null) return { seg: seg, conflict: null };
-  if (e[key] > s[key]) return { seg: seg, conflict: null };   // 表底上升 → 钱进表了
+  if (meterValue(s, key) == null || meterValue(e, key) == null) return { seg: seg, conflict: null };
+  if (meterValue(e, key) > meterValue(s, key)) return { seg: seg, conflict: null };   // 表底上升 → 钱进表了
 
   const p = _chargeSegmentPlausible(rows, key, seg, amt, mult, cap);
   if (p.ok) return { seg: seg, conflict: null };              // 用电量算得通 → 就是这个区间
@@ -193,7 +267,7 @@ function _resolveCharge(rows, key, cdate, amt, mult, cap) {
       implied_kwh: Math.round(p.implied * 10) / 10,
       threshold_kwh: Math.round(p.threshold * 10) / 10,
       start_date: s.date, end_date: e.date,
-      start_val: s[key], end_val: e[key],
+      start_val: meterValue(s, key), end_val: meterValue(e, key),
     },
   };
 }
@@ -207,7 +281,7 @@ function _chargeConflictsForMeter(rows, list, key) {
   const out = [];
   for (const c of list) {
     if (c.status === 'pending') continue;
-    const amt = Number(c[key] || 0);
+    const amt = Number(meterValue(c, key) || 0);
     if (!(amt > 0)) continue;
     const d = chargeEffectiveDate(c);
     const r = _resolveCharge(rows, key, d, amt, mult, cap);
@@ -215,7 +289,7 @@ function _chargeConflictsForMeter(rows, list, key) {
     const implied = r.conflict.implied_kwh;
     const threshold = r.conflict.threshold_kwh;
     const landingRow = rows.find(r2 => r2.date === d);
-    const sameAsReading = landingRow && Math.abs(amt - Number(landingRow[key])) < 0.01;
+    const sameAsReading = landingRow && Math.abs(amt - Number(meterValue(landingRow, key))) < 0.01;
     const reason = sameAsReading
       ? `${meta.label} ${d} 的充值额 ${amt} 和当天抄表读数一模一样 —— 是不是把抄表读数填进充值栏了?`
         + `充值额应该是**新充进去的表字数**,不是当前表底。这笔记录已从所有用电统计中排除。`
@@ -238,17 +312,17 @@ function findPastedReadingCharges(charges) {
     const key = m.key;
     const meta = METER_META(key);
     const rows = (window.CURRENT_READINGS || [])
-      .filter(r => r && r.date && r[key] != null)
+      .filter(r => r && r.date && meterValue(r, key) != null)
       .slice().sort((a, b) => a.date.localeCompare(b.date));
     for (const c of list) {
       if (c.status === 'pending') continue;
-      const amt = Number(c[key] || 0);
+      const amt = Number(meterValue(c, key) || 0);
       if (!(amt > 0)) continue;
       const d = chargeEffectiveDate(c);
       const i = rows.findIndex(r => r.date === d);
       if (i < 0) continue;
-      const cur = rows[i][key];
-      const prev = i >= 1 ? rows[i - 1][key] : null;
+      const cur = meterValue(rows[i], key);
+      const prev = i >= 1 ? meterValue(rows[i - 1], key) : null;
       if (cur == null || prev == null) continue;
       if (cur > prev) continue;               // 当天表底跳升 → 钱已进表,读数里已体现
       if (Math.abs(amt - Number(cur)) >= 0.01) continue;
@@ -279,13 +353,13 @@ function findChargeConflicts(charges) {
 
 function _chargeAttrSignature(rows, charges, key) {
   let s = key + '|' + rows.length + '|' + charges.length;
-  for (let i = 0; i < charges.length; i++) s += '|' + chargeEffectiveDate(charges[i]) + ':' + (charges[i][key] || 0);
+  for (let i = 0; i < charges.length; i++) s += '|' + chargeEffectiveDate(charges[i]) + ':' + (meterValue(charges[i], key) || 0);
   if (rows.length) s += '|' + rows[0].date + '~' + rows[rows.length - 1].date;
   return s;
 }
 
 function chargeAttribution(charges, key) {
-  const all = (window.CURRENT_READINGS || []).filter(r => r && r.date && r[key] != null);
+  const all = (window.CURRENT_READINGS || []).filter(r => r && r.date && meterValue(r, key) != null);
   const rows = all.slice().sort((a, b) => a.date.localeCompare(b.date));
   const list = charges || [];
   if (!rows.length) return null;
@@ -303,7 +377,7 @@ function chargeAttribution(charges, key) {
 
   for (const c of list) {
     if (c.status === 'pending') continue;   // 待确认的充值申请不计入统计
-    const amt = Number(c[key] || 0);
+    const amt = Number(meterValue(c, key) || 0);
     if (!amt) continue;
     const d = chargeEffectiveDate(c);       // 实际到账日，不是申请日
 
@@ -335,7 +409,7 @@ function sumChargesBetween(charges, meterKey, startDate, endDate) {
   let sum = 0;
   for (const c of charges) {
     if (c.status === 'pending') continue;
-    if (c.date > startDate && c.date <= endDate) sum += realKwh(c[meterKey] || 0, meterKey);
+    if (c.date > startDate && c.date <= endDate) sum += realKwh(meterValue(c, meterKey) || 0, meterKey);
   }
   return sum;
 }
@@ -354,7 +428,7 @@ function sumChargesBetween(charges, meterKey, startDate, endDate) {
 function unreflectedCreditMeterVal(charges, key) {
   const list = charges || [];
   const rows = (window.CURRENT_READINGS || [])
-    .filter(r => r && r.date && r[key] != null)
+    .filter(r => r && r.date && meterValue(r, key) != null)
     .sort((a, b) => a.date.localeCompare(b.date));
   if (!rows.length) return 0;
   const lastDate = rows[rows.length - 1].date;
@@ -365,7 +439,7 @@ function unreflectedCreditMeterVal(charges, key) {
   for (const c of list) {
     if (c.status === 'pending') continue;          // 待确认的充值申请不计入任何统计
     if (skipIds.has(c.id)) continue;               // 钱没进表,不算余量
-    if (chargeEffectiveDate(c) >= lastDate) candidate += Number(c[key] || 0);
+    if (chargeEffectiveDate(c) >= lastDate) candidate += Number(meterValue(c, key) || 0);
   }
 
   // 最新那次抄表若已把这笔充值抄进读数（归属到以它为终点的区间），就不能再加第二次
@@ -378,7 +452,7 @@ function unreflectedCreditMeterVal(charges, key) {
 
 function remainingBalance(charges, key) {
   const rows = (window.CURRENT_READINGS || [])
-    .filter(r => r && r.date && r[key] != null)
+    .filter(r => r && r.date && meterValue(r, key) != null)
     .sort((a, b) => a.date.localeCompare(b.date));
   const mult = MULTIPLIER(key);
   const extraMeter = unreflectedCreditMeterVal(charges, key);
@@ -387,11 +461,11 @@ function remainingBalance(charges, key) {
              extraMeterVal: extraMeter, extraKwh: extraMeter * mult, hasReading: false };
   }
   const latest = rows[rows.length - 1];
-  const meterVal = latest[key] + extraMeter;
+  const meterVal = meterValue(latest, key) + extraMeter;
   return {
     meterVal: meterVal,
     kwh: meterVal * mult,
-    readingMeterVal: latest[key],
+    readingMeterVal: meterValue(latest, key),
     readingDate: latest.date,
     extraMeterVal: extraMeter,
     extraKwh: extraMeter * mult,
@@ -426,7 +500,7 @@ function calcMonthlyDailyUsage(readings, charges, meterKey) {
     var days = (new Date(b.date) - new Date(a.date)) / 86400000;
     if (days > 0) {
       var charged = sumChargesBetween(charges, meterKey, a.date, b.date);
-      var used = (a[meterKey] - b[meterKey]) * MULTIPLIER(meterKey) + charged;
+      var used = (meterValue(a, meterKey) - meterValue(b, meterKey)) * MULTIPLIER(meterKey) + charged;
       if (used > 0) {
         chosen = {
           daily: used / days,
@@ -455,7 +529,7 @@ function calcMonthDailyUsage(rows, charges, meterKey, monthLabel) {
     var days = (new Date(b.date) - new Date(a.date)) / 86400000;
     if (days <= 0) continue;
 
-    var readingDelta = (a[meterKey] - b[meterKey]) * MULTIPLIER(meterKey);
+    var readingDelta = (meterValue(a, meterKey) - meterValue(b, meterKey)) * MULTIPLIER(meterKey);
     var charged = sumChargesBetween(charges, meterKey, a.date, b.date);
     var used = readingDelta + charged;
 
