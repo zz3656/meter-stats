@@ -22,12 +22,13 @@ settings 参数的约定:
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import json
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 DEFAULT_STORE_ID = "main"
 DEFAULT_STORE_NAME = "总店"
@@ -176,11 +177,17 @@ def add_store(store_id: str, name: str, code: str = "", address: str = "",
         # multi_store_layout() 变 True,但注册表里没有已注册门店 →
         # 门店闸把全站请求都拒掉。先写注册表则反之无风险。
         _persist(st)
+    # 建文件前的现场快照 —— 用来区分「本次调用新建的」和「调用前就存在的」。
+    # 快照失败(None)时清理阶段一律不动手:宁可不清理,也不能误删用户数据。
+    before = _snapshot_store_dir(store_id)
     try:
         _create_store_files(store_id, store["name"])
     except Exception as create_err:
-        # 建目录失败 → 把刚登记的这家撤掉,不留「有门店、没数据」的幻影店。
-        # 目录不删(万一里面已经有数据,删掉比留着更糟)。
+        # 建目录失败 → 把刚登记的这家撤掉,不留「有门店、没数据」的幻影店;
+        # 同时把**本次调用自己新建**的目录/文件清掉(调用前就存在的不动)。
+        # 清理失败绝不能掩盖原始异常 —— 原始异常(建目录失败)才是根因。
+        with contextlib.suppress(Exception):
+            _cleanup_store_dir(store_id, before)
         st["stores"] = [s for s in st["stores"]
                         if not (isinstance(s, dict) and s.get("id") == store_id)]
         if settings is None:
@@ -192,14 +199,40 @@ def add_store(store_id: str, name: str, code: str = "", address: str = "",
             # 两件事一起被瞒下来。抛 RuntimeError,把原始异常(建目录失败)
             # 挂在异常链上,让上层知道门店没建成、注册表需要人工清理。
             try:
-                _persist(st)
+                _rollback_registry_on_disk(store_id)
             except Exception as rollback_err:
-                raise RuntimeError(
+                exc = RuntimeError(
                     f"门店 {store_id} 建目录失败,且回滚注册表落盘也失败 —— "
-                    f"settings.json 里可能残留幻影门店条目,请手工检查: {rollback_err}"
-                ) from create_err
+                    f"settings.json 里可能残留幻影门店条目,请手工检查; "
+                    f"建目录异常: {type(create_err).__name__}: {create_err}; "
+                    f"回滚落盘异常: {type(rollback_err).__name__}: {rollback_err}"
+                )
+                # 异常链上带着两个异常:__cause__ = 建目录失败(原始异常),
+                # __context__ = 回滚落盘失败(Python 在 except 块里 raise 时
+                # 自动挂上)—— 上层不用去解析 message 文本就能区分。
+                raise exc from create_err
         raise
     return copy.deepcopy(store)
+
+
+def _rollback_registry_on_disk(store_id: str) -> None:
+    """回滚注册表:重新读盘,只删掉目标门店条目,再写回。
+
+    为什么不能把内存快照整份写回:settings_handler._load() **不持锁**
+    (只有 _save() 持锁),而 add_store() 从读盘到回滚之间隔了一次建目录的
+    IO —— 期间若有并发请求改了 settings.json(加用户、改门店归属),
+    那份过期快照会把那次变更**整份覆盖丢失**。
+
+    所以这里重新读盘拿到最新 settings,只摘掉目标门店那一条,再写回:
+    并发期间的其它改动原样保留。
+    """
+    from modules.system.settings_handler import get_settings
+    on_disk = get_settings()
+    stores = on_disk.get("stores")
+    if isinstance(stores, list):
+        on_disk["stores"] = [s for s in stores
+                             if not (isinstance(s, dict) and s.get("id") == store_id)]
+    _persist(on_disk)
 
 
 def _reject_case_insensitive_conflict(st: dict[str, Any], store_id: str) -> None:
@@ -294,26 +327,98 @@ def _now() -> str:
 
 
 def _create_store_files(store_id: str, name: str = "") -> None:
-    """创建门店目录 + 空的 6 个数据文件 + 默认 store.json。"""
+    """创建门店目录 + 空的 6 个数据文件 + 默认 store.json。
+
+    中途失败时**只回滚本次调用自己新建的东西**:新建的文件删掉;目录是
+    「调用前不存在 且 清理后为空」才删 —— 调用前就存在的目录里面可能有
+    真实数据(删过门店又用同样的 ID 重建),**绝不能删**。
+    """
     # 建目录前再验一次 ID —— 入口那道闸是给别人看的,这里是最后一道。
     if not is_valid_store_id(store_id):
         raise ValueError(f"门店 ID 非法: {store_id}")
     from modules.stores import config
     from storage import DATA_FILES, save_json
-    d = context_store_dir(store_id)
-    d.mkdir(parents=True, exist_ok=True)
-    for fname in DATA_FILES.values():
-        p = d / fname
-        if not p.exists():
-            save_json(p, [])
-    cfg_path = config.store_config_path(store_id)
-    if not cfg_path.exists():
-        config.write_store_config(store_id, {
-            "id": store_id,
-            "name": name,
-            "meters": [dict(m) for m in config.DEFAULT_METERS],
-            "config": dict(config.DEFAULT_CONFIG),
-        })
+    before = _snapshot_store_dir(store_id)
+    created: list[Path] = []
+    try:
+        d = context_store_dir(store_id)
+        d.mkdir(parents=True, exist_ok=True)
+        for fname in DATA_FILES.values():
+            p = d / fname
+            if not p.exists():
+                save_json(p, [])
+                created.append(p)
+        cfg_path = config.store_config_path(store_id)
+        if not cfg_path.exists():
+            config.write_store_config(store_id, {
+                "id": store_id,
+                "name": name,
+                "meters": [dict(m) for m in config.DEFAULT_METERS],
+                "config": dict(config.DEFAULT_CONFIG),
+            })
+            created.append(cfg_path)
+    except Exception:
+        # 清理失败不能掩盖原始异常 —— 原始异常才是根因。
+        with contextlib.suppress(Exception):
+            _cleanup_store_dir(store_id, before, created)
+        raise
+
+
+def _snapshot_store_dir(store_id: str) -> Optional[tuple[bool, set[str]]]:
+    """建文件前的现场快照:(目录是否存在, 目录里已有的文件名)。
+
+    用来区分「本次调用新建的」和「调用前就存在的」—— 后者里面可能有真实
+    数据,绝不能删。
+
+    快照拿不到时返回 None:清理阶段一律不动手(宁可不清理,也不能误删)。
+    """
+    try:
+        d = context_store_dir(store_id)
+        if not d.is_dir():
+            return (False, set())
+        return (True, {p.name for p in d.iterdir()})
+    except Exception:
+        return None
+
+
+def _cleanup_store_dir(store_id: str,
+                       before: Optional[tuple[bool, set[str]]],
+                       created_files: Sequence[Path] = ()) -> None:
+    """回滚本次调用在门店目录里新建的东西。
+
+    原则:**只清理本次调用自己新建的,绝不碰调用前就存在的。**
+    - 本次新建的文件 → 删掉(created_files 是精确名单,目录差集是兜底)
+    - 目录:调用前不存在 且 清理后为空 → 删掉;调用前就存在 → **绝不删**
+
+    全程容错:清理本身失败不能掩盖原始异常(原始异常才是根因)。
+    """
+    if before is None:
+        return
+    existed, names_before = before
+    try:
+        d = context_store_dir(store_id)
+    except Exception:
+        return
+    targets: list[Path] = list(created_files)
+    try:
+        if d.is_dir():
+            for p in d.iterdir():
+                if p.name not in names_before and p not in targets:
+                    targets.append(p)
+    except OSError:
+        pass
+    for p in targets:
+        try:
+            if p.is_file() or p.is_symlink():
+                p.unlink()
+        except OSError:
+            pass
+    if not existed:
+        # rmdir 对非空目录会抛 OSError → 容忍(里面有删不掉的东西,
+        # 留着总比误删强)。父目录 stores/ 绝不动 —— 删了它,
+        # multi_store_layout() 会变 False,门店闸的语义整个变了。
+        with contextlib.suppress(OSError):
+            d.rmdir()
 
 
 def context_store_dir(store_id: str) -> Path:

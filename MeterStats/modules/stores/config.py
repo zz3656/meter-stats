@@ -115,6 +115,10 @@ def get_store_prices() -> dict[str, Any]:
 
     值必须是深拷贝而不是引用拷贝:store.json 的 config 里将来可能有嵌套
     结构(标量时代看不出来),引用拷贝会让调用方改坏缓存本体。
+
+    DEFAULT_CONFIG 同理:它是**模块级常量**,out 必须是它的深拷贝 ——
+    否则调用方往返回值里塞的键会永久污染常量,跨请求泄漏
+    (下一个请求读到上一个请求塞进去的键)。
     """
     cfg = get_store_settings().get("config")
     out: dict[str, Any] = copy.deepcopy(DEFAULT_CONFIG)

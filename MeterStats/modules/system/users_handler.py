@@ -117,8 +117,34 @@ def handle_delete_users(handler, path_clean: str):
         return
 
     settings["users"] = users
-    save_settings(settings)
+    try:
+        # 写完回读校验 —— 写盘失败绝不能报成功(见 _verify_user_deleted 的说明)
+        save_settings(settings)
+        _verify_user_deleted(uid)
+    except Exception as e:
+        send_json(handler, 200, {"ok": False, "error": f"删除用户失败,用户未真正删除: {e}"})
+        return
     send_json(handler, 200, {"ok": True})
+
+
+def _verify_user_deleted(user_id: int) -> None:
+    """回读 settings.json,确认被删的用户确实从盘上消失了。
+
+    与 POST/PUT 的回读校验同一套思路:写 → 回读 → 比对 → 不通过就抛错。
+    删除的校验目标与新增/修改相反 —— **这个用户必须不在盘上了**。
+
+    为什么必须校验:_save() 会吞掉所有异常(只往 stderr 打一行
+    `[settings] [WARN] _save failed:`),写失败时调用方会以为删除成功 ——
+    用户还在盘上,角色与门店归属全都还在,「已删除」的假象比不删更危险。
+    """
+    try:
+        on_disk = get_settings()
+    except Exception as e:
+        raise RuntimeError(f"写入 settings.json 后回读失败: {e}") from e
+    for u in on_disk.get("users") or []:
+        if isinstance(u, dict) and u.get("id") == user_id:
+            raise RuntimeError(
+                f"写入 settings.json 后回读校验不通过: 用户 {user_id} 仍然留在盘上")
 
 
 # ============ 门店归属辅助 ============
