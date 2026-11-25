@@ -1030,6 +1030,22 @@ Expected: FAIL —— `ImportError: cannot import name 'migration' from 'modules
 
 - [ ] **Step 3: 创建 `modules/stores/migration.py`**
 
+> ⚠️ **控制器预审:下面这段代码有 4 处必须偏离的缺陷,照抄会出事。**
+> (控制器在派发前逐行读码 + 推演故障路径得出,与 Task 2 的处理方式一致:
+> **计划授权的缺陷照样是缺陷**。)
+>
+> | # | 缺陷 | 后果 | 必须怎么改 |
+> |---|---|---|---|
+> | 1 | **幂等判定只看 `readings.json` 一个文件**(`(main_dir / "readings.json").exists()`) | 上次迁移**中途失败**(比如第 3 个文件 `copy2` 时磁盘满)→ `stores/main/` 里只有 2 个文件,但 `readings.json` 已存在 → 下次启动判定"已迁移"→ **直接跳过,剩下 4 个文件永远补不上** → 门店数据永久残缺 | 幂等判定必须覆盖**全部 6 个数据文件**(或写一个完成标记文件,例如 `stores/main/.migrated`,全部搬完才写) |
+> | 2 | **`_ensure_registry()` 落盘失败后,代码仍继续建 `stores/` 目录** | `settings_handler.save_settings()` **会吞掉所有异常**(只打 WARN)→ `_ensure_registry` 里的 `except` 也只是记日志 → 注册表里**没有** `main` → 但 `stores/main/` 目录建出来了 → `multi_store_layout()` 变 True → Task 4 门店闸要求门店必须已注册 → **全站 404** | `_ensure_registry()` 之后必须**回读 settings.json 校验 `main` 真的在册**,不通过就**中止迁移**(保持单店布局,门店闸整体放行),**绝不建 `stores/` 目录** |
+> | 3 | `_write_default_store_json()` 用 `json.loads(path.read_text())` 读 settings.json | ① 绕过存储层(全局约束:统一走 `storage.load_json`);② 与 `_ensure_registry()` **读的是两个不同的数据源**(一个走 `settings_handler.get_settings()` 的内存态,一个直接读文件)→ 两边不一致时,`store.json` 的表定义和注册表对不上 | 统一从 `settings_handler.get_settings()` 取(与 `_ensure_registry` 同源),或走 `storage.load_json` |
+> | 4 | 全新安装分支用 `p.write_text("[]")` 写数据文件 | 绕过 `storage.save_json` → 非原子写(中途崩溃留半截文件)+ **不失效 storage 缓存** | 改用 `storage.save_json(p, [])` |
+>
+> 另外:**搬数据文件用 `shutil.copy2` 是对的,不用改** —— 它是字节级复制,
+> 保留原文件的格式与编码;`storage.save_json` 会重新序列化,反而可能改变内容。
+> "存储读写统一走 storage 层"这条约束针对的是 **JSON 的读与写**,
+> 不是文件搬迁。
+
 ```python
 """数据迁移 —— 顶层数据文件 → stores/<store_id>/。
 
@@ -1515,6 +1531,19 @@ def _store_gate(sess: dict, handler) -> bool:
     set_current_store(requested)
     return True
 ```
+
+> ⚠️ **控制器预审:上面这段 `_store_gate` 有 2 处必须偏离的缺陷,照抄会出事。**
+>
+> | # | 缺陷 | 后果 | 必须怎么改 |
+> |---|---|---|---|
+> | 1 | **`scope is None` 的回退是 fail-open**:`scope = registry.user_store_scope(sess.get("user_id"))` 查不到用户记录时,回退 `all_stores = bool(sess.get("all_stores", True))` —— **默认 `True` = 全店权限** | 场景:账号被删除,但会话还没过期 → 旧会话里若带 `all_stores=True` → **该用户仍可访问全部门店**;更常见的是测试用的合成会话没有 `all_stores` 字段 → 默认放行全店 | **查不到用户记录就拒绝(403)**,不要回退放行。fail-closed,不是 fail-open |
+> | 2 | **公开端点也会过门店闸**:`_auth_gate` 对 `PUBLIC_API_PATHS` 返回 `{}`(空 dict)→ `_store_gate({}, handler)` → `sess.get("user_id")` 为 `None` → 回退 `all_stores=True` → `requested` 默认 `main` → `registry.get_store("main")` 为 None 时**直接 404** | `GET /api/health` 是 **Docker HEALTHCHECK** 与 `run.sh` 启动探测用的,404 会让容器被判 unhealthy、服务起不来 | 门店闸**跳过公开端点**(`PUBLIC_API_PATHS` 里的路径直接放行),或公开端点不校验门店存在性。**推荐前者** —— 公开端点与门店无关,不该走门店逻辑 |
+>
+> 另外注意 `_store_gate` 用 `handler.path` 解析 query 取 `store` 参数,
+> 而 `_route()` 里的 `path_clean` 是**去掉 query 之后**的路径 —— 两个都可用,但别混用。
+>
+> **再补一条**:门店闸是「fail-closed」的闸 —— 拿不准就 403,不要 500。
+> 500 会让前端以为是服务端故障,403 才是「你没权限」。
 
 - [ ] **Step 5: 改 `_route` 调用闸门**
 
