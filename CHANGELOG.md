@@ -40,18 +40,33 @@
 - **自动备份包明文含 NAS 凭据**:`nas_sync_pass` / `nas_sync_user` 只在手动备份时被剥掉,自动备份没剥。现在两条路径用同一份剥离清单
 - **同一秒内两次备份互相覆盖**:备份目录名是秒级时间戳,`/api/restore` 的「恢复前备份」可能直接覆盖正被恢复的那个包 → 恢复到错误内容。现在目录名带毫秒
 
+### P1 门店切换器(0.5.0 内补齐)
+
+- **侧栏顶部新增门店切换器**:总部账号(`all_stores=true`)与多店用户可见,单店用户自动隐藏。切店只改门店上下文、由 UI 统一重拉数据,避免两处各刷一次
+- **所有 `/api/*` 请求贯通 `?store=` 参数**:`api.js` 用白名单拼装,引导端点(`/api/stores`、`/api/stores/current`、登录)按约定不带;历史上「切了店还是上一个店的数据」不再出现
+- **切店时清空五类缓存**:`State`、报表缓存、充值归属缓存、离线缓存、裸全局变量 —— 杜绝跨店串数据
+- **`GET /api/stores` 与 `GET /api/stores/current` 新增 `all_stores` 标记**,前端据此决定切换器是否可见
+- **门店上下文模块 `js/core/storeContext.js`**:前端唯一的门店状态源,内含代次守卫(登出后迟到的引导结果一律丢弃,不写 state、不持久化、不广播)与失效恢复(`403 无权访问门店` / `404 门店不存在` → 清缓存 + 重新引导)
+
+#### 一并补掉的两处 P0 遗留坑
+
+CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复:
+
+- **写盘失败后内存里留下幻影数据**:`storage.load_json()` 命中缓存时返回的是**缓存对象本身**(不是副本),而 `modules/_base.py` 的 `handle_post` / `handle_put` 是**原地改**再存盘。原来「失效缓存」写在 `save_json()` 成功路径的最后一行 —— 写盘失败(磁盘满 / 权限)时根本不会执行,而失败的写入又**没有改变磁盘 mtime**,`load_json()` 的 mtime 校验拦不住 → GET 继续返回多出来的那行,重启才消失。现在失效挪进 `finally`,成功与失败都失效。新增 `tests/test_storage_cache.py` 4 项(含「退回旧实现必须失败」的反向验证)
+- **`escapeHtml` 有两份、运行时生效的是弱版**:`admin.js` 顶层的函数声明加载顺序在 `js/helpers/utils.js` 之后,会覆盖 `utils.js` 的强版本,而弱版只转义 `& < >`、**不转义引号** —— 自由文本(门店名 / 物品名)一旦进到属性值位置,就能用引号把属性打断。现在删除 `admin.js` 那份,全局 `escapeHtml` 只剩 `utils.js` 的强版(连引号一起转义);属性值位置仍**一律要求**走 `escapeAttr`,作为纵深防御
+
 ### 已知问题
 
 - **值班照片仍然没有自动备份**。改造前照片就没进过备份包(既存缺口,不是分店引入的)。这次刻意**不只做一半**:若把照片收进备份,恢复侧必须同步扩展,否则会变成「包里有照片、恢复时静默丢弃」这种更糟的状态。**照片需要另外手工备份**
-- **`modules/_base.py` 的缓存别名地雷**:写盘失败时内存里是幻影数据、磁盘上是旧值,要重启才消失。触发条件苛刻(磁盘满 / 权限),**与分店无关**,列 P1
-- **`escapeHtml` 在 `admin.js` 与 `js/helpers/utils.js` 各定义一份**,`admin.js` 那份是弱版本。当前 30 处用法全在元素内容位置,**没有活跃的 XSS**;本版不动它,列 P1
 - **备份侧 `rglob` 任意深度,恢复侧白名单只收 3 段** → 深层路径(如 `stores/x/backup/<日期>/readings.json`)会进包但恢复时被丢
 - **multipart 上传 ZIP 分支不走 ZIP 校验**(JSON body 分支走)—— 既存问题,与分店无关
-- **macOS / Windows 文件系统大小写不敏感**:`stores/MAIN/readings.json` 与 `stores/main/readings.json` 在盘上是**同一个目录**。门店范围闸的**比较**已经是大小写敏感的(`"MAIN" != "main"`,越权会被拒),但**文件系统层面**的隐患仍在:注册表若同时存在 `MAIN` 与 `main` 两种写法(或有人手工在盘上造目录),总店与「同名分店」仍然指向同一份数据。列 P1
+- **macOS / Windows 文件系统大小写不敏感**:`stores/MAIN/readings.json` 与 `stores/main/readings.json` 在盘上是**同一个目录**。门店范围闸的**比较**已经是大小写敏感的(`"MAIN" != "main"`,越权会被拒),但**文件系统层面**的隐患仍在:注册表若同时存在 `MAIN` 与 `main` 两种写法(或有人手工在盘上造目录),总店与「同名分店」仍然指向同一份数据
+- **`/api/admin/dir-listing` 前端传的是 `?dir=`、后端读的是 `?path=`** —— 目录列举功能是坏的。P1 未修,与分店无关
+- **SIGTERM 无法优雅退出**:`server.py` 的 `_shutdown()` 由 `signal.signal` 注册,运行在主线程,而 `serve_forever()` 也占着主线程 —— 信号处理器里调 `server.shutdown()` 会等 `serve_forever` 退出,主线程却被处理器占住 → **死锁**,进程只能等 SIGKILL。影响:`./run.sh stop` 无感知(它本来就用 `kill -9`);`docker stop` 要等满 10 秒超时才强杀。既存问题(首个提交即存在),与分店无关
 
 ### 文档
 
-- 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`,全量 **484 项**(存量 349 + 分店 135)
+- 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`、`test_store_switch_frontend.py`、`test_store_switcher_ui.py`、`test_storage_cache.py`,全量 **549 项**(存量 349 + 分店 200)
 
 ## [0.4.3] — 2026-11-12
 
