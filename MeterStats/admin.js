@@ -1118,11 +1118,12 @@ async function saveBackupSettings() {
 
 // 页面加载时初始化
 initAuth();
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
+
+// 注:escapeHtml 现在**只有一份** —— js/helpers/utils.js 的强版(转义 & < > " ')。
+// 这里原来还有一份弱版(顶层函数声明,加载顺序在 utils.js 之后 → 运行时覆盖强版,
+// 只转义 & < >,不转义引号)。弱版让自由文本进属性值就能被引号打断
+// (例:js/modules/items.js 把 escapeHtml(物品名) 塞进 data-name="...") → 已删除。
+// 元素内容位置用 escapeHtml,属性值位置一律用 escapeAttr。
 
 // ==================== 表单提交 (从旧 forms_submit.js 迁移) ====================
 

@@ -22,12 +22,10 @@ window.escapeHtml = function escapeHtml(s) {
 /**
  * 属性值转义 —— 把值安全地放进双引号/单引号属性里。
  *
- * 为什么不能直接用 escapeHtml:admin.js 里有一份同名函数(顶层函数声明),
- * 加载顺序在 utils.js 之后 → **运行时真正生效的是 admin.js 那份弱版本**,
- * 只转义 & < >,**不转义 " 和 '**。
- * 自由文本(门店名称/地址/编号)一旦进了属性值,弱版本就能被引号打断。
- *
- * 所以:元素内容位置用 escapeHtml,属性值位置一律用 escapeAttr。
+ * 为什么不能只靠 escapeHtml:自由文本(门店名称/物品名/地址/编号)一旦进了
+ * 属性值,就必须连引号一起转义,否则 `value="a" onmouseover="…"` 能把属性打断。
+ * escapeHtml 连引号一起转义,元素内容位置用它是安全的;但**属性值位置一律用
+ * escapeAttr**,不要图省事 —— 两者的语义边界写清楚,后人就不会用错。
  */
 window.escapeAttr = function escapeAttr(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {

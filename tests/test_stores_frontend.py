@@ -8,8 +8,8 @@
 
 外加两条「别把前端的坑再挖一遍」的护栏:
 - stores.js 不得自己再定义一份 escapeHtml(全局那份已经够用,重复定义会互相覆盖)
-- 门店 ID 进属性值必须走 escapeAttr —— 全局 escapeHtml 被 admin.js 的弱版本覆盖,
-  那份只转义 & < >,不转义 " 和 ' ,自由文本进属性值就能打断属性
+- 门店 ID 进属性值必须走 escapeAttr —— 属性值位置必须连引号一起转义,
+  自由文本进属性值就能用引号把属性打断
 """
 import json
 import os
@@ -88,7 +88,7 @@ class TestStoresFrontendWiring(unittest.TestCase):
         self.assertNotIn("window.escapeHtml", src)
 
     def test_store_values_in_attributes_use_attribute_escaping(self) -> None:
-        """门店 ID 进属性值必须走 escapeAttr(全局 escapeHtml 是弱版,不转义引号)。"""
+        """门店 ID 进属性值必须走 escapeAttr(属性值位置要连引号一起转义)。"""
         stores = STORES_JS.read_text(encoding="utf-8")
         admin = ADMIN_JS.read_text(encoding="utf-8")
         self.assertIn("escapeAttr", stores)
@@ -595,8 +595,12 @@ class TestAccessibilityStoreError(unittest.TestCase):
 
 # ============ 行为验证(需要 node) ============
 
-# 用真实的 stores.js 跑一遍:先装上 admin.js 的那份弱 escapeHtml(页面运行时它会覆盖
-# utils.js 的强版本),再喂恶意门店数据,看渲染出来的 HTML 到底长什么样。
+# 用真实的 stores.js 跑一遍:加载 utils.js(提供强版 escapeHtml 与 escapeAttr),
+# 再喂恶意门店数据,看渲染出来的 HTML 到底长什么样。
+#
+# 注:admin.js 那份弱版 escapeHtml(顶层函数声明会覆盖 utils.js 的强版)已在 P1 收尾轮
+# 删除 —— 全局 escapeHtml 现在就是 utils.js 的强版(连引号一起转义),
+# 所以这里**不再**从 admin.js 抠一份弱版来装。
 _STORES_HARNESS = r"""
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const ROOT = process.env.MS_ROOT;
@@ -656,13 +660,7 @@ vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/helpers/utils.js'), 'utf8'),
                 sandbox, { filename: 'utils.js' });
 
-// ② 真实运行时生效的是 admin.js 那份弱 escapeHtml(顶层函数声明会覆盖 utils.js 的)
-const adminSrc = fs.readFileSync(path.join(ROOT, 'admin.js'), 'utf8');
-const m = adminSrc.match(/function escapeHtml\(str\) \{[\s\S]*?\n\}/);
-if (!m) { console.log(JSON.stringify({ error: 'admin.js 里找不到 escapeHtml' })); process.exit(0); }
-vm.runInContext(m[0], sandbox, { filename: 'admin-escapeHtml.js' });
-
-// ③ 再加载 stores.js
+// ② 再加载 stores.js
 vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/modules/stores.js'), 'utf8'),
                 sandbox, { filename: 'stores.js' });
 
@@ -712,7 +710,7 @@ class TestStoresBehavior(unittest.TestCase):
         return out
 
     def test_store_name_cannot_inject_markup(self) -> None:
-        """门店名称是自由文本 —— 弱 escapeHtml 下也不能拼出标签。"""
+        """门店名称是自由文本 —— 转义后不能拼出标签。"""
         out = self._run(_STORES_HARNESS)
         html = out["html"]
         self.assertNotIn("<img", html, "门店名称被拼成了真标签(弱 escapeHtml 不够用)")
@@ -720,7 +718,7 @@ class TestStoresBehavior(unittest.TestCase):
         self.assertIn("&lt;img", html, "门店名称应被转义成文本")
 
     def test_store_id_in_attribute_is_escaped(self) -> None:
-        """门店 ID 进属性值必须走 escapeAttr —— 弱 escapeHtml 不转义引号。"""
+        """门店 ID 进属性值必须走 escapeAttr —— 属性值要连引号一起转义。"""
         out = self._run(_STORES_HARNESS)
         html = out["html"]
         self.assertIn(

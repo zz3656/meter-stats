@@ -85,12 +85,13 @@ function makeSandbox(opts) {
   vm.createContext(sandbox);
 
   // ⚠️ escapeHtml / escapeAttr 必须给**不同的实现**:
-  //    生产里全局 escapeHtml 是 admin.js 的弱版本(只转义 & < >,不转义引号),
-  //    escapeAttr 才是 js/helpers/utils.js 的强版本(引号也转义)。
-  //    沙箱里若两者同源,「门店 ID 误用弱 escapeHtml」这条变异就抓不住 ——
+  //    生产里两者都是 js/helpers/utils.js 的强版本(引号也转义),
+  //    但属性值位置**只允许**用 escapeAttr —— 沙箱里故意把 escapeHtml 换成弱版
+  //    (只转义 & < >),「门店 ID 误用 escapeHtml」这条变异才会露出来:
   //    弱版不转义 '"' → value="a"b" → 属性被打断。
+  //    这条护栏是纵深防御:即便将来 escapeHtml 变弱,属性值也断不了。
   sandbox.escapeHtml = function (s) {
-    // 弱版本(与 admin.js:1082 一致):只转义 & < >
+    // 弱版本(只转义 & < >):故意与生产不同,用来抓「误用 escapeHtml」
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   };
@@ -200,11 +201,18 @@ function notify(sandbox, listeners, state, reason) {
 
   // ⑥b 先渲染出门店(总部账号),再变成不可见 → 下拉内容必须清空
   //    (隐藏时残留上一位用户的门店名 = 跨用户信息泄露)
+  //    innerHTML 与 value 都要清:只清 innerHTML 时,sel.value 可能还指着旧门店。
   const e3 = makeSandbox({ allStores: true });
   e3.sandbox.initStoreSwitcher();
   const beforeHidden = e3.sel.innerHTML;
+  const beforeHiddenValue = e3.sel.value;
   e3.sandbox.renderStoreSwitcher({ stores: [{ id: 'main', name: '总店' }], allStores: false });
-  out.hiddenClears = { before: beforeHidden, after: e3.sel.innerHTML };
+  out.hiddenClears = {
+    before: beforeHidden,
+    after: e3.sel.innerHTML,
+    beforeValue: beforeHiddenValue,
+    afterValue: e3.sel.value,
+  };
 
   // ⑦ 自由文本必须转义:门店 ID 进属性值(escapeAttr)、门店名进元素内容(escapeHtml)
   const f = makeSandbox({
@@ -598,11 +606,17 @@ class TestStoreSwitcherBehaviour(unittest.TestCase):
                          "门店 ID 用了弱 escapeHtml —— 属性值被打断")
 
     def test_hidden_switcher_clears_options(self) -> None:
-        """切换器隐藏时要把下拉内容清空 —— 残留的是上一位用户的门店名。"""
+        """切换器隐藏时要把下拉内容清空 —— 残留的是上一位用户的门店名。
+
+        innerHTML 与 value **都要**清:只清 innerHTML 的话,sel.value 可能还指着
+        旧门店(护栏必须能抓住「只清一半」这条变异)。
+        """
         out = self._run(_SWITCHER_HARNESS)
         self.assertTrue(out["hiddenClears"]["before"], "前置场景没渲染出门店")
         self.assertEqual(out["hiddenClears"]["after"], "",
                          "切换器隐藏后 <option> 内容没清空")
+        self.assertEqual(out["hiddenClears"]["afterValue"], "",
+                         "切换器隐藏后 select.value 没清空(还指着上一位用户的门店)")
         self.assertEqual(out["visibility"]["singleOptions"], "",
                          "单店用户(切换器不可见)不该留下门店名")
 
