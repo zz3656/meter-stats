@@ -598,6 +598,20 @@ Expected: FAIL —— `ImportError: cannot import name 'registry' from 'modules.
 
 - [ ] **Step 3: 创建 `modules/stores/registry.py`**
 
+> ⚠️ **本段代码是初版,已被代码复核修订 —— 实现以 `MeterStats/modules/stores/registry.py`(commit `aa9046e`)为准。**
+> 下面这段初版有 4 个已被复核判为 Important 的缺陷,**照抄会重新引入**:
+>
+> | 初版的问题 | 复核后的正确行为 |
+> |---|---|
+> | 重复检查在 `ensure_default_store()` **之前** | 必须**之后** —— 否则全新 settings.json 上 `add_store("main")` 会产生 `['main','main']`,且 `delete_store("main")` 拒绝删 → 两条都删不掉 |
+> | 只做精确重复检查 | 必须额外拒绝**大小写不敏感**冲突(`main` vs `MAIN` 在 macOS/Windows 是同一个目录 → 跨店串数据) |
+> | `_persist` 不校验写入结果 | `settings_handler._save` **会吞掉所有异常**,所以写完必须**回读 settings.json 校验**再返回成功,否则会留下"已创建但未注册"的孤儿门店目录 |
+> | 落盘顺序:先建目录再写注册表 | 必须**先落盘再建目录** —— 反过来的话,目录建好而注册表写失败 → `multi_store_layout()` 变 True 而门店闸要求已注册 → **全站 404**。建目录失败时回滚注册表条目(**目录不删**,里面可能已有数据) |
+>
+> 另外 `is_valid_store_id` 的正则要用 `\A[A-Za-z0-9_-]{1,32}\Z` 而不是 `^...$`
+> (Python 的 `$` 在末尾 `\n` 之前也匹配 → 会接受 `"s002\n"` 这种带换行的 ID)。
+> 完整的最终实现见 `MeterStats/modules/stores/registry.py`,逐条对应的测试见 `tests/test_stores.py`。
+
 ```python
 """门店注册表 —— settings.json 里的 stores[] 分区。
 
@@ -787,6 +801,20 @@ def context_store_dir(store_id: str):
 ```
 
 - [ ] **Step 4: 创建 `modules/stores/config.py`**
+
+> ⚠️ **本段代码是初版,已被代码复核修订 —— 实现以 `MeterStats/modules/stores/config.py`(commit `aa9046e`)为准。**
+> 初版用 `path.read_text` + `json.loads` 读、手搓 tmp+replace 写,**绕过了存储层**,违反全局约束
+> 「存储读写统一走 `storage.load_json` / `storage.save_json`」。代价是:
+> 丢掉 LRU 缓存、丢掉"文件损坏 → `_try_restore_from_backup()` 自动恢复"路径、
+> 手搓的写不失效 storage 缓存(`storage.save_json` 会做)。修订后:
+>
+> - 读:`storage.load_json(path, default)` —— default **要传 dict**(`load_json` 签名里 `default=None` 会被替换成 `[]`),并保留"内容不是 dict 就用默认值"的判断
+> - 写:`storage.save_json(path, cfg)` —— 但 `save_json` **不会建父目录**,`path.parent.mkdir(parents=True, exist_ok=True)` 要自己留着
+>
+> 另外 `read_store_config()` 返回的对象必须与 storage 缓存**解耦**:
+> `load_json` 命中缓存时返回的是缓存里同一个解析对象,浅拷贝 `dict(data)` 之后
+> `data["meters"]` 这个 list 仍与缓存共享 —— 调用方改一下就把缓存改坏了。
+> 返回前要深拷贝。
 
 ```python
 """门店配置 store.json —— 该店自己的表定义与价格/倍率。
@@ -1765,7 +1793,9 @@ def handle_post_store(handler):
             code=str(body.get("code") or ""),
             address=str(body.get("address") or ""),
         )
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
+        # ⚠️ RuntimeError:registry 写 settings.json 失败时会抛(回读校验不通过)。
+        #    只捕 ValueError 会让它变成未捕获异常 → 500,而不是 {"ok": false}。
         send_json(handler, 200, {"ok": False, "error": str(e)})
         return
     send_json(handler, 200, {"ok": True, "store": store})
@@ -1781,7 +1811,9 @@ def handle_put_store(handler, path_clean: str):
     body = read_body(handler) or {}
     try:
         store = registry.update_store(store_id, body)
-    except ValueError as e:
+    except (ValueError, RuntimeError) as e:
+        # ⚠️ RuntimeError:registry 写 settings.json 失败时会抛(回读校验不通过)。
+        #    只捕 ValueError 会让它变成未捕获异常 → 500,而不是 {"ok": false}。
         send_json(handler, 200, {"ok": False, "error": str(e)})
         return
     send_json(handler, 200, {"ok": True, "store": store})
@@ -1794,7 +1826,13 @@ def handle_delete_store(handler, path_clean: str):
         send_json(handler, 200, {"ok": False, "error": "仅管理员可删除门店"})
         return
     store_id = path_clean.split("/")[3] if len(path_clean.split("/")) >= 4 else ""
-    if not registry.delete_store(store_id):
+    try:
+        deleted = registry.delete_store(store_id)
+    except (ValueError, RuntimeError) as e:
+        # ⚠️ RuntimeError:settings.json 写失败(回读校验不通过)时 registry 会抛
+        send_json(handler, 200, {"ok": False, "error": str(e)})
+        return
+    if not deleted:
         send_json(handler, 200, {"ok": False, "error": f"门店不存在或不可删除: {store_id}"})
         return
     send_json(handler, 200, {"ok": True})
