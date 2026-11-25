@@ -710,5 +710,212 @@ class TestStoreContextBehaviour(unittest.TestCase):
             )
 
 
+# ============================================================
+# 陈旧引导的「不广播」+ 已登出时的门店错误处理
+# ============================================================
+#
+# 两个场景都围绕同一个失效边界:**登出**。
+#
+# M-1:引导在途 → reset()(登出)→ 陈旧引导落地。
+#     之前的断言写在「reset 之前就订阅的监听器」上 —— 而 reset() 会把监听器
+#     全部摘掉,那条断言恒真(护栏空转)。正确的做法是:**reset 之后**再订阅,
+#     断言这个新订阅者一个广播都收不到。
+#
+# M-3:请求在登出前发出、403 在登出后才到达 → handleStoreError 若还往下走,
+#     会带着已失效的 token 起一次新引导;init() 会**复用**在途 promise →
+#     下一个登录恰好落在它落地前时,新用户拿到 storeId='' → 一屏空白。
+#     所以「没有有效 token」时必须直接返回。
+_GUARD_HARNESS = r"""
+const fs = require('fs'), path = require('path'), vm = require('vm');
+const ROOT = process.env.MS_ROOT;
+
+function makeSandbox(opts) {
+  opts = opts || {};
+  const sandbox = {
+    console, setTimeout, clearTimeout, JSON, Date, Number, String, Array, Object,
+    Promise, RegExp, Error, isNaN, parseInt, parseFloat,
+    localStorage: (function () {
+      const map = {};
+      return {
+        getItem: (k) => (Object.prototype.hasOwnProperty.call(map, k) ? map[k] : null),
+        setItem: (k, v) => { map[k] = String(v); },
+        removeItem: (k) => { delete map[k]; },
+      };
+    })(),
+    window: null,
+  };
+  sandbox.window = sandbox;
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  sandbox.State = { reset: () => {} };
+
+  // token 闸:与 admin.js 的 currentAuthToken() 同名同职责(登出后返回空)
+  let token = ('token' in opts) ? opts.token : 'tok-1';
+  sandbox.currentAuthToken = function () { return token; };
+
+  const calls = [];
+  let release = null;
+  const listPromise = opts.hangList
+    ? new Promise(function (res) { release = res; })
+    : Promise.resolve({
+        ok: true, all_stores: true,
+        stores: [{ id: 'main', name: '总店' }, { id: 's002', name: '国贸店' }],
+      });
+
+  sandbox.Api = {
+    stores: {
+      list: async function () { calls.push('list'); return listPromise; },
+      current: async function () {
+        calls.push('current');
+        return { ok: true, store_id: 'main', all_stores: true };
+      },
+    },
+  };
+
+  vm.runInContext(fs.readFileSync(path.join(ROOT, 'js/core/storeContext.js'), 'utf8'),
+                  sandbox, { filename: 'storeContext.js' });
+
+  return {
+    sandbox: sandbox,
+    calls: calls,
+    release: function () {
+      if (release) {
+        release({
+          ok: true, all_stores: true,
+          stores: [{ id: 'main', name: '总店' }, { id: 's002', name: '国贸店' }],
+        });
+      }
+    },
+    setToken: function (t) { token = t; },
+  };
+}
+
+const tick = function () { return new Promise(function (r) { setTimeout(r, 0); }); };
+
+(async () => {
+  const out = {};
+
+  // ===== 场景 A(M-1):reset 之后才订阅的监听器,不许收到陈旧引导的广播 =====
+  {
+    const h = makeSandbox({ hangList: true });
+    h.sandbox.StoreContext.onChange(function () { /* reset 之前的老订阅者,会被摘掉 */ });
+    const p = h.sandbox.StoreContext.init();      // 引导在途
+    await tick();
+    h.sandbox.StoreContext.reset();                // 登出 → 清 listeners + 代次 +1
+    const reasons = [];
+    h.sandbox.StoreContext.onChange(function (_s, reason) { reasons.push(reason); });
+    h.release();                                   // 陈旧引导落地
+    await p.catch(function () {});
+    await tick();
+    out.stale = {
+      reasons: reasons,
+      storeId: h.sandbox.StoreContext.getStoreId(),
+    };
+  }
+
+  // ===== 场景 B(M-3 正向):已登出 → 迟到的 403 不许起新引导 =====
+  {
+    const h = makeSandbox({ token: 'tok-1' });
+    await h.sandbox.StoreContext.init();
+    h.setToken('');                                // clearAuth():token 没了
+    h.sandbox.StoreContext.reset();                // clearAuth():reset()
+    const before = h.calls.length;
+    h.sandbox.StoreContext.handleStoreError(403, '无权访问门店: s002');   // 迟到的 403
+    await tick();
+    out.loggedOut = {
+      callsBefore: before,
+      callsAfter: h.calls.length,
+      storeId: h.sandbox.StoreContext.getStoreId(),
+    };
+  }
+
+  // ===== 场景 C(M-3 反向):token 有效 → 同样的 403 必须照常起新引导 =====
+  {
+    const h = makeSandbox({ token: 'tok-1' });
+    await h.sandbox.StoreContext.init();
+    const before = h.calls.length;
+    h.sandbox.StoreContext.handleStoreError(403, '无权访问门店: s002');
+    await tick();
+    out.loggedIn = {
+      callsBefore: before,
+      callsAfter: h.calls.length,
+      storeId: h.sandbox.StoreContext.getStoreId(),
+    };
+  }
+
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+class TestLogoutGuards(unittest.TestCase):
+    """登出边界上的两条护栏(需要 node,缺失则跳过)。"""
+
+    def setUp(self) -> None:
+        if not shutil.which("node"):
+            self.skipTest("未安装 node,跳过前端行为验证")
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def _run(self) -> dict[str, Any]:
+        hp = Path(self.tmp.name) / "guard_harness.js"
+        hp.write_text(_GUARD_HARNESS, encoding="utf-8")
+        env = dict(**os.environ)
+        env["MS_ROOT"] = str(METERSTATS)
+        proc = subprocess.run(
+            ["node", str(hp)], capture_output=True, text=True, env=env, timeout=60,
+        )
+        self.assertEqual(proc.returncode, 0, msg="node 执行失败:\n%s" % proc.stderr)
+        out: dict[str, Any] = json.loads(proc.stdout.strip().splitlines()[-1])
+        return out
+
+    def test_stale_bootstrap_does_not_broadcast_after_reset(self) -> None:
+        """陈旧引导(登出前发起、登出后落地)不许再广播。
+
+        为什么要在 reset() **之后**才订阅:reset() 会把监听器全部摘掉 ——
+        订阅在 reset 之前的断言恒真,护栏就成了摆设。
+        """
+        out = self._run()
+        self.assertEqual(
+            out["stale"]["reasons"], [],
+            "陈旧引导落地后仍广播了 %s —— reset 之后注册的监听器收到了广播"
+            % (out["stale"]["reasons"],),
+        )
+        self.assertEqual(
+            out["stale"]["storeId"], "",
+            "陈旧引导把上一个用户的门店写回来了",
+        )
+
+    def test_store_error_after_logout_does_not_start_new_bootstrap(self) -> None:
+        """已登出时,迟到的门店 403 不许起新引导。
+
+        起了新引导 = 带着失效 token 跑(后端 401 → picked='')→
+        init() 会复用这个在途 promise → 下一个登录落在它落地前时,
+        新用户拿到空门店 → 一屏空白,只能手动刷新。
+        """
+        out = self._run()
+        self.assertEqual(
+            out["loggedOut"]["callsAfter"], out["loggedOut"]["callsBefore"],
+            "已登出却起了新引导(多打了 %d 次后端请求)"
+            % (out["loggedOut"]["callsAfter"] - out["loggedOut"]["callsBefore"]),
+        )
+        self.assertEqual(
+            out["loggedOut"]["storeId"], "",
+            "已登出后门店上下文被迟到的 403 改了",
+        )
+
+    def test_store_error_with_valid_token_still_recovers(self) -> None:
+        """反向护栏:token 有效时,门店 403 必须照常起新引导(守卫不许误伤恢复流程)。"""
+        out = self._run()
+        self.assertGreater(
+            out["loggedIn"]["callsAfter"], out["loggedIn"]["callsBefore"],
+            "token 有效时门店 403 没有触发恢复引导 —— 恢复流程被守卫打死了",
+        )
+        self.assertEqual(
+            out["loggedIn"]["storeId"], "main",
+            "恢复引导后没有落到有效门店",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

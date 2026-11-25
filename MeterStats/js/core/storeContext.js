@@ -112,6 +112,34 @@
     try { return window.localStorage; } catch (e) { return null; }
   }
 
+  /**
+   * 当前还有没有有效会话 —— token 只认 admin.js 的 currentAuthToken()
+   * (AGENTS.md 约定:历史上有 token / meter_admin_token / meter_token 三套键名,
+   *  后两个是死键,不要直读 localStorage)。
+   *
+   * 写法照抄 js/core/api.js::_authToken():admin.js 排在 storeContext.js 之后,
+   * 所以必须做存在性守卫,不能假设 currentAuthToken 已经在了。
+   *
+   * ⚠️ **读不到 token 读口 ≠ 已登出**:那种情况返回 true(不拦)。
+   * 理由:这个守卫是用来挡「登出后迟到的响应」的,不是用来挡「没登录」的;
+   * 判错了会把**恢复流程**打死(门店失效 → 本该重新引导 → 却什么都不做 →
+   * 用户卡在失效门店上出不来)。宁可多跑一次后端往返,不能把恢复路径堵死。
+   * 真正登出的判定依据是 currentAuthToken() **存在且返回空**(admin.js 的
+   * clearAuth() 会把 ADMIN_TOKEN 置 null 并删掉 localStorage 的三个键)。
+   */
+  function _hasAuthToken() {
+    try {
+      if (typeof currentAuthToken === 'function') {
+        return !!currentAuthToken();
+      }
+    } catch (e) { /* admin.js 还没加载 */ }
+    try {
+      if (typeof ADMIN_TOKEN !== 'undefined') return !!ADMIN_TOKEN;
+    } catch (e) { /* ignore */ }
+    // 判断不了 → 不拦
+    return true;
+  }
+
   function _readPersisted() {
     var ls = _localStorage();
     if (!ls) return '';
@@ -408,6 +436,17 @@
     handleStoreError: function (status, text) {
       var msg = String(text || '');
       if (state.recovering) return;
+      // ⚠️ 已登出 → 这次的响应属于**上一个会话**,不许再碰任何 state。
+      //
+      // 为什么:请求是登出前发的,403 是登出后才到的。这时若还往下走(起一次新引导),
+      // 那次引导会带着已失效的 token 跑(后端 401 → picked=''),而 init() 会**复用**
+      // 在途的 promise → 下一个登录恰好落在它落地前时,新用户拿到 storeId='' →
+      // 走「加载门店列表失败,请刷新重试」的空态分支,loadAppData() 不执行 →
+      // 新用户一屏空白,只能手动刷新。
+      //
+      // 边界:token 在服务端过期时 localStorage 里还有 token → 守卫放行,
+      // 行为不变(那是「会话过期」,不是「已登出」)。
+      if (!_hasAuthToken()) return;
       if (_isNoStoreMessage(msg)) {
         // 账号已经没有门店了 → 旧店的数据(尤其 localStorage 离线缓存)必须清,
         // 不然用户会继续看着一个自己已经无权访问的门店的数据。
