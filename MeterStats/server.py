@@ -195,6 +195,20 @@ def main():
     app_handler.DATA_PATHS = data_paths
     app_handler._sync_data_paths()  # 初始化 settings.json
 
+    # 分店迁移:顶层数据 → stores/main/(幂等;失败不阻塞启动)
+    # ⚠️ 必须放在 _sync_data_paths() 之后 —— 迁移要写 settings.json
+    #    (门店注册表 + 用户门店归属),settings.json 不存在时做不了。
+    from modules.stores.migration import migrate_to_stores as _migrate_to_stores
+    try:
+        _mig = _migrate_to_stores(data_dir)
+        if not _mig.get("ok", True):
+            # 门店注册表没落盘 → 迁移已中止(stores/ 目录没建,仍是单店布局)。
+            # 不阻塞启动,但要显眼:多门店功能不可用,需要人工看一眼 settings.json。
+            log("  [MIGRATE] [WARN] 门店注册表未落盘 —— 多门店布局未启用,"
+                "继续以单店模式运行(下次启动会自动重试)")
+    except Exception as e:
+        log(f"  [MIGRATE] 多门店布局迁移异常(继续以单店模式运行): {e}")
+
 
     bind_host = os.environ.get("METER_BIND", "0.0.0.0")
     server = ThreadingHTTPServer((bind_host, PORT), app_handler.Handler)

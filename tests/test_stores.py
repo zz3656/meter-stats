@@ -9,20 +9,31 @@
 - 报表缓存按门店隔离(总店的月报不能被分店命中)
 """
 import json
+import shutil as _shutil
 import sys
 import tempfile
 import threading
 import unittest
+import unittest.mock
 from pathlib import Path
 from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
-from modules.stores import config, context, registry  # noqa: E402
+from modules.stores import config, context, migration, registry  # noqa: E402
 
 import app_handler  # noqa: E402
 import routing  # noqa: E402
 from storage import DATA_FILES  # noqa: E402
+
+
+def _is_under(path: Path, parent: Path) -> bool:
+    """path 是否在 parent 目录之下(纯路径判断,不碰文件系统)。"""
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
 
 
 class StoreTestBase(unittest.TestCase):
@@ -945,3 +956,436 @@ class TestStoreConfigIsolation(StoreTestBase):
         meters = config.get_store_meters()
         meters[0]["multiplier"] = 999
         self.assertEqual(config.DEFAULT_METERS[0]["multiplier"], 160)
+
+
+class TestStoreMigration(StoreTestBase):
+    """顶层数据 → stores/main/ 的幂等迁移。"""
+
+    def _seed_legacy(self) -> None:
+        """造一份"迁移前"的数据:顶层 6 个 json + settings.json。"""
+        (self.data_dir / "readings.json").write_text(
+            '[{"date": "2026-11-01", "hall": 10.0}]', encoding="utf-8")
+        (self.data_dir / "charges.json").write_text(
+            '[{"id": "c1", "date": "2026-11-01", "hall": 5.0}]', encoding="utf-8")
+        from modules.system.settings_handler import init_settings
+        init_settings(self.data_dir)
+
+    # --- 简报 Step 1 的用例 ---
+
+    def test_migration_moves_files_into_main_store(self) -> None:
+        self._seed_legacy()
+        result = migration.migrate_to_stores(self.data_dir)
+        self.assertTrue(result["migrated"])
+        self.assertTrue(result["ok"])
+        main = self.data_dir / "stores" / "main"
+        self.assertTrue((main / "readings.json").exists())
+        self.assertTrue((main / "charges.json").exists())
+        data = json.loads((main / "readings.json").read_text(encoding="utf-8"))
+        self.assertEqual(data[0]["date"], "2026-11-01")
+
+    def test_migration_keeps_legacy_files_for_rollback(self) -> None:
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+        # 顶层旧文件保留(可回滚),不删除
+        self.assertTrue((self.data_dir / "readings.json").exists())
+
+    def test_migration_is_idempotent(self) -> None:
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+        result2 = migration.migrate_to_stores(self.data_dir)
+        self.assertFalse(result2["migrated"])
+        data = json.loads(
+            (self.data_dir / "stores" / "main" / "readings.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(data), 1)
+
+    def test_migration_creates_store_json_with_meters(self) -> None:
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+        cfg = config.read_store_config("main")
+        self.assertEqual(len(cfg["meters"]), 4)
+
+    def test_migration_registers_default_store(self) -> None:
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+        from modules.system.settings_handler import get_settings
+        stores = get_settings().get("stores") or []
+        self.assertEqual(len(stores), 1)
+        self.assertEqual(stores[0]["id"], "main")
+
+    def test_migration_assigns_existing_users_to_default_store(self) -> None:
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+        from modules.system.settings_handler import get_settings
+        users = get_settings().get("users") or []
+        self.assertTrue(users)
+        for u in users:
+            if u.get("role") == "admin":
+                self.assertTrue(u.get("all_stores"))
+            else:
+                self.assertEqual(u.get("store_ids"), ["main"])
+
+    def test_fresh_install_creates_empty_main_store(self) -> None:
+        """全新安装(没有任何顶层数据)→ 建好默认店,不报错。"""
+        from modules.system.settings_handler import init_settings
+        init_settings(self.data_dir)
+        result = migration.migrate_to_stores(self.data_dir)
+        self.assertFalse(result["migrated"])
+        self.assertTrue((self.data_dir / "stores" / "main" / "readings.json").exists())
+
+    # --- 缺陷 1 专项:幂等判定不能只看一个文件 ---
+
+    def test_migration_judges_completion_by_all_files_not_one(self) -> None:
+        """只有 readings.json 在,不等于迁移完成。
+
+        计划代码的判定是 `(main_dir/"readings.json").exists()` → 中途失败
+        (第 3 个文件 copy2 时磁盘满)后,stores/main/ 里只有 2 个文件,
+        但 readings.json 已存在 → 下次启动判定"已迁移"→ 直接跳过 →
+        剩下 4 个数据文件永远补不上 → 门店数据永久残缺,而且没有报错。
+
+        本实现用完成标记(stores/main/.migrated)判定:全部搬完才写标记。
+        """
+        self._seed_legacy()
+        main = self.data_dir / "stores" / "main"
+        main.mkdir(parents=True)
+        # 模拟"上次迁移中途失败":只有 readings.json 在,没有完成标记
+        (main / "readings.json").write_text(
+            '[{"date": "2026-11-01", "hall": 10.0}]', encoding="utf-8")
+
+        migration.migrate_to_stores(self.data_dir)
+
+        # 剩下 5 个文件必须补齐
+        for fname in DATA_FILES.values():
+            self.assertTrue((main / fname).exists(), fname)
+        # 完成标记在
+        self.assertTrue((main / ".migrated").exists())
+
+    def test_migration_marker_only_written_after_all_files_copied(self) -> None:
+        """中途失败 → 不写完成标记(否则下次启动会误判"已完成")。"""
+        self._seed_legacy()
+        main = self.data_dir / "stores" / "main"
+        original = _shutil.copy2
+
+        def flaky_copy(src: Any, dst: Any, *args: Any, **kwargs: Any) -> Any:
+            if _is_under(Path(dst), main):
+                raise OSError("磁盘满了")
+            return original(src, dst, *args, **kwargs)
+
+        with unittest.mock.patch("shutil.copy2", side_effect=flaky_copy):
+            result = migration.migrate_to_stores(self.data_dir)
+        self.assertFalse(result["migrated"])
+        self.assertFalse((main / ".migrated").exists())
+
+    def test_migration_resumes_after_partial_copy_failure(self) -> None:
+        """上次搬了一半(磁盘满)→ 下次启动补齐剩下的文件。"""
+        self._seed_legacy()
+        main = self.data_dir / "stores" / "main"
+        original = _shutil.copy2
+        calls = {"n": 0}
+
+        def flaky_copy(src: Any, dst: Any, *args: Any, **kwargs: Any) -> Any:
+            if _is_under(Path(dst), main):
+                calls["n"] += 1
+                if calls["n"] > 2:
+                    raise OSError("磁盘满了")
+            return original(src, dst, *args, **kwargs)
+
+        with unittest.mock.patch("shutil.copy2", side_effect=flaky_copy):
+            migration.migrate_to_stores(self.data_dir)
+
+        # 搬了一半:只有 2 个文件在,没有完成标记
+        self.assertFalse((main / ".migrated").exists())
+        self.assertEqual(calls["n"], 3)
+
+        # 模拟修复后重启:标记没写 → 必须重跑并补齐
+        result = migration.migrate_to_stores(self.data_dir)
+        for fname in DATA_FILES.values():
+            self.assertTrue((main / fname).exists(), fname)
+        self.assertTrue(result["migrated"] or result["created"])
+
+    # --- 缺陷 2 专项:注册表落盘失败必须中止迁移 ---
+
+    def test_migration_aborts_when_registry_write_fails(self) -> None:
+        """注册表写盘失败 → 中止迁移,**不建 stores/ 目录**。
+
+        settings_handler.save_settings() 会吞掉所有异常(只往 stderr 打一行
+        WARN)。计划代码只记日志就继续往下走 → stores/main/ 建出来了 →
+        multi_store_layout() 变 True → 门店闸要求门店已注册 → main 不在册
+        → 全站 404。
+
+        正确做法:回读 settings.json 校验 main 真的在册;不通过就中止,
+        保持单店布局(门店闸整体放行,行为与改造前完全一致)。
+        """
+        self._seed_legacy()
+        from modules.system import settings_handler
+
+        original = settings_handler.save_settings
+        settings_handler.save_settings = lambda data: None
+        try:
+            result = migration.migrate_to_stores(self.data_dir)
+        finally:
+            settings_handler.save_settings = original
+
+        self.assertFalse(result["migrated"])
+        self.assertFalse(result["created"])
+        # 注册表没落盘 → ok=False(调用方据此打醒目的 WARN)
+        self.assertFalse(result["ok"])
+        # 关键:stores/ 目录不能存在 —— 存在就等于切到多店布局了
+        self.assertFalse((self.data_dir / "stores").exists())
+
+    def test_migration_verifies_registry_by_rereading_disk(self) -> None:
+        """落盘校验必须**回读磁盘**,不能只看内存里的 dict。"""
+        self._seed_legacy()
+        from modules.system import settings_handler
+
+        original = settings_handler.save_settings
+
+        def fake_save(data: Any) -> None:
+            # 写盘"成功"但实际没落盘(内存里有 stores,磁盘上没有)
+            return None
+
+        settings_handler.save_settings = fake_save
+        try:
+            result = migration.migrate_to_stores(self.data_dir)
+        finally:
+            settings_handler.save_settings = original
+
+        self.assertFalse(result["migrated"])
+        self.assertFalse((self.data_dir / "stores").exists())
+        # 磁盘上的 settings.json 必须还是原样(没有被写坏)
+        on_disk = json.loads((self.data_dir / "settings.json").read_text(encoding="utf-8"))
+        self.assertIsNone(on_disk.get("stores"))
+
+    # --- 缺陷 4 专项:全新安装分支必须走 storage.save_json ---
+
+    def test_fresh_install_uses_storage_save_json(self) -> None:
+        """空文件必须用 storage.save_json 写(原子写 + 失效缓存)。
+
+        计划代码用 p.write_text("[]") —— 中途崩溃会留半截文件,
+        而且不失效 storage 的 LRU 缓存(别人读到的是陈旧值)。
+        """
+        from modules.system.settings_handler import init_settings
+        init_settings(self.data_dir)
+
+        import storage
+        calls: list[str] = []
+        original = storage.save_json
+
+        def spy_save(path: Path, data: Any) -> Any:
+            calls.append(path.name)
+            return original(path, data)
+
+        storage.save_json = spy_save
+        try:
+            migration.migrate_to_stores(self.data_dir)
+        finally:
+            storage.save_json = original
+
+        main = self.data_dir / "stores" / "main"
+        self.assertTrue((main / "readings.json").exists())
+        self.assertIn("readings.json", calls)
+
+    # --- 图片目录迁移 ---
+
+    def test_migration_moves_images_dir(self) -> None:
+        """顶层 images/ → stores/main/images/(值班照片不能变孤儿)。"""
+        self._seed_legacy()
+        images = self.data_dir / "images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"\xff\xd8\xff\xe0fake-jpeg")
+
+        migration.migrate_to_stores(self.data_dir)
+
+        moved = self.data_dir / "stores" / "main" / "images" / "a.jpg"
+        self.assertTrue(moved.exists())
+        self.assertEqual(moved.read_bytes(), b"\xff\xd8\xff\xe0fake-jpeg")
+
+    def test_migration_keeps_top_level_images_for_rollback(self) -> None:
+        """顶层 images/ 保留(可回滚副本)—— 不删。"""
+        self._seed_legacy()
+        images = self.data_dir / "images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"jpeg")
+
+        migration.migrate_to_stores(self.data_dir)
+
+        self.assertTrue((self.data_dir / "images" / "a.jpg").exists())
+
+    def test_migration_without_images_dir_succeeds(self) -> None:
+        """绝大多数部署没有 images/ → 跳过,不算错误。"""
+        self._seed_legacy()
+        result = migration.migrate_to_stores(self.data_dir)
+        self.assertTrue(result["migrated"])
+        self.assertFalse((self.data_dir / "stores" / "main" / "images").exists())
+
+    def test_migration_backs_up_before_moving_images(self) -> None:
+        """图片搬运也在备份之后 —— 备份是"动数据之前"的闸门。"""
+        self._seed_legacy()
+        images = self.data_dir / "images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"jpeg")
+
+        result = migration.migrate_to_stores(self.data_dir)
+
+        self.assertIsNotNone(result["backup"])
+        # 备份包里必须有顶层数据文件(证明备份发生在搬文件之前)
+        backup_zip = Path(result["backup"])
+        self.assertTrue(backup_zip.exists())
+
+    def test_migration_images_idempotent(self) -> None:
+        """迁移两次 → stores/main/images/ 里只有一份,内容不变。"""
+        self._seed_legacy()
+        images = self.data_dir / "images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"jpeg")
+
+        migration.migrate_to_stores(self.data_dir)
+        result2 = migration.migrate_to_stores(self.data_dir)
+
+        self.assertFalse(result2["migrated"])
+        moved_dir = self.data_dir / "stores" / "main" / "images"
+        self.assertEqual(len(list(moved_dir.glob("*.jpg"))), 1)
+        self.assertEqual((moved_dir / "a.jpg").read_bytes(), b"jpeg")
+
+    def test_migration_images_does_not_overwrite_existing_target(self) -> None:
+        """与数据文件同一口径:目标已存在且有内容 → 跳过,不覆盖。"""
+        self._seed_legacy()
+        images = self.data_dir / "images"
+        images.mkdir()
+        (images / "a.jpg").write_bytes(b"new-content")
+        # 目标已有一份(门店侧的活数据)→ 迁移不能拿顶层旧副本盖上去
+        moved_dir = self.data_dir / "stores" / "main" / "images"
+        moved_dir.mkdir(parents=True)
+        (moved_dir / "a.jpg").write_bytes(b"store-side-content")
+
+        migration.migrate_to_stores(self.data_dir)
+
+        moved = moved_dir / "a.jpg"
+        self.assertEqual(moved.read_bytes(), b"store-side-content")
+        # 顶层那份不动(可回滚副本)
+        self.assertEqual((images / "a.jpg").read_bytes(), b"new-content")
+
+    # --- settings-only 接口 ---
+
+    def test_migrate_settings_stores_does_not_move_files(self) -> None:
+        """migrate_settings_stores 只补注册表与用户归属,不搬数据文件。"""
+        self._seed_legacy()
+        result = migration.migrate_settings_stores(self.data_dir)
+
+        self.assertFalse((self.data_dir / "stores" / "main" / "readings.json").exists())
+        from modules.system.settings_handler import get_settings
+        stores = get_settings().get("stores") or []
+        self.assertEqual([s["id"] for s in stores], ["main"])
+        self.assertIn("stores", result)
+
+    # --- 不推翻管理员的显式配置 ---
+
+    def _add_user(self, **fields: Any) -> None:
+        """往 settings.json 里加一个用户(走 settings 层,不手改 JSON 文件)。"""
+        from modules.system import settings_handler
+        st = settings_handler.get_settings()
+        st.setdefault("users", []).append(fields)
+        settings_handler.save_settings(st)
+
+    def _users_by_name(self) -> dict[str, Any]:
+        from modules.system.settings_handler import get_settings
+        return {str(u.get("username") or ""): u
+                for u in (get_settings().get("users") or [])
+                if isinstance(u, dict)}
+
+    def test_migration_keeps_explicit_empty_store_ids(self) -> None:
+        """员工 store_ids: [] = 管理员刻意「还没分配门店」→ 原样保留。
+
+        自动补成 ["main"] 等于凭空给员工总店访问权。
+        """
+        self._seed_legacy()
+        self._add_user(id=2, username="waiter", role="employee", enabled=True,
+                       store_ids=[])
+
+        migration.migrate_to_stores(self.data_dir)
+
+        users = self._users_by_name()
+        self.assertEqual(users["waiter"]["store_ids"], [])
+
+    def test_migration_keeps_explicit_admin_all_stores_false(self) -> None:
+        """admin all_stores=False = 管理员刻意限定单店 → 原样保留(不静默提权)。"""
+        self._seed_legacy()
+        self._add_user(id=3, username="boss", role="admin", enabled=True,
+                       all_stores=False)
+
+        migration.migrate_to_stores(self.data_dir)
+
+        users = self._users_by_name()
+        self.assertIs(users["boss"]["all_stores"], False)
+
+    def test_migration_fills_missing_user_store_fields(self) -> None:
+        """老用户(盘上根本没有这些字段)→ 按角色补默认值。
+
+        管理员补 all_stores=True;员工补 store_ids=["main"]。
+        (不给非管理员补 all_stores=True —— 那是提权。)
+        """
+        self._seed_legacy()
+        self._add_user(id=4, username="old-boss", role="admin", enabled=True)
+        self._add_user(id=5, username="old-staff", role="employee", enabled=True)
+
+        migration.migrate_to_stores(self.data_dir)
+
+        users = self._users_by_name()
+        self.assertIs(users["old-boss"]["all_stores"], True)
+        self.assertEqual(users["old-staff"]["store_ids"], ["main"])
+
+    def test_migration_repeated_runs_keep_settings_byte_identical(self) -> None:
+        """连跑 3 次 → settings.json 逐字节不变。
+
+        锁死三件事:迁移幂等、显式配置不被改、不会每次启动都重写 settings.json。
+        """
+        self._seed_legacy()
+        self._add_user(id=2, username="waiter", role="employee", enabled=True,
+                       store_ids=[])
+
+        migration.migrate_to_stores(self.data_dir)
+        first = (self.data_dir / "settings.json").read_bytes()
+        migration.migrate_to_stores(self.data_dir)
+        second = (self.data_dir / "settings.json").read_bytes()
+        migration.migrate_to_stores(self.data_dir)
+        third = (self.data_dir / "settings.json").read_bytes()
+
+        self.assertEqual(first, second)
+        self.assertEqual(second, third)
+
+    # --- store.json 的落盘位置 ---
+
+    def test_store_json_lands_in_data_dir(self) -> None:
+        """store.json 落在传入的 data_dir 下(DATA_PATHS 基准一致时)。"""
+        self._seed_legacy()
+        migration.migrate_to_stores(self.data_dir)
+
+        path = self.data_dir / "stores" / "main" / "store.json"
+        self.assertTrue(path.exists())
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(len(cfg["meters"]), 4)
+        # 与 config.read_store_config() 读的必须是同一个文件
+        self.assertEqual(config.store_config_path("main"), path)
+        self.assertEqual(len(config.read_store_config("main")["meters"]), 4)
+
+    def test_store_json_follows_passed_data_dir_not_global_base(self) -> None:
+        """migrate_to_stores(其它目录) → store.json 落在那个目录,不是全局基准。
+
+        config.store_config_path() 走的是全局 app_handler.DATA_PATHS 基准;
+        迁移的所有产物都必须跟着传入的 data_dir 走。
+        """
+        from modules.system.settings_handler import init_settings
+
+        self._seed_legacy()
+        other = Path(tempfile.mkdtemp())
+        try:
+            init_settings(other)
+            migration.migrate_to_stores(other)
+
+            path = other / "stores" / "main" / "store.json"
+            self.assertTrue(path.exists())
+            cfg = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(len(cfg["meters"]), 4)
+            # 全局基准下不能被写出一个 store.json
+            self.assertFalse((self.data_dir / "stores" / "main" / "store.json").exists())
+        finally:
+            _shutil.rmtree(other, ignore_errors=True)
