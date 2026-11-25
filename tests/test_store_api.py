@@ -378,3 +378,60 @@ class TestStoreApiWrite(StoreApiTestBase):
         if h.response_status == 200:
             self.assertFalse(h.parsed["ok"])
         self.assertIsNotNone(registry.get_store("s002"))
+
+
+class TestStoreApiInvalidStoreId(StoreApiTestBase):
+    """路径里的门店 ID 非法 → 必须报错,而且注册表一点都不能动。
+
+    门店 ID 会拼进文件路径(stores/<id>/),所以必须挡住 "../" 之类的穿越字符。
+    URL 编码过的("%2F")更危险 —— unquote 之后才暴露出来。
+    校验一旦被去掉,非法 ID 会一路走到 registry,报错文案从
+    「门店 ID 非法」变成「门店不存在」,穿越字符还会被当成目录名。
+    """
+
+    # 三类非法 ID:路径穿越 / URL 编码过的斜杠 / 含空格与中文
+    INVALID_IDS = (
+        "../evil",
+        "%2F..%2Fevil",
+        "门店 1",
+        "evil store",
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._multi_store_layout()
+
+    def _registry_snapshot(self) -> List[Dict[str, Any]]:
+        """注册表快照(用于比对「有没有被动过」)。"""
+        return registry.list_stores()
+
+    def test_put_store_rejects_invalid_store_id(self) -> None:
+        tok = self._session(self._users()[0])
+        before = self._registry_snapshot()
+        for bad in self.INVALID_IDS:
+            with self.subTest(store_id=bad):
+                h = self._call("PUT", f"/api/stores/{bad}", {"name": "越权店"}, token=tok)
+                self.assertEqual(h.response_status, 200)
+                self.assertFalse(h.parsed["ok"])
+                self.assertEqual(h.parsed["error"], "门店 ID 非法")
+                self.assertEqual(self._registry_snapshot(), before)
+
+    def test_delete_store_rejects_invalid_store_id(self) -> None:
+        tok = self._session(self._users()[0])
+        before = self._registry_snapshot()
+        for bad in self.INVALID_IDS:
+            with self.subTest(store_id=bad):
+                h = self._call("DELETE", f"/api/stores/{bad}", token=tok)
+                self.assertEqual(h.response_status, 200)
+                self.assertFalse(h.parsed["ok"])
+                self.assertEqual(h.parsed["error"], "门店 ID 非法")
+                self.assertEqual(self._registry_snapshot(), before)
+
+    def test_invalid_store_id_does_not_touch_existing_stores(self) -> None:
+        """非法 ID 的请求不能顺手改掉别的门店。"""
+        tok = self._session(self._users()[0])
+        for bad in self.INVALID_IDS:
+            with self.subTest(store_id=bad):
+                self._call("PUT", f"/api/stores/{bad}", {"name": "越权店"}, token=tok)
+                self.assertEqual(self._store("main")["name"], "总店")
+                self.assertEqual(self._store("s002")["name"], "国贸店")

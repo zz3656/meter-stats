@@ -2,49 +2,62 @@
 从原 handlers.admin.py 拆分而来,保持 API 行为完全一致。
 """
 from __future__ import annotations
+
 from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
-from utils import send_json, read_body
-from modules.system.settings_handler import (
-    get_settings, save_settings, add_user, update_user, delete_user, save_users_verified, ROLES,
-)
+from constants import ROLES
+from utils import read_body, send_json
 
+from modules.system.settings_handler import (
+    add_user,
+    delete_user,
+    get_settings,
+    save_settings,
+    save_users_verified,
+    update_user,
+)
 
 # ============ 用户管理 CRUD ============
 
-def handle_get_users(handler):
+def handle_get_users(handler: Any) -> None:
     """GET /api/admin/users → [users](不含密码)"""
     settings = get_settings()
-    # 不返回密码
-    users = [{k: v for k, v in u.items() if k != "password"} for u in settings.get("users", [])]
+    # 不返回密码 —— 走 _public_user(),与 POST/PUT 的响应用同一套脱敏逻辑
+    users = [_public_user(u) for u in settings.get("users", [])]
     send_json(handler, 200, users)
 
 
-def handle_post_users(handler):
+def handle_post_users(handler: Any) -> None:
     """POST /api/admin/users {username, password, name, role, store_ids?, all_stores?} → {ok, user}"""
     body = read_body(handler)
-    if not body:
+    # body 不是 JSON 对象(数组/标量/null)→ 按空参数处理,
+    # 否则下面的 .get() 会抛 AttributeError → 500。
+    if not body or not isinstance(body, dict):
         send_json(handler, 200, {"ok": False, "error": "参数不能为空"})
         return
 
     settings = get_settings()
     users = settings.get("users", [])
-    username = (body or {}).get("username", "")
-    password = (body or {}).get("password", "")
-    name = (body or {}).get("name", username)
-    role = (body or {}).get("role", "employee")
-    store_ids = (body or {}).get("store_ids")
-    all_stores = (body or {}).get("all_stores")
+    username = body.get("username", "")
+    password = body.get("password", "")
+    name = body.get("name", username)
+    role = body.get("role", "employee")
+    store_ids = body.get("store_ids")
+    all_stores = body.get("all_stores")
 
     if not username or not password:
         send_json(handler, 200, {"ok": False, "error": "用户名和密码不能为空"})
         return
 
-    err = _check_store_ids(store_ids, settings)
-    if err:
-        send_json(handler, 200, {"ok": False, "error": err})
-        return
+    # 只有「键存在」才校验:键不存在 = 没传门店(新用户 store_ids = [])。
+    # 不能用 .get() 判 —— 显式传 store_ids: null 时 .get() 返回 None,
+    # 会被当成「没传」放行,然后被 update_user 强转成 [] → 门店归属被静默清空。
+    if "store_ids" in body:
+        err = _check_store_ids(store_ids, settings)
+        if err:
+            send_json(handler, 200, {"ok": False, "error": err})
+            return
 
     result = add_user(users, username, password, name, role,
                       store_ids=store_ids if isinstance(store_ids, list) else None,
@@ -66,7 +79,7 @@ def handle_post_users(handler):
     send_json(handler, 200, {"ok": True, "user": _public_user(result)})
 
 
-def handle_put_users(handler, path_clean: str):
+def handle_put_users(handler: Any, path_clean: str) -> None:
     """PUT /api/admin/users?id=<uid> {fields} → {ok, user}"""
     qs = parse_qs(urlparse(handler.path).query)
     uid_str = qs.get("id", [None])[0]
@@ -78,12 +91,19 @@ def handle_put_users(handler, path_clean: str):
     settings = get_settings()
     users = settings.get("users", [])
     body = read_body(handler)
-    body = body or {}
-
-    err = _check_store_ids(body.get("store_ids"), settings)
-    if err:
-        send_json(handler, 200, {"ok": False, "error": err})
+    # body 不是 JSON 对象(数组/标量/null)→ 按空参数处理,
+    # 否则下面的 body.get() 会抛 AttributeError → 500。
+    if not isinstance(body, dict):
+        send_json(handler, 200, {"ok": False, "error": "参数不能为空"})
         return
+
+    # 「键存在」才校验(理由同 POST):显式传 null 也必须报错,
+    # 否则 update_user 会把它强转成 [] → 用户的门店归属被静默清空。
+    if "store_ids" in body:
+        err = _check_store_ids(body["store_ids"], settings)
+        if err:
+            send_json(handler, 200, {"ok": False, "error": err})
+            return
 
     result = update_user(users, uid, body)
     if result is None:
@@ -100,7 +120,7 @@ def handle_put_users(handler, path_clean: str):
     send_json(handler, 200, {"ok": True, "user": _public_user(result)})
 
 
-def handle_delete_users(handler, path_clean: str):
+def handle_delete_users(handler: Any, path_clean: str) -> None:
     """DELETE /api/admin/users?id=<uid> → {ok}"""
     qs = parse_qs(urlparse(handler.path).query)
     uid_str = qs.get("id", [None])[0]
@@ -150,16 +170,29 @@ def _verify_user_deleted(user_id: int) -> None:
 # ============ 门店归属辅助 ============
 
 def _check_store_ids(store_ids: Any, settings: Dict[str, Any]) -> Optional[str]:
-    """校验 store_ids 里的每个门店 ID 都在注册表里。返回错误文案,None = 通过。
+    """校验 store_ids:必须是数组,且数组里的每个门店 ID 都在注册表里。
 
-    不校验的后果:用户的 store_ids 里躺着一个永远匹配不上的 ID(手打错了、
-    门店已被删)→ 门店闸永远 403「无权访问门店」,用户看不到任何数据,
+    返回错误文案,None = 通过。
+
+    **必须是数组**:类型不对(字符串 / 数字 / dict / null)必须报错,
+    不能放行 —— 放行后 update_user 会把它强转成 [] ,
+    用户的门店归属被**静默清空**:管理员收到「成功」,用户当场失去门店访问权
+    (门店闸 403「账号未分配有效门店」),而且盘上的原值已经没了。
+
+    **空数组合法**:[] = 「不分配任何门店」——
+    前端取消勾选全部门店、新建用户时先不选门店,都走这条路径。
+    (把它一起拒掉会打断 UI 的正常操作。)
+
+    不校验门店存在性的后果:用户的 store_ids 里躺着一个永远匹配不上的 ID
+    (手打错了、门店已被删)→ 门店闸永远 403「无权访问门店」,用户看不到任何数据,
     而且看不出原因。这里是可用性/数据一致性问题 —— 接口是 /api/admin/users,
     仅管理员可访问,鉴权闸已经挡住了越权。
 
     用内存里的 settings 查注册表,不额外读盘。
     """
-    if not isinstance(store_ids, list) or not store_ids:
+    if not isinstance(store_ids, list):
+        return "store_ids 必须是数组"
+    if not store_ids:
         return None
     from modules.stores import registry
     known = {str(s.get("id")) for s in registry.list_stores(settings)}
@@ -176,7 +209,7 @@ def _public_user(user: Dict[str, Any]) -> Dict[str, Any]:
 
 # ============ 电表设置 ============
 
-def handle_get_meter_settings(handler):
+def handle_get_meter_settings(handler: Any) -> None:
     """GET /api/admin/meter → {meter, config}"""
     settings = get_settings()
     send_json(handler, 200, {
@@ -185,7 +218,7 @@ def handle_get_meter_settings(handler):
     })
 
 
-def handle_get_meters_public(handler):
+def handle_get_meters_public(handler: Any) -> None:
     """GET /api/meters → {meters, config} (非管理员也可访问)"""
     settings = get_settings()
     send_json(handler, 200, {
@@ -194,7 +227,7 @@ def handle_get_meters_public(handler):
     })
 
 
-def handle_put_meter_settings(handler):
+def handle_put_meter_settings(handler: Any) -> None:
     """PUT /api/admin/meter → {meter, config}"""
     body = read_body(handler)
     if not body:
@@ -212,6 +245,6 @@ def handle_put_meter_settings(handler):
 
 # ============ 权限管理 ============
 
-def handle_get_roles(handler):
+def handle_get_roles(handler: Any) -> None:
     """GET /api/admin/roles → [roles]"""
     send_json(handler, 200, [{"key": k, "name": v} for k, v in ROLES.items()])

@@ -39,6 +39,7 @@ from modules.system.settings_handler import (  # noqa: E402  # type: ignore[impo
     update_user,
 )
 from modules.system.users_handler import (  # noqa: E402  # type: ignore[import-not-found]
+    handle_get_users,
     handle_post_users,
     handle_put_users,
 )
@@ -50,6 +51,7 @@ from storage import DATA_FILES  # noqa: E402  # type: ignore[import-not-found]
 # 测试只关心 HTTP 层的返回内容,这里显式声明成 Any。
 post_users: Any = handle_post_users
 put_users: Any = handle_put_users
+get_users: Any = handle_get_users
 post_login: Any = handle_post_login
 
 
@@ -66,7 +68,7 @@ def _sess(sess: Any) -> Dict[str, Any]:
 class FakeHandler:
     """模拟 BaseHTTPRequestHandler 的最小实现,捕获响应。"""
 
-    def __init__(self, path: str, body: Optional[Dict[str, Any]] = None,
+    def __init__(self, path: str, body: Any = None,
                  method: str = "POST") -> None:
         self.path = path
         self.command = method
@@ -141,14 +143,19 @@ class UserStoreTestBase(unittest.TestCase):
         ]
         save_settings(settings)
 
-    def _post_users(self, body: Dict[str, Any]) -> FakeHandler:
+    def _post_users(self, body: Any) -> FakeHandler:
         h = FakeHandler("/api/admin/users", body, "POST")
         post_users(h)
         return h
 
-    def _put_users(self, uid: int, body: Dict[str, Any]) -> FakeHandler:
+    def _put_users(self, uid: int, body: Any) -> FakeHandler:
         h = FakeHandler(f"/api/admin/users?id={uid}", body, "PUT")
         put_users(h, "/api/admin/users")
+        return h
+
+    def _get_users(self) -> FakeHandler:
+        h = FakeHandler("/api/admin/users", None, "GET")
+        get_users(h)
         return h
 
     def _user_on_disk(self, username: str) -> Any:
@@ -414,3 +421,258 @@ class TestSessionStoreScope(UserStoreTestBase):
         self.assertTrue(h.parsed["ok"])
         self.assertFalse(h.parsed["user"]["all_stores"])
         self.assertEqual(h.parsed["user"]["store_ids"], ["s002"])
+
+
+class TestUsersApiStoreIdsType(UserStoreTestBase):
+    """store_ids 类型不对必须报错 —— 不能静默清空用户的门店归属。
+
+    真 bug:PUT 传 {"store_ids": "s002"} → 接口回 ok:true,
+    但盘上的 store_ids 被清成 [] → 用户当场失去门店访问权
+    (门店闸 403「账号未分配有效门店」),管理员却收到「成功」。
+    """
+
+    def test_post_users_rejects_string_store_ids(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": "s002",
+        })
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_post_users_rejects_null_store_ids(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": None,
+        })
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_post_users_rejects_object_store_ids(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": {"a": 1},
+        })
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_post_users_rejected_type_is_not_persisted(self) -> None:
+        """类型错误时整个用户都不该落盘。"""
+        self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": "s002",
+        })
+        self.assertIsNone(self._user_on_disk("emp"))
+
+    def _make_emp(self) -> int:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+        return int(h.parsed["user"]["id"])
+
+    def test_put_users_rejects_string_store_ids(self) -> None:
+        uid = self._make_emp()
+        h = self._put_users(uid, {"store_ids": "s002"})
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_put_users_rejects_null_store_ids(self) -> None:
+        """显式传 null 也必须报错 —— .get() 判「键存在」会把 null 当成「没传」。"""
+        uid = self._make_emp()
+        h = self._put_users(uid, {"store_ids": None})
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_put_users_rejects_object_store_ids(self) -> None:
+        uid = self._make_emp()
+        h = self._put_users(uid, {"store_ids": {"a": 1}})
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "store_ids 必须是数组")
+
+    def test_put_users_type_error_keeps_disk_value(self) -> None:
+        """类型错误时盘上的原值必须原封不动(不能先清空再报错)。"""
+        uid = self._make_emp()
+        self._put_users(uid, {"store_ids": "s002"})
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002"])
+
+    def test_put_users_null_store_ids_keeps_disk_value(self) -> None:
+        uid = self._make_emp()
+        self._put_users(uid, {"store_ids": None})
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002"])
+
+    def test_put_users_object_store_ids_keeps_disk_value(self) -> None:
+        uid = self._make_emp()
+        self._put_users(uid, {"store_ids": {"a": 1}})
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002"])
+
+
+class TestUsersApiEmptyStoreIds(UserStoreTestBase):
+    """空数组是**合法**语义:「不分配任何门店」。
+
+    这是 F1 收紧的另一半 —— 把空数组一起拒掉会打断 UI:
+    前端取消勾选全部门店、新建用户时先不选门店,都走这条路径。
+    """
+
+    def test_post_users_accepts_empty_store_ids(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": [],
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+        self.assertEqual(h.parsed["user"]["store_ids"], [])
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], [])
+
+    def test_post_users_without_store_ids_key_defaults_to_empty(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee",
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], [])
+
+    def test_put_users_accepts_empty_store_ids_and_clears(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        h2 = self._put_users(uid, {"store_ids": []})
+        self.assertTrue(h2.parsed["ok"], h2.parsed)
+        self.assertEqual(h2.parsed["user"]["store_ids"], [])
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], [])
+
+    def test_put_users_without_store_ids_key_keeps_existing(self) -> None:
+        """不带 store_ids 键 → 不动用户原有的门店归属。"""
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        h2 = self._put_users(uid, {"name": "员工改名"})
+        self.assertTrue(h2.parsed["ok"], h2.parsed)
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002"])
+
+
+class TestUsersApiBodyNotObject(UserStoreTestBase):
+    """body 不是 JSON 对象 → 200 + 参数不能为空,不能 500。"""
+
+    def test_post_users_rejects_array_body(self) -> None:
+        h = self._post_users([1, 2, 3])
+        self.assertEqual(h.response_status, 200)
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "参数不能为空")
+
+    def test_post_users_rejects_string_body(self) -> None:
+        h = self._post_users("hello")
+        self.assertEqual(h.response_status, 200)
+        self.assertFalse(h.parsed["ok"])
+        self.assertEqual(h.parsed["error"], "参数不能为空")
+
+    def test_put_users_rejects_array_body(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        h2 = self._put_users(uid, [1, 2, 3])
+        self.assertEqual(h2.response_status, 200)
+        self.assertFalse(h2.parsed["ok"])
+        self.assertEqual(h2.parsed["error"], "参数不能为空")
+
+    def test_put_users_rejects_string_body(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        h2 = self._put_users(uid, "hello")
+        self.assertEqual(h2.response_status, 200)
+        self.assertFalse(h2.parsed["ok"])
+        self.assertEqual(h2.parsed["error"], "参数不能为空")
+
+    def test_put_users_rejected_body_keeps_disk_value(self) -> None:
+        """body 不合法时盘上的门店归属不能被动。"""
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        self._put_users(uid, [1, 2, 3])
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002"])
+
+
+class TestUsersApiPasswordNotLeaked(UserStoreTestBase):
+    """密码哈希绝不能出现在用户接口的响应里。
+
+    回归网:_public_user() 一旦被改回 return dict(user),
+    PBKDF2 哈希就跟着响应走(前端只要把响应打日志/存缓存就等于泄密)。
+    """
+
+    def test_post_users_response_has_no_password(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+        self.assertNotIn("password", h.parsed["user"])
+        self.assertNotIn("pbkdf2", json.dumps(h.parsed, ensure_ascii=False))
+
+    def test_put_users_response_has_no_password(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = h.parsed["user"]["id"]
+        h2 = self._put_users(uid, {"name": "员工改名"})
+        self.assertTrue(h2.parsed["ok"], h2.parsed)
+        self.assertNotIn("password", h2.parsed["user"])
+        self.assertNotIn("pbkdf2", json.dumps(h2.parsed, ensure_ascii=False))
+
+    def test_get_users_response_has_no_password(self) -> None:
+        h = self._get_users()
+        self.assertTrue(h.parsed)
+        for u in h.parsed:
+            self.assertNotIn("password", u)
+        self.assertNotIn("pbkdf2", json.dumps(h.parsed, ensure_ascii=False))
+
+    def test_get_users_hides_builtin_admin_password(self) -> None:
+        """init_settings 建出来的 admin 也有哈希 —— 同样不能出现在响应里。"""
+        h = self._get_users()
+        admins = [u for u in h.parsed if u.get("username") == "admin"]
+        self.assertTrue(admins)
+        for u in admins:
+            self.assertNotIn("password", u)
+
+
+class TestUsersApiStoreIdsOrderInsensitive(UserStoreTestBase):
+    """回读校验比较 store_ids 时必须**忽略顺序**。
+
+    落盘顺序与内存预期不一致(某些存储/序列化层会重排)不是错误 ——
+    顺序敏感的比较会报「store_ids 不一致」,把一次成功的保存说成失败。
+    """
+
+    def test_put_users_ok_when_disk_order_differs(self) -> None:
+        h = self._post_users({
+            "username": "emp", "password": "pw123456", "name": "员工",
+            "role": "employee", "store_ids": ["s002"],
+        })
+        uid = int(h.parsed["user"]["id"])
+
+        real_save = settings_handler.save_settings
+
+        def _save_with_flipped_order(settings: Dict[str, Any]) -> None:
+            """模拟「落盘顺序与内存预期不同」的写入。"""
+            data = json.loads(json.dumps(settings, ensure_ascii=False))
+            for u in data.get("users", []):
+                if u.get("id") == uid:
+                    u["store_ids"] = list(reversed(u.get("store_ids") or []))
+            real_save(data)
+
+        with mock.patch.object(settings_handler, "save_settings",
+                               side_effect=_save_with_flipped_order):
+            h2 = self._put_users(uid, {"store_ids": ["main", "s002"]})
+
+        self.assertTrue(h2.parsed["ok"], h2.parsed)
+        # 盘上顺序确实与预期不同 —— 回读比对真的发生在两个不同顺序之间
+        self.assertEqual(self._user_on_disk("emp")["store_ids"], ["s002", "main"])
