@@ -86,11 +86,18 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
   而默认门店的表集合**就是**这 4 个 key。旧 4 表 key 在表定义里是合法的
   (写入时固定走顶层字段,不存在两处存值)
 
-#### 已知问题(本轮新增)
+#### 另修掉两处既存遗留(与分店无关,收尾时处理)
 
-- **`dataimport` 仍按旧 4 表列名校验**:默认 4 表门店导入行为不变;
-  自定义表门店导入时,自定义表那几列**不会进库**(现有行为是静默忽略,
-  尚未改成明确报错),列后续单期
+- **SIGTERM 死锁**:`server.py` 的 `_shutdown()` 由 `signal.signal` 注册、跑在主线程,
+  而 `serve_forever()` 也占着主线程 —— 处理器里调 `server.shutdown()` 会等
+  `serve_forever` 退出,两边互等 → 进程卡死,只能 `kill -9`;
+  `docker stop` 每次都要等满 10 秒超时才被强杀。现在把 `shutdown()` 丢到辅助线程,
+  并在 `finally` 补 `server_close()`(否则端口要等进程退出才释放,紧跟着的重启会撞占用)。
+  实测 SIGTERM 后 600ms 内退出、退出码 0
+- **CSV 导入按当前店表集合**:改造前 `dataimport` 按写死的 4 表列名解析,
+  2 表门店导入 4 表 CSV 时多出来的列被**静默丢掉**(「导入成功 20 条」却少一半数据)。
+  现在列校验与 CSV 模板都跟着门店走,未知列**整份拒收**并列出是哪几列
+
 
 ### 已知问题
 
@@ -99,12 +106,11 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
 - **multipart 上传 ZIP 分支不走 ZIP 校验**(JSON body 分支走)—— 既存问题,与分店无关
 - **macOS / Windows 文件系统大小写不敏感**:`stores/MAIN/readings.json` 与 `stores/main/readings.json` 在盘上是**同一个目录**。门店范围闸的**比较**已经是大小写敏感的(`"MAIN" != "main"`,越权会被拒),但**文件系统层面**的隐患仍在:注册表若同时存在 `MAIN` 与 `main` 两种写法(或有人手工在盘上造目录),总店与「同名分店」仍然指向同一份数据
 - **`/api/admin/dir-listing` 前端传的是 `?dir=`、后端读的是 `?path=`** —— 目录列举功能是坏的。P1 未修,与分店无关
-- **SIGTERM 无法优雅退出**:`server.py` 的 `_shutdown()` 由 `signal.signal` 注册,运行在主线程,而 `serve_forever()` 也占着主线程 —— 信号处理器里调 `server.shutdown()` 会等 `serve_forever` 退出,主线程却被处理器占住 → **死锁**,进程只能等 SIGKILL。影响:`./run.sh stop` 无感知(它本来就用 `kill -9`);`docker stop` 要等满 10 秒超时才强杀。既存问题(首个提交即存在),与分店无关
 
 ### 文档
 
 - 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`、`test_store_switch_frontend.py`、`test_store_switcher_ui.py`、`test_storage_cache.py`
-- P2 新增 `tests/test_meter_tables.py`、`test_meter_config_api.py`、`test_meter_config_frontend.py`、`test_dynamic_forms.py`、`test_dynamic_render.py`、`test_meter_settings_ui.py`,全量 **638 项**(存量 349 + 分店 289)
+- P2 新增 `tests/test_meter_tables.py`、`test_meter_config_api.py`、`test_meter_config_frontend.py`、`test_dynamic_forms.py`、`test_dynamic_render.py`、`test_meter_settings_ui.py`、`test_graceful_shutdown.py`、`test_import_store_meters.py`,全量 **650 项**(存量 349 + 分店 301)
 
 ## [0.4.3] — 2026-11-12
 
