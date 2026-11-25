@@ -115,9 +115,9 @@
           <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
         </div>
         <button class="sidebar-item" data-section="settings-stores" onclick="switchSettingsPage('stores')"><span class="item-icon">🏪</span><span class="item-label">门店管理</span></button>
-        <button class="sidebar-item" data-section="settings-users" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
-        <button class="sidebar-item" data-section="settings-meter" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
-        <button class="sidebar-item" data-section="settings-data" onclick="switchSettingsPage('data')"><span class="item-icon">📂</span><span class="item-label">数据管理</span></button>
+        <button class="sidebar-item" data-section="settings-users" data-roles="admin" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
+        <button class="sidebar-item" data-section="settings-meter" data-roles="manager" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
+        <button class="sidebar-item" data-section="settings-data" data-roles="manager" onclick="switchSettingsPage('data')"><span class="item-icon">📂</span><span class="item-label">数据管理</span></button>
         <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')"><span class="item-icon">🔐</span><span class="item-label">权限管理</span></button>
       </div>
 

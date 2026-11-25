@@ -15,6 +15,28 @@ const ROLE_NAMES = { admin: '管理员', supervisor: '主管', employee: '员工
 const ADMIN_DELETE_ROLES = new Set(['admin', 'supervisor']);
 const ADMIN_MANAGE_ROLES = new Set(['admin']);
 
+// 主管以上 —— 与后端 routing.MANAGER_ROLES 保持一致。
+// 数据管理(备份/恢复/NAS 同步/图片目录/保留期)全在后端的 MANAGER_ONLY_PREFIXES 里,
+// 员工点这些按钮只会拿到 403 —— 与其让人点了个没反应,不如根本不显示。
+const MANAGER_ROLES = new Set(['admin', 'supervisor']);
+
+// 按角色隐藏侧栏里进不去的页面。
+// data-roles="manager" → 主管以上可见;data-roles="admin" → 仅管理员可见。
+// **fail-closed**:拿不到当前用户(未登录 / 会话失效)→ 一律隐藏。
+function applyRoleVisibility() {
+  var role = (ADMIN_USER && ADMIN_USER.role) || '';
+  var allowed = {
+    manager: MANAGER_ROLES.has(role),
+    admin: ADMIN_MANAGE_ROLES.has(role),
+  };
+  var items = document.querySelectorAll('.sidebar-item[data-roles]');
+  for (var i = 0; i < items.length; i++) {
+    var need = items[i].getAttribute('data-roles');
+    var ok = Object.prototype.hasOwnProperty.call(allowed, need) && allowed[need];
+    items[i].style.display = ok ? '' : 'none';
+  }
+}
+
 // ===== 初始化: 有token则验证, 否则显示登录页 =====
 function initAuth() {
   showLoginVersion();
@@ -57,6 +79,8 @@ function setLoggedIn(user) {
   document.getElementById('login-page').style.display = 'none';
   // admin-user-info was in the removed popup modal
   // 鉴权通过才允许加载业务数据（后端 /api/* 已强制 token）
+  // 按角色隐藏进不去的设置页(数据管理要主管以上、用户管理仅管理员)
+  applyRoleVisibility();
   if (typeof window.loadAppData === 'function') window.loadAppData();
 }
 
@@ -71,6 +95,8 @@ function clearAuth() {
   localStorage.removeItem('meter_token');
   document.getElementById('logout-btn').style.display = 'none';
   document.getElementById('login-page').style.display = 'flex';
+  // 登出后管理类入口一律藏起来(不等下次登录)
+  applyRoleVisibility();
 }
 
 // ===== 登录 =====
@@ -851,7 +877,16 @@ function browserPickFiles() {
 
 async function adminBackup() {
   showAlert('正在备份数据…', 'info');
-  const res = await api('POST', '/api/backup');
+  // ⚠️ 必须 try/catch:api() 遇非 2xx 会 throw(403 = 权限不足)。
+  //    没有 catch 就是 unhandled rejection —— 用户看到「正在备份数据…」
+  //    然后什么也没发生,连报错都没有。
+  let res;
+  try {
+    res = await api('POST', '/api/backup');
+  } catch (e) {
+    showAlert('备份失败: ' + (e && e.message ? e.message : '未知错误'), 'error');
+    return;
+  }
   if (!res.ok) {
     showAlert('备份失败: ' + (res.error || '未知错误'), 'error');
     return;
