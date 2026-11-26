@@ -207,6 +207,11 @@ def parse_store_target(rel: str) -> Tuple[bool, Optional[str]]:
     if len(parts) == 1:
         # 顶层文件:没有门店维度
         return (True, None)
+    if parts[0] == "images":
+        # 单店/遗留布局的图片目录(images/*.jpg):与顶层文件一样「没有门店维度」。
+        # 归属口径与 backup_rel_store_id 一致 —— 它把非 stores/ 路径都算总店。
+        # 不认这条的话:带照片的备份包一恢复就被判「非法的数据文件路径」而 403。
+        return (True, None)
     if parts[0] != "stores":
         # 既不是顶层文件,也不是门店子路径 → 非法
         return (False, None)

@@ -138,20 +138,31 @@ def handle_post_backup_download(handler, use_get=False):
     data_dir = _get_data_dir()
     backup_dir = _resolve_backup_parent(data_dir)
 
-    # 获取 zip_name(POST body 或 query)
-    is_get = use_get
-    try:
-        body = read_body(handler)
-        zip_name = (body or {}).get("zip_name", "")
-    except Exception:
-        # GET 兼容路径
-        is_get = True
+    # 取 zip_name:GET 走 query,POST 走 body。
+    #
+    # ⚠️ 这里原来用 `try: read_body() except: 当作 GET` 来"探测"请求形态,
+    #    但 read_body() 对**没有 Content-Length 的 GET 是返回 {} 而不是抛异常**
+    #    (见 utils/api.py)—— except 分支永远执行不到,zip_name 恒为空。
+    #    后果:前端 downloadBackup() 用 <a href> 发 GET,「下载备份」按钮
+    #    100% 返回 400「缺少 zip_name 参数」(实测),而 POST 路径完全正常,
+    #    所以单元测试里只断言「不是 401/403」的做法一直没发现它。
+    #    修法:直接按**路由**判定 —— routing 已经把 GET 映射到 use_get=True 的包装,
+    #    不需要再看 Content-Type 猜(那是删除接口为了挡 CSRF 才做的判断,
+    #    而下载是只读操作,没有 CSRF 面;照抄反而会把「带 Content-Type 的 GET」
+    #    再误判一次 POST)。
+    is_get = bool(use_get)
+
+    if is_get:
         qs = parse_qs(urlparse(handler.path).query)
-        zip_name = qs.get("zip_name", [None])[0]
+        zip_name = qs.get("zip_name", [None])[0] or ""
         if not zip_name:
+            # 老前端传的是 ?dir=<时间戳>,换算出对应的包名
             dir_name = qs.get("dir", [None])[0]
             if dir_name:
                 zip_name = f"meter-backup-{dir_name}.zip"
+    else:
+        body = read_body(handler)
+        zip_name = (body or {}).get("zip_name", "")
 
     if not zip_name:
         send_json(handler, 400, {"error": "缺少 zip_name 参数"})
@@ -163,9 +174,12 @@ def handle_post_backup_download(handler, use_get=False):
         return
 
     # 安全校验: 防止目录穿越
+    # ⚠️ 用 is_relative_to 而不是字符串前缀:后者会把**同级目录**也算合规
+    #    (备份目录 /data/backup 的前缀同样命中 /data/backup-x/…),
+    #    等于允许读/删备份目录旁边的任意 ZIP。
     real_backup = backup_dir.resolve()
     real_zip = zip_path.resolve()
-    if not str(real_zip).startswith(str(real_backup)):
+    if not real_zip.is_relative_to(real_backup):
         send_json(handler, 403, {"error": "非法备份文件名"})
         return
 
@@ -188,7 +202,13 @@ def handle_post_backup_download(handler, use_get=False):
     for k, v in CORS.items():
         handler.send_header(k, v)
     if is_get:
-        handler.send_header("X-API-Migration", "已弃用: 请使用 POST /api/admin/backup-download")
+        # ⚠️ 响应头的值必须是 latin-1 可编码的:http.server 用
+        #    ("%s: %s\r\n" % (k, v)).encode('latin-1') 严格编码,中文会当场抛
+        #    UnicodeEncodeError —— 而且是在 send_response 之后抛的,客户端拿到的是
+        #    「200 + 半个响应头」然后连接被掐断(curl 报 Header without colon、
+        #    文件 0 字节)。这里原来写的是「已弃用: 请使用 POST …」,正因为
+        #    GET 分支的取参 bug 让它永远走不到,才一直没暴露。
+        handler.send_header("X-API-Migration", "deprecated; use POST /api/admin/backup-download")
     handler.end_headers()
     handler.wfile.write(zip_data)
 
@@ -235,9 +255,10 @@ def handle_post_backup_delete(handler, use_get=False):
         return
 
     # 安全校验: 防止目录穿越
+    # 同上(下载):is_relative_to,不用字符串前缀
     real_backup = backup_dir.resolve()
     real_zip = zip_path.resolve()
-    if not str(real_zip).startswith(str(real_backup)):
+    if not real_zip.is_relative_to(real_backup):
         send_json(handler, 403, {"ok": False, "error": "非法备份文件名"})
         return
 

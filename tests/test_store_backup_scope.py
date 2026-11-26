@@ -354,8 +354,9 @@ class TestStoreScopeGate(StoreScopeTestBase):
         self.assertNotIn("stores/s003/readings.json", files)
         # 顶层业务数据文件在多店布局下归属总店 → 越权时也不给
         self.assertNotIn("readings.json", files)
-        # settings.json 是全局配置,不是门店数据
-        self.assertIn("settings.json", files)
+        # settings.json 一律不给:它含 users[].password 哈希与 nas_sync_pass 明文,
+        # 而这个接口 supervisor 也能调(实测过原样返回)。
+        self.assertNotIn("settings.json", files)
 
     def test_data_files_admin_sees_all_stores(self) -> None:
         """总部账号 → 返回全部门店。"""

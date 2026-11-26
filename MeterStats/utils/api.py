@@ -209,7 +209,8 @@ def _validate_zip_safely(zip_path, extract_to, max_size: int = ZIP_MAX_DECOMPRES
         extract_to_resolved = Path(extract_to).resolve()
         for name in namelist:
             member_path = (extract_to_resolved / name).resolve()
-            if not str(member_path).startswith(str(extract_to_resolved)):
+            # 同上:字符串前缀判断挡不住同级目录(/data/backup 前缀命中 /data/backup-x)
+            if not member_path.is_relative_to(extract_to_resolved):
                 return None, f"目录穿越检测: {name}"
 
         # 全部校验通过，安全解压

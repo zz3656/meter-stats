@@ -136,7 +136,11 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         file_path = (ROOT / path.lstrip("/")).resolve()
-        if not str(file_path).startswith(str(ROOT)):
+        # ⚠️ 用 is_relative_to 而不是 str.startswith:字符串前缀判断会把**同级目录**
+        #    也算进去 —— /…/meter-stats/MeterStats.bak/x.js 的前缀同样是
+        #    "/…/meter-stats/MeterStats",于是仓库旁边一个 MeterStats.bak/ 就能
+        #    被匿名读走(静态服务是第一道门,连鉴权都没有)。
+        if not file_path.is_relative_to(ROOT):
             self.send_error(403)
             return
         if not file_path.is_file():

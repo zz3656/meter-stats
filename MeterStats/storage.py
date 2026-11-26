@@ -221,6 +221,16 @@ def init_data_files(data_dir: Path) -> dict:
     return files
 
 
+def _iter_backup_files(base_dir: Path, include_images: bool = True):
+    """数据根下的可备份文件(相对路径, 绝对路径),规则见 backup_paths.classify_rel。
+
+    这里是薄包装:让 backup_data 的循环读起来短一点,同时把「唯一规则来源」
+    指明给后人 —— 别在这里再写一套后缀/深度判断。
+    """
+    from backup_paths import iter_backup_files
+    return iter_backup_files(base_dir, include_images=include_images)
+
+
 def _rel_in_store_filter(rel: str, store_ids: "set[str]") -> bool:
     """备份相对路径是否落在给定的门店范围内。
 
@@ -336,32 +346,31 @@ def backup_data(data_dir: Path, force: bool = False, target_parent: "Optional[Pa
         else:
             log(f"[BACKUP] 跳过 {name}: 文件不存在")
 
-    # 多门店布局:stores/ 整个子树也要进备份。
+    # 多门店布局:stores/ 子树 + 图片目录都要进备份。
     # P0 之后业务数据都在 stores/<store_id>/ 下,不复制的话备份包是空的。
     #
-    # ⚠️ 后缀过滤只放行 .json / .tmp —— 值班照片(images/)从来就没被备份过,
-    #    这里是「维持现状」,不做半吊子:
-    #    若把图片收进备份,恢复侧(_iter_store_files / _safe_rel_target)必须
-    #    同步扩展,否则会出现「备份包里有照片、恢复时静默丢弃」。
-    stores_dir = data_dir / "stores"
-    if stores_dir.is_dir():
-        for src in sorted(stores_dir.rglob("*")):
-            if not src.is_file():
-                continue
-            if src.suffix not in (".json", ".tmp"):
-                continue
-            rel = src.relative_to(data_dir)
-            if scope is not None and not _rel_in_store_filter(rel.as_posix(), scope):
-                log(f"[BACKUP] 跳过 {rel}: 不在门店范围内")
-                continue
-            dest = backup_dir / rel
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.copy2(src, dest)
-                log(f"[BACKUP] 已复制 {rel} → {backup_dir}")
-            except OSError as e:
-                log(f"[BACKUP] 复制 {rel} 失败: {e}")
-                raise
+    # 收哪些文件由 backup_paths.classify_rel 统一决定 —— 备份侧与恢复侧
+    # (_safe_rel_target)共用同一套规则,这是「包里的每个文件都恢复得回去」的保证。
+    #
+    # ⚠️ 两处历史遗留一并修掉:
+    #   1. 值班照片(images/)从来没进过备份,换机器/重建容器即永久丢失 → 现在收;
+    #   2. 以前后缀白名单顺带放行了 .tmp,崩溃残留的半成品也被打进包里 → 现在不收
+    #      (.tmp 只是 save_json 原子写入的中间产物,不是数据)。
+    #
+    # 注意:图片目录若被「图片目录」设置指到数据目录**之外**(image_dir 是绝对路径),
+    # 这里遍历不到 —— 恢复时也不认,不会出现「包里有、恢复丢」,但那份照片不在备份里。
+    for rel, src in _iter_backup_files(data_dir, include_images=True):
+        if scope is not None and not _rel_in_store_filter(rel, scope):
+            log(f"[BACKUP] 跳过 {rel}: 不在门店范围内")
+            continue
+        dest = backup_dir / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            shutil.copy2(src, dest)
+            log(f"[BACKUP] 已复制 {rel} → {backup_dir}")
+        except OSError as e:
+            log(f"[BACKUP] 复制 {rel} 失败: {e}")
+            raise
 
     # 自动备份也包含 settings.json（与手动备份一致）
     settings_src = data_dir / "settings.json"

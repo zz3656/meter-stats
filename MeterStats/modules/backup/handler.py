@@ -13,6 +13,8 @@ from typing import Any, Iterable, List, Optional, Tuple
 from utils import read_body, send_json
 from utils.api import _validate_zip_safely
 
+from backup_paths import classify_rel, iter_backup_files
+
 from storage import (
     BACKUP_EXCLUDED_SETTINGS_KEYS,
     DATA_FILES,
@@ -30,26 +32,6 @@ from storage import (
 _BACKUP_EXCLUDED_SETTINGS_KEYS = BACKUP_EXCLUDED_SETTINGS_KEYS
 
 
-def _iter_store_files(base_dir: Path) -> list[tuple[str, Path]]:
-    """列出 stores/ 子树下的数据文件。
-
-    返回 [(相对路径, 绝对路径)],相对路径形如 "stores/s002/readings.json"。
-
-    ⚠️ 只认 *.json —— 值班照片(images/)从来就没被备份过,维持现状。
-    若将来要把图片纳入备份,这里必须同步扩展,恢复侧(_safe_rel_target 的白名单)
-    也要一起扩展,否则会出现「备份包里有照片、恢复时静默丢弃」。
-    """
-    out: list[tuple[str, Path]] = []
-    stores_dir = base_dir / "stores"
-    if not stores_dir.is_dir():
-        return out
-    for src in sorted(stores_dir.rglob("*.json")):
-        if not src.is_file():
-            continue
-        out.append((str(src.relative_to(base_dir)).replace("\\", "/"), src))
-    return out
-
-
 def _is_under(base: Path, target: Path) -> bool:
     """target 是否在 base 之内(路径穿越的最后一道护栏)。"""
     try:
@@ -63,33 +45,19 @@ def _is_under(base: Path, target: Path) -> bool:
 def _safe_rel_target(base_dir: Path, rel: str) -> Optional[Path]:
     """把备份包里的相对路径解析成目标路径,挡掉路径穿越。
 
-    允许的两种形态:
+    合法形态的**唯一定义**在 `backup_paths.classify_rel` —— 备份侧用同一个函数
+    决定收哪些文件,所以这里不会出现「备份收得进、恢复认不出」的错位:
     - 顶层数据文件:readings.json / settings.json 等
-    - 门店子文件:stores/<safe_id>/<safe_name>.json
-      (safe_id 要过 registry.is_valid_store_id,safe_name 要过白名单;
-       store.json 是门店配置,必须能恢复)
+    - 单店/遗留图片目录:images/<图片>
+    - 门店数据:stores/<id>/readings.json … / store.json
+    - 门店图片:stores/<id>/images/<图片>
 
     其它一律拒绝(返回 None)。特别是 ".." 和绝对路径。
     """
-    if not rel or not isinstance(rel, str):
+    if classify_rel(rel) is None:
         return None
-    if rel.startswith("/") or "\\" in rel:
-        return None
-    parts = rel.split("/")
-    if len(parts) == 1:
-        if parts[0] in set(DATA_FILES.values()) | {"settings.json"}:
-            target = base_dir / parts[0]
-            return target if _is_under(base_dir, target) else None
-        return None
-    if len(parts) == 3 and parts[0] == "stores":
-        from modules.stores.registry import is_valid_store_id
-        if not is_valid_store_id(parts[1]):
-            return None
-        if parts[2] not in set(DATA_FILES.values()) | {"store.json"}:
-            return None
-        target = base_dir / "stores" / parts[1] / parts[2]
-        return target if _is_under(base_dir, target) else None
-    return None
+    target = base_dir / rel
+    return target if _is_under(base_dir, target) else None
 
 
 def _filter_settings_for_backup(settings: dict) -> dict:
@@ -169,12 +137,16 @@ def _backup_zip_scope_ok(handler: Any, zip_path: Path) -> Tuple[bool, str]:
 
 
 def _restore_targets(extract_dir: Path) -> List[str]:
-    """备份包里将被写回的数据文件相对路径(顶层 + stores/ 子树)。"""
+    """备份包里将被写回的文件相对路径(顶层 + stores/ 子树 + 图片)。
+
+    ⚠️ 必须带上图片(include_images=True):门店范围闸是拿这份清单判的,
+        漏掉图片等于「照片可以跨店恢复」。
+    """
     rels: List[str] = []
     for name in DATA_FILES.values():
         if (extract_dir / name).exists():
             rels.append(name)
-    for rel, _ in _iter_store_files(extract_dir):
+    for rel, _ in iter_backup_files(extract_dir, include_images=True):
         rels.append(rel)
     return rels
 
@@ -264,8 +236,10 @@ def _write_restore_files(handler: Any, target_dir: Path,
             f"旧格式备份(顶层文件)已恢复到总店 stores/{main_id}/: {', '.join(bridged)}"
         )
 
-    # 2. 恢复 stores/ 子树(路径保持)
-    for rel, src_path in _iter_store_files(extract_dir):
+    # 2. 恢复 stores/ 子树与图片(路径保持)
+    #    图片也走同一条路:stores/<id>/images/x.jpg → 同一个位置,
+    #    单店布局的 images/x.jpg → 同一个位置。
+    for rel, src_path in iter_backup_files(extract_dir, include_images=True):
         dest = _safe_rel_target(target_dir, rel)
         if dest is None:
             log(f"  [WARN] 跳过非法备份路径: {rel}")
@@ -335,6 +309,18 @@ def handle_get_data_files(handler):
     ⚠️ **只返回调用方门店范围内的文件**(R1):
     这个接口原来把全部门店的数据都吐出来 —— 一个只管 s002 的主管
     也能拿到总店和别家分店的数据。门店范围闸在这里是「读」这一侧的闸。
+
+    ⚠️ **不返回 settings.json**(2026-11 安全收口):
+    这个接口原来把 settings.json 整份原文塞回浏览器,而它里面躺着
+    `users[].password` 的 PBKDF2 哈希(足以离线爆破出管理员口令)和
+    `nas_sync_pass` 明文 —— 等于让一个 supervisor 一条 GET 就把全站凭据拿走。
+    备份 ZIP 那边专门写了 BACKUP_EXCLUDED_SETTINGS_KEYS 做剥离,
+    这条旁路把整套机制绕过去了。
+
+    这里选择**整份不发**(而不是发打码版):/api/upload 是能写 settings.json 的,
+    发一份密码被清成 "***" 的版本,只要有人下载后又上传,全站账号就登不进了。
+    少发一个文件不会破坏任何东西 —— 恢复侧的 settings.json 合并只覆盖业务字段、
+    保留部署字段,缺这个文件就是"不动配置"。
     """
     from modules.stores.context import base_data_dir
     from modules.stores.handler import caller_store_scope
@@ -350,9 +336,8 @@ def handle_get_data_files(handler):
         return
 
     files = {}
-    data_file_names = set(DATA_FILES.values()) | {"settings.json"}
+    data_file_names = set(DATA_FILES.values())
     # allowed=None → 不按门店过滤(单店布局 / 总部账号)
-    # settings.json 是全局配置(用户表/门店注册表/单价),不是门店数据 → 始终返回
     top_level_allowed = allowed is None or "main" in allowed
 
     try:
@@ -362,7 +347,7 @@ def handle_get_data_files(handler):
         top_entries = []
     for f in top_entries:
         if f.is_file() and f.suffix == '.json' and f.name in data_file_names:
-            if f.name != "settings.json" and not top_level_allowed:
+            if not top_level_allowed:
                 # 顶层数据文件在多门店布局下是**总店的历史位置** → 越权
                 continue
             try:
@@ -370,7 +355,8 @@ def handle_get_data_files(handler):
             except OSError as e:
                 log(f"[WARN] 读取 {f.name} 失败: {e}")
 
-    for rel, path in _iter_store_files(target_dir):
+    # 只列 JSON 文本文件(图片是二进制,这个接口回的是 JSON 字符串字典)
+    for rel, path in iter_backup_files(target_dir, include_images=False):
         if allowed is not None:
             from modules.stores.handler import backup_rel_store_id
             if backup_rel_store_id(rel) not in allowed:
@@ -502,10 +488,11 @@ def handle_post_backup(handler):
             except Exception as e:
                 log(f"[WARN] 读取 settings 失败,跳过剥离: {e}")
 
-        # 1.5 多门店布局:复制 stores/ 子树(保持相对路径)
-        # ⚠️ 只有 *.json 会进来(_iter_store_files 只认 JSON)——
-        #    值班照片仍然不进备份,维持改造前现状。
-        for rel, src in _iter_store_files(source_dir):
+        # 1.5 多门店布局:复制 stores/ 子树 + 图片目录(保持相对路径)
+        # ⚠️ 收哪些文件由 backup_paths.classify_rel 统一决定 ——
+        #    必须与恢复侧(_safe_rel_target)用同一套规则,否则会出现
+        #    「包里有照片、恢复时静默丢弃」。值班照片从 0.5.1 起进备份。
+        for rel, src in iter_backup_files(source_dir, include_images=True):
             if allowed is not None and backup_rel_store_id(rel) not in allowed:
                 log(f"[BACKUP] 跳过 {rel}: 不在门店范围内")
                 continue
@@ -663,8 +650,15 @@ def handle_post_upload(handler):
         names = []
         zip_path = Path(tmp_dir) / "upload.zip"
         zip_path.write_bytes(zip_bytes)
-        with zipfile.ZipFile(zip_path, 'r') as zf:
-            zf.extractall(tmp_dir)
+        # ⚠️ 这里是四处解压入口里**唯一**没走校验的一处
+        #    (restore / upload 的 base64 分支 / restore-upload 三条都走
+        #     _validate_zip_safely),裸 extractall 等于把 ZIP bomb 的门开着:
+        #    几 KB 的递归 ZIP 能解出 TB 级内容撑爆 /data 卷,解压期间还占满 GIL,
+        #    ThreadingHTTPServer 的其它请求全部停摆 —— 而 /api/upload 上那个
+        #    100MB 的 body 上限对这种压缩包完全无效。
+        _safe_dir, error = _validate_zip_safely(zip_path, tmp_dir)
+        if error:
+            raise ValueError(f"ZIP 文件不安全: {error}")
         # zip 里可能有 YYYYMMDD_HHMMSS/ 子目录(自动备份格式)或根目录
         extract_dir = _resolve_extract_dir(Path(tmp_dir))
         ok, err = _scope_check_rels(handler, _restore_targets(extract_dir))

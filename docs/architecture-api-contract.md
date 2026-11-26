@@ -225,12 +225,12 @@
 | 55 | `/api/admin/backup-config` | GET | `Api.admin.backupConfig()` |
 | 56 | `/api/admin/auto-backup` | PUT | `Api.admin.setAutoBackup(enabled)` |
 | 57 | `/api/admin/backup-retention` | PUT | `Api.admin.setBackupRetention(days)` |
-| 58 | `/api/admin/backup-delete?name=...` | GET | `Api.admin.backupDelete(name)` |
-| 59 | `/api/admin/backup-download?name=...` | GET | `Api.admin.backupDownload(name)` |
-| 60 | `/api/admin/backup-delete?name=...` | POST | — (POST 版本备份删除) |
-| 61 | `/api/admin/backup-download?name=...` | POST | — (POST 版本备份下载) |
-| 62 | `/api/admin/data-files` | GET | `Api.admin.dataFiles()` |
-| 63 | `/api/admin/dir-listing?dir=...` | GET | `Api.admin.dirListing(dir)` |
+| 58 | `/api/admin/backup-delete?zip_name=...` | GET | `Api.admin.backupDelete(name)` |
+| 59 | `/api/admin/backup-download?zip_name=...` | GET | `Api.admin.backupDownload(name)` |
+| 60 | `/api/admin/backup-delete` (body `{zip_name}`) | POST | — (POST 版本备份删除) |
+| 61 | `/api/admin/backup-download` (body `{zip_name}`) | POST | — (POST 版本备份下载) |
+| 62 | `/api/admin/data-files` | GET | `Api.admin.dataFiles()`（**不回 `settings.json`**：里面有密码哈希与 NAS 凭据） |
+| 63 | `/api/admin/dir-listing?path=...` | GET | `Api.admin.dirListing(dir)` ⚠️ **未接线**：前端发 `?dir=`、后端读 `?path=`，且当前 UI 零调用点 |
 
 **其他管理:**
 | # | 路径 | 方法 | Api.* 映射 |

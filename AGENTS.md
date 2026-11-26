@@ -27,6 +27,7 @@ MeterStats/
 ├── app_handler.py         # HTTP handler, 路由分发
 ├── routing.py             # URL → handler 映射
 ├── constants.py           # 常量定义
+├── backup_paths.py        # 备份/恢复共用的路径规则(哪些相对路径收得进、认得回)
 ├── modules/               # API 处理模块(按业务域拆目录)
 │   ├── _base.py           # JsonModelHandler 基类
 │   ├── readings/          # 抄表 + 水电表底
@@ -56,6 +57,7 @@ MeterStats/
 ## 关键约定
 
 - **后端**: Python 3.9+, `from __future__ import annotations`, 零外部依赖。用 `http.server.ThreadingHTTPServer`。
+- **备份路径**: 「备份包里哪些文件算数」的**唯一来源**是 `MeterStats/backup_paths.py` 的 `classify_rel()` —— 备份侧只收恢复侧认得回的形态(round-trip 不变式)。要加新的可备份内容(新数据文件、图片、附件)只改这一处,别在 `storage.backup_data` / `modules/backup/handler.py` 各写一套后缀判断(以前就是两套漂移,导致「包里有、恢复丢」)。
 - **存储**: JSON 文件 + 原子写入 (写 tmp 再 rename) + `threading.Lock` 行级锁。数据目录: Docker 用 `METER_DATA_DIR`(默认 `/data`), macOS `.app` 用 `~/Library/Application Support/com.meter.stats/`, 本地源码运行用 `MeterStats/.data/`。
 - **前端**: 纯 HTML/CSS/JS, 无构建步骤。Chart.js 通过 CDN 加载。JS 文件按功能拆到 `js/` 目录,在 `index.html` 中 `<script>` 引入。
 - **提交规范**: 约定式提交 (feat/fix/refactor/docs/style/scope)。`./run.sh` 首次运行自动设置 `.gitmessage` 为 commit template。

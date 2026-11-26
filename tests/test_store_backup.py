@@ -30,8 +30,8 @@ from typing import Any, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "MeterStats"))
 
+from backup_paths import classify_rel, iter_backup_files  # noqa: E402
 from modules.backup.handler import (  # noqa: E402
-    _iter_store_files,
     _safe_rel_target,
     handle_get_data_files,
     handle_post_backup,
@@ -198,20 +198,20 @@ class TestBackupZipContents(StoreBackupTestBase):
             names = zf.namelist()
         self.assertIn("settings.json", names)
 
-    def test_backup_zip_excludes_images(self) -> None:
-        """⚠️ 值班照片不进备份 —— 维持改造前现状,不做半吊子。
+    def test_backup_zip_includes_images(self) -> None:
+        """值班照片进备份(0.5.1)。
 
-        改造前 backup_data() 只复制 6 个 JSON + settings.json,images/ 从来没进过备份。
-        本 Task 把 stores/ 子树纳入扫描范围后,后缀过滤必须继续把图片挡在外面
-        (否则会出现「备份包里有照片、恢复时静默丢弃」的半吊子状态)。
+        以前 images/ 从来没进过备份 —— 换机器 / 重建容器等于照片永久丢失。
+        现在「备份收什么」由 backup_paths.classify_rel 统一决定,恢复侧认同一套规则,
+        所以收进来不会被静默丢弃(round-trip 由下面的 TestImageRoundTrip 锁死)。
         """
         self._make_stores()
         zip_path = backup_data(self.data_dir, force=True)
         assert zip_path is not None
         with zipfile.ZipFile(zip_path) as zf:
             names = zf.namelist()
-        self.assertNotIn("stores/s002/images/photo.jpg", names)
-        self.assertFalse([n for n in names if n.startswith("stores/s002/images/")])
+        self.assertIn("stores/s002/images/photo.jpg", names)
+        self.assertIn("stores/main/images/photo.jpg", names)
 
     def test_manual_backup_zip_contains_all_stores(self) -> None:
         """手动备份(/api/backup)同样必须覆盖所有门店。"""
@@ -227,38 +227,38 @@ class TestBackupZipContents(StoreBackupTestBase):
         self.assertIn("stores/s002/readings.json", names)
         self.assertIn("stores/s002/store.json", names)
 
-    def test_manual_backup_zip_excludes_images(self) -> None:
-        """手动备份同样不收图片。"""
+    def test_manual_backup_zip_includes_images(self) -> None:
+        """手动备份也要收图片 —— 自动/手动两条路径必须同一口径。"""
         self._make_stores()
         h = FakeHandler("/api/backup", method="POST")
         handle_post_backup(h)  # type: ignore[no-untyped-call]
         assert h.parsed is not None
         with zipfile.ZipFile(h.parsed["zip_path"]) as zf:
             names = zf.namelist()
-        self.assertFalse([n for n in names if "/images/" in n])
+        self.assertIn("stores/s002/images/photo.jpg", names)
 
 
-class TestIterStoreFiles(StoreBackupTestBase):
-    """stores/ 子树的列举。"""
+class TestIterBackupFiles(StoreBackupTestBase):
+    """stores/ 与 images/ 子树的列举(规则来源 backup_paths.classify_rel)。"""
 
     def test_lists_all_store_json_files(self) -> None:
         self._make_stores()
-        files = _iter_store_files(self.data_dir)
-        rels = [rel for rel, _ in files]
+        rels = [rel for rel, _ in iter_backup_files(self.data_dir, include_images=False)]
         self.assertIn("stores/main/readings.json", rels)
         self.assertIn("stores/s002/readings.json", rels)
         self.assertIn("stores/s002/store.json", rels)
 
-    def test_skips_images(self) -> None:
-        """图片不是数据文件 —— 不进备份(维持现状)。"""
+    def test_images_only_when_asked(self) -> None:
+        """图片要显式 include_images=True 才收:
+        数据文件列举接口(/api/admin/data-files)回的是 JSON 文本,不能混进二进制。"""
         self._make_stores()
-        files = _iter_store_files(self.data_dir)
-        rels = [rel for rel, _ in files]
-        self.assertFalse([r for r in rels if r.endswith(".jpg")])
-        self.assertFalse([r for r in rels if "/images/" in r])
+        without = [r for r, _ in iter_backup_files(self.data_dir, include_images=False)]
+        self.assertFalse([r for r in without if "/images/" in r])
+        with_images = [r for r, _ in iter_backup_files(self.data_dir, include_images=True)]
+        self.assertIn("stores/s002/images/photo.jpg", with_images)
 
     def test_empty_without_stores_dir(self) -> None:
-        self.assertEqual(_iter_store_files(self.data_dir), [])
+        self.assertEqual(list(iter_backup_files(self.data_dir)), [])
 
 
 class TestSafeRelTarget(StoreBackupTestBase):
@@ -308,8 +308,14 @@ class TestSafeRelTarget(StoreBackupTestBase):
         self.assertIsNone(_safe_rel_target(self.data_dir, "stores/s002/readings.json.tmp"))
 
     def test_rejects_too_deep_path(self) -> None:
-        self.assertIsNone(_safe_rel_target(self.data_dir, "stores/s002/images/photo.jpg"))
+        """恢复只认备份会收的形态 —— 更深的一律不认(避免「收得进、恢复丢」)。"""
+        self.assertIsNone(_safe_rel_target(self.data_dir, "stores/s002/backup/20260101/readings.json"))
         self.assertIsNone(_safe_rel_target(self.data_dir, "a/b/c/d.json"))
+
+    def test_accepts_store_images(self) -> None:
+        """门店照片:备份收得进,恢复就得认得回。"""
+        self.assertIsNotNone(_safe_rel_target(self.data_dir, "stores/s002/images/photo.jpg"))
+        self.assertIsNone(_safe_rel_target(self.data_dir, "stores/s002/images/evil.txt"))
 
 
 class TestDataFilesEndpoint(StoreBackupTestBase):
@@ -328,12 +334,21 @@ class TestDataFilesEndpoint(StoreBackupTestBase):
         # 图片不是数据文件,不应出现在这个接口里
         self.assertNotIn("stores/s002/images/photo.jpg", files)
 
-    def test_returns_settings_json(self) -> None:
+    def test_excludes_settings_json(self) -> None:
+        """settings.json 一并不回 —— 它含 users[].password 哈希与 NAS 凭据。
+
+        这个接口是 supervisor 也能调的,原样返回等于把全站凭据交出去。
+        (备份 ZIP 侧早有剥离清单,这条旁路绕过了它。)
+        """
         self._make_stores()
         h = FakeHandler("/api/admin/data-files", method="GET")
         handle_get_data_files(h)  # type: ignore[no-untyped-call]
         assert h.parsed is not None
-        self.assertIn("settings.json", h.parsed["files"])
+        files = h.parsed["files"]
+        self.assertNotIn("settings.json", files)
+        self.assertNotIn(
+            "SECRET", json.dumps(files, ensure_ascii=False),
+            "数据文件接口不应吐出任何凭据",)
 
 
 class TestRestoreByRelativePath(StoreBackupTestBase):

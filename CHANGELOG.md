@@ -2,6 +2,48 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [未发布]
+
+**备份 / 恢复加固轮(A 批止血)。** 全部是「坏了但没人发现」的既存缺陷,
+不是新功能;业务口径零改动,全量 **751** 项单测通过(新增 18 项)。
+
+### 修复
+
+- **「下载备份」按钮 100% 失败**(实测 HTTP 400「缺少 zip_name 参数」):取 `zip_name` 用的是
+  `try: read_body() except: 当作 GET`,而 `read_body()` 对**没有 Content-Length 的 GET 返回 `{}`
+  且不抛异常**(`utils/api.py`)→ `except` 分支永远执行不到。前端 `downloadBackup()` 用 `<a href>`
+  发 GET,于是按钮必坏;POST 路径一直是好的,而原有测试只断言「不是 401/403」,400 照样绿。
+  现在 GET 直接按 query 取参(路由已经分好 GET/POST,不需要再靠 Content-Type 猜)
+- **下载 GET 修好后立刻暴露的第二个坑:响应头写中文**。`X-API-Migration: 已弃用: …` 会让
+  `http.server` 在**已经开始写响应头之后**抛 `UnicodeEncodeError`,客户端拿到「200 + 半截头」+
+  断连(0 字节文件,curl 报 `Header without colon`)。改成 ASCII,并新增源码级护栏:
+  任何 `send_header(...)` 里出现中文直接失败
+- **`/api/admin/data-files` 原样吐出 `settings.json`**:里面是 `users[].password` 的 PBKDF2 哈希
+  和 `nas_sync_pass` 明文,而这个接口**主管就能调**(实测返回了哈希)。备份 ZIP 早就写了
+  `BACKUP_EXCLUDED_SETTINGS_KEYS` 做剥离,这条旁路把机制绕过去了。现在整份不发
+  (不发打码版:`/api/upload` 能写 settings.json,发打码版再上传回去会让全站账号登不进)
+- **`/api/upload` 的 multipart ZIP 分支是四处解压入口里唯一不校验的**:几 KB 的递归 ZIP 能
+  解出 TB 级内容撑爆 `/data`,解压期间还占满 GIL(那个 100MB body 上限对这种包无效)。
+  现在与另外三处一样走 `_validate_zip_safely`
+- **四处路径包含判断用手写 `str.startswith`**:同级目录前缀同样命中
+  (`/…/MeterStats.bak/x.js` 的前缀就是 `/…/MeterStats`;`/data/backup-x/` 的前缀就是
+  `/data/backup`)。静态资源那条**连鉴权都没有**。统一改 `Path.is_relative_to()`
+
+### 新增
+
+- **值班照片进备份,恢复也认**:以前 `images/` 从来没进过备份包 —— 换机器 / 重建容器即永久丢失。
+  现在 `stores/<id>/images/*` 与单店布局的 `images/*` 都进包,恢复时按原路径写回
+- **备份/恢复共用一套路径规则**(`MeterStats/backup_paths.py`):以前备份侧 `rglob` 收任意深度、
+  恢复侧白名单只认 1 段/3 段,漂移出来的后果是「包里有文件、恢复时静默丢弃」。现在两侧都调
+  `classify_rel()`,并确立 round-trip 不变式:**包里的每个文件都恢复得回去,恢复得回去的都在包里**
+- 顺带修掉:崩溃残留的 `*.json.tmp` 以前会被打进备份包(它是原子写入的中间产物,不是数据)
+
+### 注意
+
+- 备份包会因照片而变大;自动备份按「份数」保留(默认 5),照片多的部署请留意磁盘占用
+- 「图片目录」若被设置指到**数据目录之外**的绝对路径,那份照片不在备份里(遍历不到,
+  但恢复侧同样认不回来,不会出现「包里有、恢复丢」)
+
 ## [0.5.0] — 2026-11-25
 
 **分店底座(P0)。** 这一版**只换底座、不换行为**：单店部署下,界面上的操作与改造前完全一致,只是底层数据目录换了个位置。门店切换器(P1)、每店自定义表计(P2)、总部总表(P3)分别在后三期。
@@ -125,9 +167,9 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
 
 ### 已知问题
 
-- **值班照片仍然没有自动备份**。改造前照片就没进过备份包(既存缺口,不是分店引入的)。这次刻意**不只做一半**:若把照片收进备份,恢复侧必须同步扩展,否则会变成「包里有照片、恢复时静默丢弃」这种更糟的状态。**照片需要另外手工备份**
-- **备份侧 `rglob` 任意深度,恢复侧白名单只收 3 段** → 深层路径(如 `stores/x/backup/<日期>/readings.json`)会进包但恢复时被丢
-- **multipart 上传 ZIP 分支不走 ZIP 校验**(JSON body 分支走)—— 既存问题,与分店无关
+- ~~**值班照片仍然没有自动备份**~~ → **未发布版已修**:照片进备份包,恢复侧同步扩展,有 round-trip 测试锁死(见 `[未发布]`)
+- ~~**备份侧 `rglob` 任意深度,恢复侧白名单只收 3 段**~~ → **未发布版已修**:两侧共用 `backup_paths.classify_rel`,备份只收恢复得回来的东西
+- ~~**multipart 上传 ZIP 分支不走 ZIP 校验**~~ → **未发布版已修**:四个解压入口统一走 `_validate_zip_safely`
 - **macOS / Windows 文件系统大小写不敏感**:`stores/MAIN/readings.json` 与 `stores/main/readings.json` 在盘上是**同一个目录**。门店范围闸的**比较**已经是大小写敏感的(`"MAIN" != "main"`,越权会被拒),但**文件系统层面**的隐患仍在:注册表若同时存在 `MAIN` 与 `main` 两种写法(或有人手工在盘上造目录),总店与「同名分店」仍然指向同一份数据
 - **`/api/admin/dir-listing` 前端传的是 `?dir=`、后端读的是 `?path=`** —— 目录列举功能是坏的。P1 未修,与分店无关
 

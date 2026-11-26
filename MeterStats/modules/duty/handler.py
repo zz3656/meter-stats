@@ -129,7 +129,9 @@ def handle_delete_duty(handler, path_clean: str):
             for fn in image_filenames:
                 fp = (images_dir / fn).resolve()
                 try:
-                    if fp.is_file() and str(fp).startswith(str(images_dir.resolve())):
+                    # is_relative_to 而非字符串前缀:后者会让 images_dir 的**同级目录**
+                    # (例如 images-bak/) 也通过判断,从而删掉本不该动的文件。
+                    if fp.is_file() and fp.is_relative_to(images_dir.resolve()):
                         fp.unlink()
                         log(f"  -- 删除工作记录 {rid} 关联图片: {fn}")
                 except OSError as e:
@@ -378,8 +380,8 @@ def handle_get_duty_image(handler, path_clean: str):
     """GET /api/duty/image/{filename} — 返回图片。"""
     images_dir = _get_images_dir()
     filepath = (images_dir / path_clean).resolve()
-    # 防止目录穿越
-    if not str(filepath).startswith(str(images_dir.resolve())):
+    # 防止目录穿越 —— 用 is_relative_to:字符串前缀会放过同级目录(images-bak/x.jpg)
+    if not filepath.is_relative_to(images_dir.resolve()):
         send_json(handler, 403, {"error": "Forbidden"})
         return
     if not filepath.exists():
