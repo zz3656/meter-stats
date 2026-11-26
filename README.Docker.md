@@ -118,9 +118,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.2
+## 📦 工程部管理系统 v0.5.3
 
-提交 `e79fe04`
+提交 `d711433`
 
 **升级 Docker 容器**:
 ```bash
@@ -129,26 +129,26 @@ docker compose up -d
 ```
 
 
-**CI 首次在 GitHub Actions 上跑全量测试后立刻抓到的一个真 bug。**
+**「从 NAS 同步」在多门店布局下写进了没人读的位置 —— 界面报成功、数据没变化。**
 
 ### 修复
 
-- **同一毫秒内的两次手动备份会互相覆盖**:备份文件名只精确到毫秒
-  (`meter-backup-20261127_090909_123.zip`),而收尾用的是 `shutil.move` ——
-  POSIX 上 rename **静默覆盖**同名文件,于是「连点两下备份」或脚本连跑时,
-  前一个包凭空消失(用户完全看不出)。CI 上实测:连做 12 次手动备份只留下 **9** 个包
-  (`test_manual_backup_max_10` 断言 10 失败)。现在撞名就递增毫秒位,
-  并额外记住本进程已发出去过的名字(清理删掉旧包后名字会"空出来",光看文件是否存在不够),
-  同一毫秒连做 20 次也能拿到 20 个互不相同的包
-- 顺带把 `handle_post_backup` 里的 `import datetime` 提到模块顶层(原来写在函数体内,
-  导致测试无法用固定时钟验证这个行为)
+- **NAS 同步不再把数据写进孤儿路径**:本地已是 0.5.x 多门店布局时,应用读的是
+  `stores/<id>/`,而 NAS 上多半还跑着 0.4.x 单店布局(`/api/admin/data-files` 回的是
+  顶层文件名)。同步接口原来把顶层 `readings.json` 原样写进数据根目录 ——
+  文件确实写了,但**没有任何代码读它**,用户看到的是「同步成功,数据一点没变」。
+  (实测发生在 2026-11-27 凌晨:同步一次后顶层 readings.json 多了当天的抄表记录,
+  而 `stores/main/readings.json` 一个字节没动。)
+  现在同步的落盘**直接复用恢复路径**的 `_write_restore_files`:
+  顶层文件桥接到 `stores/<main>/`(顶层仍留一份可回滚副本)、`settings.json` 合并
+  (保留本机 NAS 凭据与备份目录)、响应里明确写出「已桥接到 stores/main/」
+- 缓存失效从「逐个文件」改为整盘 `_cache_clear()` —— 同步是直接写文件、绕过
+  `save_json` 的,漏掉一个路径就是读到旧内容;文件缓存命中率本来就不高,清干净最稳
 
-### 工程
+### 新增测试
 
-- **CI**:Python 3.9 那条腿固定到 `ubuntu-22.04` —— `ubuntu-latest` 已升到 24.04/26.04,
-  `setup-python` 在那里取不到 3.9(首次上线时报 `The version '3.9' … was not found for
-  Ubuntu 26.04`),与代码无关。3.11 继续跑在 `ubuntu-24.04`
-- 首次 CI 结果:Python 3.11 **788 项全绿**(项目史上第一次在 CI 跑测试)
+- `tests/test_nas_sync.py::TestSyncBridgesToStoreDir`(3 项):顶层载荷必须落进
+  `stores/main/`、顶层保留回滚副本、显式 `stores/<id>/` 载荷不重复桥接
 
 ### ⬆️ 升级
 
@@ -159,5 +159,5 @@ docker compose up -d
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.1...v0.5.2
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.2...v0.5.3
 
