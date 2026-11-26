@@ -3101,3 +3101,23 @@ a:hover {
   border-radius: 8px;
   cursor: pointer;
 }
+
+/* ===== 键盘可见焦点(:focus-visible)=====
+
+   原先只有表单控件有 ``:focus`` 样式(input/select/textarea/.field-control),
+   而且都是 ``outline: none`` + 换个边框色 —— 对比度很低,键盘用户很难看出焦点在哪;
+   按钮/链接则完全依赖浏览器默认外框(浅色主题下几乎是看不见的细线,深色下是突兀的蓝框)。
+
+   现在统一:键盘导航(:focus-visible 命中)时用主题色描边;鼠标点击**不加**框
+   (按钮不会因为点一下就多一圈环)。
+
+   ⚠️ 刻意**不包含** input / select / textarea:它们在浏览器里鼠标点击也会命中
+   :focus-visible(规范如此:文本控件永远算"需要键盘输入"),加了描边就会每次点输入框
+   都多一圈环。而表单控件的焦点样式本来就不弱 —— 见下方 input:focus:
+   边框变主色 + 3px 柔光环 + 背景提亮,深浅两套主题都有。
+
+   只在支持 :focus-visible 的浏览器生效(macOS 12+ / Safari 15.4+),老浏览器退回原有行为。 */
+:where(button, [role="button"], a[href], summary, [tabindex]:not([tabindex="-1"])):focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
