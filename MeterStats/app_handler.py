@@ -13,6 +13,21 @@ from utils.api import inject_version_to_html as _inject_version_to_html
 
 ROOT = Path(__file__).resolve().parent
 
+# 只允许服务**前端静态资源**的扩展名。
+#
+# ⚠️ 这个 handler 原来把「ROOT 之下的任意文件」直接发出去 ——
+#    http://<host>:8765/routing.py 能下载到后端源码(接口面、鉴权逻辑全暴露),
+#    .db / .log / .plist / .sh / .swift 同理。服务还监听在所有网卡上,
+#    等于同网段任何人都能拿走源码。
+# 现在按白名单收口:不在表里的一律 404(用 404 而不是 403 ——
+#    不告诉外面"这个文件存在但不能读")。
+_STATIC_ALLOWED_SUFFIXES = frozenset({
+    ".html", ".css", ".js",                # 页面与脚本
+    ".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico",   # 图片
+    ".woff", ".woff2", ".ttf",             # 字体
+})
+
+
 from constants import DEFAULT_PORT
 
 # 端口由 server.py 设置
@@ -125,6 +140,11 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(403)
             return
         if not file_path.is_file():
+            self.send_error(404)
+            return
+
+        # 只发前端资源:后端源码(.py)、配置(.json)、缓存(.db)、日志、脚本一律不对外
+        if file_path.suffix.lower() not in _STATIC_ALLOWED_SUFFIXES:
             self.send_error(404)
             return
 
