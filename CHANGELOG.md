@@ -2,6 +2,24 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.10] — 2026-11-27
+
+### 修复
+
+- **0.5.9 的「迁移按布局分派」在真实启动路径上没生效**(自测抓到的):分派逻辑用
+  `stores_root()` → `base_data_dir()` → 读 `app_handler.DATA_PATHS`,而 `server.py` 里
+  `run_startup_migration()`(line ~192)早于 `app_handler.DATA_PATHS = data_paths`(line ~246)
+  —— 那一刻 `base_data_dir()` 必然抛 `RuntimeError`,被我的 `except` 当成"判不出布局"
+  回退单店,于是多门店下**继续去改顶层遗留文件**,问题原样存在。
+  实测证据(0.5.9 装好后的启动日志):
+  `[MIGRATE] 判定门店布局失败,按单店处理: 数据目录未初始化:app_handler.DATA_PATHS['readings'] 为空 …`
+  - 修法:目标目录**直接由传进来的 `data_dir` 推导**(`data_dir/stores/`),不依赖任何全局状态;
+    多门店时日志会明说「逐个门店跑水电字段迁移(N 个门店)」
+  - 新增回归用例 `test_layout_detected_without_global_data_paths`:显式把 `DATA_PATHS`
+    置空(模拟启动那一刻),断言布局仍被识别、顶层遗留文件不被改写
+- 教训写在这儿:**0.5.9 的单测是绿的**(它 mock 了 `base_data_dir`),但真实启动顺序没被测到。
+  这类"只在装配顺序上才暴露"的问题,只有把真实状态(而不是 mock)放进测试才守得住。
+
 ## [0.5.9] — 2026-11-27
 
 ### 修复

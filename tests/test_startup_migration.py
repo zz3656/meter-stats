@@ -28,6 +28,7 @@ sys.path.insert(0, str(REPO / "MeterStats"))
 
 from unittest import mock  # noqa: E402
 
+import app_handler  # noqa: E402
 import storage  # noqa: E402
 
 ROW_WITH_WATER = {
@@ -63,9 +64,8 @@ class TestStartupMigrationDispatch(unittest.TestCase):
         self.assertNotIn("water", top[0], "迁移后 readings.json 仍留着水电字段")
 
     def _run_multi(self) -> None:
-        """在「多门店布局」下跑启动迁移(base_data_dir 指向临时目录)。"""
-        with mock.patch("modules.stores.context.base_data_dir", return_value=self.base):
-            storage.run_startup_migration(self.base)
+        """在多门店布局下跑启动迁移 —— 布局由 data_dir/stores/ 判定,不依赖全局状态。"""
+        storage.run_startup_migration(self.base)
 
     def test_multi_store_migrates_each_store(self) -> None:
         main = self.base / "stores" / "main"
@@ -80,6 +80,27 @@ class TestStartupMigrationDispatch(unittest.TestCase):
             water = _read(d / "readings_water.json")
             self.assertEqual(len(water), 1, f"{d.name} 门店的水电字段没迁出来")
             self.assertNotIn("water", _read(d / "readings.json")[0], d.name)
+
+    def test_layout_detected_without_global_data_paths(self) -> None:
+        """回归:迁移不能依赖 app_handler.DATA_PATHS(启动时它还没初始化)。
+
+        2026-11-27 实测过:那条路径上 base_data_dir() 必抛 RuntimeError,
+        代码按"判不出布局"回退单店 → 多门店下又去改顶层遗留文件。
+        """
+        _write(self.base / "stores" / "main" / "readings.json", [dict(ROW_WITH_WATER)])
+        top_before = self.base / "readings.json"
+        _write(top_before, [{"date": "2026-06-01", "hall": 1.0}])
+        before_text = top_before.read_text(encoding="utf-8")
+
+        # 模拟 server.py 启动时的真实状态:此刻 DATA_PATHS 还没被赋值
+        empty = {k: None for k in app_handler.DATA_PATHS}
+        with mock.patch.object(app_handler, "DATA_PATHS", empty):
+            storage.run_startup_migration(self.base)
+
+        self.assertEqual(len(_read(self.base / "stores" / "main" / "readings_water.json")), 1,
+                         "多门店布局没被识别出来(仍在按单店处理)")
+        self.assertEqual(top_before.read_text(encoding="utf-8"), before_text,
+                         "顶层遗留文件又被改写了")
 
     def test_multi_store_does_not_touch_legacy_top_level(self) -> None:
         """顶层是「总店的旧位置」,多门店布局下不该被重写。"""

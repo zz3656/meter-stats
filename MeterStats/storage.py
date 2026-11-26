@@ -870,14 +870,18 @@ def run_startup_migration(data_dir: Path):
       - **漏掉每个门店自己的数据** —— 老部署里门店的 readings.json 若还留着
         内联的水电字段,不迁移就永远进不了 readings_water.json。
     """
+    # ⚠️ 这里**不能**用 modules.stores.context.stores_root():
+    #    它在 server.py 里的调用点(run_startup_migration, line ~192)早于
+    #    `app_handler.DATA_PATHS = data_paths`(line ~246),那时 base_data_dir() 必抛
+    #    RuntimeError → 被当成"判不出布局"回退单店 → 多门店下又去改顶层遗留文件。
+    #    (2026-11-27 实测:启动日志里就出现了「判定门店布局失败,按单店处理」。)
+    #    传进来的 data_dir 本身就是权威的,直接看它下面的 stores/ 即可。
+    stores_dir = Path(data_dir) / "stores"
     targets = [data_dir]
-    try:
-        from modules.stores.context import multi_store_layout, stores_root
-        if multi_store_layout():
-            targets = [p for p in sorted(stores_root().iterdir())
-                       if p.is_dir() and not p.name.startswith(".")]
-    except Exception as e:                      # 判不出布局 → 按单店处理(保守)
-        log(f"  [MIGRATE] 判定门店布局失败,按单店处理: {e}")
+    if stores_dir.is_dir():
+        targets = [p for p in sorted(stores_dir.iterdir())
+                   if p.is_dir() and not p.name.startswith(".")]
+        log(f"  [MIGRATE] 多门店布局:逐个门店跑水电字段迁移({len(targets)} 个门店)")
 
     total = 0
     for target in targets:
