@@ -13,10 +13,16 @@ let monthlyPieChart = null;
 function calcMonthPie(monthReadings, charges) {
   if (!monthReadings || monthReadings.length < 2) return null;
   const first = monthReadings[0], last = monthReadings[monthReadings.length - 1];
+  // ⚠️ 读表值必须走 meterValue:自定义表存在 row.meters 里,直接 first[k] 得到
+  //    undefined → NaN → 整个饼图 NaN%(2 表门店/加了自定义表的门店都中招)。
+  //    某块表这段没抄全 → 记 0,不参与占比(以前 NaN 会把合计也带成 NaN)。
   const usage = (window.METER_KEYS || []).map(k => {
-    const delta = realKwh(first[k] - last[k], k);
+    const a = meterValue(first, k), b = meterValue(last, k);
+    if (a == null || b == null) return 0;
+    const delta = realKwh(a - b, k);
     const charged = sumChargesBetween(charges, k, first.date, last.date);
-    return Math.max(delta + charged, 0);
+    const v = delta + charged;
+    return isFinite(v) ? Math.max(v, 0) : 0;
   });
   const total = usage.reduce((a, b) => a + b, 0);
   if (total <= 0) return null;
@@ -91,15 +97,20 @@ function renderDailyPie(dateStr) {
   // 计算 prev → next 区间,按天数均摊到 prev 日(与单天汇报口径一致)
   const days = Math.max(1, Math.round((new Date(next.date) - new Date(prev.date)) / 86400000));
   const usage = (window.METER_KEYS || []).map(k => {
-    const delta = realKwh(prev[k] - next[k], k);
+    const a = meterValue(prev, k), b = meterValue(next, k);
+    if (a == null || b == null) return 0;
+    const delta = realKwh(a - b, k);
     const charged = sumChargesBetween(CURRENT_CHARGES, k, prev.date, next.date);
-    return Math.max((delta + charged) / days, 0);
+    const v = (delta + charged) / days;
+    return isFinite(v) ? Math.max(v, 0) : 0;
   });
   const total = usage.reduce((a, b) => a + b, 0);
 
   wrap.style.display = '';
   const pct = (i) => total > 0 ? (usage[i] / total * 100).toFixed(1) : '0';
-  const KEYS = ['hall', 'fire', 'private_room', 'ac'];
+  // 明细行必须与扇区同源:写死 4 表时,2 表门店会出现「图 2 项、明细 4 行」,
+  // 而 usage 是按 METER_KEYS 算的 → 多出来的行读 undefined 直接抛 TypeError。
+  const KEYS = window.METER_KEYS || [];
   const rowHtml = (k, i) =>
     '<div class="day-detail-row">' +
       '<span class="dot" style="background:' + COLORS(k) + '"></span>' +
@@ -132,7 +143,9 @@ function renderMonthlyPie(monthKey) {
   wrap.style.display = '';
 
   const pct = (i) => data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : '0';
-  const KEYS = ['hall', 'fire', 'private_room', 'ac'];
+  // 明细行必须与扇区同源:写死 4 表时,2 表门店会出现「图 2 项、明细 4 行」,
+  // 而 usage 是按 METER_KEYS 算的 → 多出来的行读 undefined 直接抛 TypeError。
+  const KEYS = window.METER_KEYS || [];
   summaryEl.innerHTML =
     KEYS.map((k, i) =>
       '<div class="day-detail-row">' +

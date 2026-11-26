@@ -87,53 +87,78 @@ PUBLIC_API_PATHS = frozenset({"/api/health", "/api/version", "/api/auth/login"})
 # 删除类操作允许的角色,与前端 ADMIN_DELETE_ROLES 保持一致
 DELETE_ROLES = frozenset({"admin", "supervisor"})
 
-# 仅管理员的接口。
+# 角色高低。数字比较代替「两个集合 + 两次 startswith」。
+ROLE_RANK = {"employee": 0, "supervisor": 1, "admin": 2}
+
+# ============ 接口最低角色 —— **唯一一张表** ============
 #
-# - /api/admin/users:否则任何登录用户都能新建管理员账号自我提权
-# - 下面这 5 个是**部署级全局配置**,写的是顶层 settings.json、影响所有门店:
-#     备份目录 / NAS 账号密码 / 自动备份开关 / 保留份数 / 图片目录
-#   分店主管改了会波及全站(比如关掉自动备份、改错备份目录、读到 NAS 凭据;
-#   图片目录还是"全局覆盖项",一设就会让所有门店的照片混进同一目录)。
-#   主管仍保留**本店范围**的备份/恢复能力(/api/backup、/api/restore、
-#   backup-download、backup-delete、data-files —— 它们各自带门店范围闸)。
-ADMIN_ONLY_PREFIXES = (
-    "/api/admin/users",
-    "/api/admin/backup-config",
-    "/api/admin/nas-config",
-    "/api/admin/auto-backup",
-    "/api/admin/backup-retention",
-    "/api/admin/images",
+# 以前是 ADMIN_ONLY_PREFIXES / MANAGER_ONLY_PREFIXES 两个元组,配两次
+# `path.startswith(前缀)`,漂移出三类问题:
+#
+#   1. **重复**:backup-config / nas-config / auto-backup / backup-retention /
+#      images 在两张表里各写一遍。admin 检查在前,所以后一组里那 5 条永远走不到;
+#   2. **漏项**:backup-status / report-cache / roles / sessions 两张表里都没有,
+#      → 任何登录用户(连最普通的员工)都能 `GET /api/admin/backup-status`
+#      拿到全站备份清单 + 绝对路径,`GET /api/admin/report-cache` 拿到跨店的
+#      {门店, 月份} 缓存键,`GET /api/admin/sessions` 拿到在线会话;
+#   3. **前缀不是按段比的**:`startswith("/api/admin/users")` 会把
+#      `/api/admin/users-anything` 一起放进来(以后加导出接口就中招)。
+#
+# 现在:一张 (前缀, 最低角色) 有序表 + **按段边界**匹配(`_min_role_for`)。
+# 没有列在这里的接口 = 任何登录用户可读/录入(与改造前一致)。
+MIN_ROLE_PREFIXES: "Tuple[Tuple[str, str], ...]" = (
+    # ---- 仅管理员 ----
+    # users:否则任何登录用户都能新建管理员账号自我提权
+    ("/api/admin/users", "admin"),
+    # sessions / report-cache:在线会话列表与跨店缓存键,属于运维面
+    ("/api/admin/sessions", "admin"),
+    ("/api/admin/report-cache", "admin"),
+    # 下面 5 个是**部署级全局配置**,写的是顶层 settings.json、影响所有门店:
+    # 备份目录 / NAS 账号密码 / 自动备份开关 / 保留份数 / 图片目录。
+    # 分店主管改了会波及全站(关掉自动备份、改错备份目录、读到 NAS 凭据;
+    # 图片目录还是「全局覆盖项」,一设就让所有门店的照片混进同一目录)。
+    # 主管仍保留**本店范围**的备份/恢复能力(backup、restore、backup-download、
+    # backup-delete、data-files —— 它们各自带门店范围闸)。
+    ("/api/admin/backup-config", "admin"),
+    ("/api/admin/nas-config", "admin"),
+    ("/api/admin/auto-backup", "admin"),
+    ("/api/admin/backup-retention", "admin"),
+    ("/api/admin/images", "admin"),
+    # ---- 主管及以上 ----
+    ("/api/admin/audit", "supervisor"),
+    ("/api/admin/data-files", "supervisor"),
+    ("/api/admin/dir-listing", "supervisor"),
+    ("/api/admin/migrate-water", "supervisor"),
+    ("/api/admin/meter", "supervisor"),
+    ("/api/admin/roles", "supervisor"),
+    # 备份清单里有全站包名与绝对路径;下载/删除是「数据文件」级操作
+    ("/api/admin/backup-status", "supervisor"),
+    ("/api/admin/backup-download", "supervisor"),
+    ("/api/admin/backup-delete", "supervisor"),
+    ("/api/admin/restore-upload", "supervisor"),
+    ("/api/admin/sync-from-nas", "supervisor"),
+    # ⚠️ upload / restore **能写任意门店的数据**(载荷里带 stores/<id>/ 路径),
+    #    员工不该有「覆盖别人门店数据」的权限;
+    #    backup / backup-download 能**导出含全部门店数据的备份包**。
+    ("/api/upload", "supervisor"),
+    ("/api/restore", "supervisor"),
+    ("/api/backup", "supervisor"),
 )
 
-# 管理类接口至少主管:审计日志、备份删除/恢复、NAS 同步、电价倍率与图片目录配置
-# 这些不该由"只能录入抄表"的员工角色触碰,与前端 ADMIN_MANAGE_ROLES 的意图对齐。
-#
-# ⚠️ /api/upload、/api/restore、/api/backup、/api/admin/backup-download 也在其中:
-#   - upload / restore **能写任意门店的数据**(载荷里带 stores/<id>/ 路径),
-#     员工角色不该有「覆盖别人门店数据」的权限;
-#   - backup / backup-download 能**导出含全部门店数据的备份包**
-#     (Task 7 之前备份包只含顶层 = 单店,现在含全部门店 —— 导出面被放大了)。
-# 它们与已有的 /api/admin/data-files 同级:都是「数据文件」级别的操作。
-MANAGER_ONLY_PREFIXES = (
-    "/api/admin/audit",
-    "/api/admin/data-files",
-    "/api/admin/dir-listing",
-    "/api/admin/migrate-water",
-    "/api/admin/restore-upload",
-    "/api/admin/sync-from-nas",
-    "/api/admin/backup-delete",
-    "/api/admin/backup-download",
-    "/api/admin/meter",
-    "/api/admin/images",
-    "/api/admin/auto-backup",
-    "/api/admin/backup-retention",
-    "/api/admin/backup-config",
-    "/api/admin/nas-config",
-    "/api/upload",
-    "/api/restore",
-    "/api/backup",
-)
+# 兼容别名:老代码/文档里提到这两个名字,语义已合并进 MIN_ROLE_PREFIXES。
 MANAGER_ROLES = frozenset({"admin", "supervisor"})
+
+
+def _min_role_for(path_clean: str) -> "Optional[str]":
+    """这条接口要求的最低角色;没列出来的返回 None(= 任何登录用户)。
+
+    按**路径段边界**匹配:`/api/admin/users` 匹配 `/api/admin/users` 和
+    `/api/admin/users/42`,但不匹配 `/api/admin/users-export`。
+    """
+    for prefix, min_role in MIN_ROLE_PREFIXES:
+        if path_clean == prefix or path_clean.startswith(prefix + "/"):
+            return min_role
+    return None
 
 # 单元测试用 _do_api 直接跑业务逻辑时,可在 fixture 内置 False 跳过鉴权。
 # 生产启动路径不读任何环境变量,这个开关在进程内,外部配不出来。
@@ -189,12 +214,14 @@ def _auth_gate(method: str, path_clean: str, handler) -> Optional[Dict[str, Any]
         send_json(handler, 403, {"error": "权限不足: 删除需要主管或管理员权限"})
         return None
 
-    if path_clean.startswith(ADMIN_ONLY_PREFIXES) and role != "admin":
-        send_json(handler, 403, {"error": "权限不足: 该操作需要管理员权限"})
-        return None
-
-    if path_clean.startswith(MANAGER_ONLY_PREFIXES) and role not in MANAGER_ROLES:
-        send_json(handler, 403, {"error": "权限不足: 该操作需要主管或管理员权限"})
+    required = _min_role_for(path_clean)
+    if required is not None and ROLE_RANK.get(role, 0) < ROLE_RANK[required]:
+        # 文案保持原样(测试与前端提示都按「主管」/「管理员」认)
+        message = (
+            "权限不足: 该操作需要管理员权限" if required == "admin"
+            else "权限不足: 该操作需要主管或管理员权限"
+        )
+        send_json(handler, 403, {"error": message})
         return None
 
     return sess
@@ -385,7 +412,7 @@ _POST_PREFIX = {
     "/api/duty": handle_post_duty,
     "/api/import": handle_post_import,
     # 门店管理:权限在 handler 内部判(增删改仅 admin)——
-    # 放进 ADMIN_ONLY_PREFIXES 会把 GET /api/stores 一起拦掉。
+    # 放进 MIN_ROLE_PREFIXES 会把 GET /api/stores 一起拦掉。
     "/api/stores": handle_post_store,
 }
 

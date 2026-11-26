@@ -5,7 +5,7 @@
 ## [未发布]
 
 **备份 / 恢复加固轮(A 批止血)。** 全部是「坏了但没人发现」的既存缺陷,
-不是新功能;业务口径零改动,全量 **751** 项单测通过(新增 18 项)。
+不是新功能;业务口径零改动,全量 **774** 项单测通过(A 批新增 21 项、B 批新增 21 项)。
 
 ### 修复
 
@@ -28,6 +28,49 @@
 - **四处路径包含判断用手写 `str.startswith`**:同级目录前缀同样命中
   (`/…/MeterStats.bak/x.js` 的前缀就是 `/…/MeterStats`;`/data/backup-x/` 的前缀就是
   `/data/backup`)。静态资源那条**连鉴权都没有**。统一改 `Path.is_relative_to()`
+
+### 权限收口(接口授权矩阵)
+
+- **接口最低角色收敛成一张表**(`routing.MIN_ROLE_PREFIXES`):以前是
+  `ADMIN_ONLY_PREFIXES` / `MANAGER_ONLY_PREFIXES` 两个元组 + 两次 `startswith`,
+  漂移出三类问题:
+  - **重复** 5 条(`backup-config` / `nas-config` / `auto-backup` / `backup-retention` /
+    `images` 在两个表里各写一遍,admin 检查在前 → 后一组永远走不到);
+  - **漏项**:`backup-status` / `report-cache` / `roles` / `sessions` 两张表里都没有 →
+    **任何登录用户(包括只能录入抄表的员工)**都能 `GET /api/admin/backup-status`
+    拿到全站备份清单与绝对路径、`GET /api/admin/report-cache` 拿到跨店缓存键;
+  - **前缀不按段比**:`startswith("/api/admin/users")` 会把 `/api/admin/users-anything`
+    一起放进来。现在按路径段边界匹配。实测:员工访问上述 4 条全部 403,主管访问
+    `backup-status`/`audit`/`roles` 200,`report-cache`/`sessions` 仍仅管理员
+
+### 前端正确性
+
+- **5 对同名全局函数互相覆盖,全部清理**(`escapeHtml` 那次事故的同类):
+  `submitUtilityAdd`、`refreshDayCopySelect`、`checkDutyReminder`、`calcDayUsage`、
+  `copyTextWithFallback` —— **每一对的内容都不一样**,谁生效只取决于 `index.html` 里
+  `<script>` 的顺序。其中 `copyTextWithFallback` 最讽刺:带 macOS 原生剪贴板桥的那份
+  在 `render_charts.js`,一直静默覆盖 `utils.js` 的旧版,改 utils.js 等于白改。
+  现在每个名字只剩一处定义,并新增**源码级护栏**:跨文件同名全局函数直接测试失败
+- **`module.exports` 里塞别的文件的标识符**:`reports.js` 导出了 `renderTrendChart` /
+  `renderMonthlyPie` / `copyDayUsage` 等 5 个不属于本文件的裸标识符 —— 浏览器里
+  `module` 未定义看不出来,Node 下 `require` 直接 ReferenceError(清理同名副本时
+  又新增两处)。现在导出只列本文件定义的函数,同样有护栏
+- **用户管理表格的存储型 XSS**:`renderUsersTable` 把 `username` / `name` 直接拼进
+  `innerHTML`,还把用户名拼进 `onclick="editAdminUser(id,'用户名')"` —— 后端
+  `add_user` 不校验字符集,管理员建个 `<img src=x onerror=...>` 当用户名,
+  任何打开该页的人(含主管)都会执行;而用户名里**一个单引号**就能把那行按钮打断。
+  现在自由文本走 `escapeHtml`、属性值走 `escapeAttr`,按钮改成 `data-*` + tbody 上
+  一次事件委托(顺带解决「每次重绘都在累加监听器」)
+- **一次刷新把同一块表画 2~3 遍**:`renderReadingTable()` 尾部无条件调
+  `renderWaterTable()`,而水电数据是第三个请求才回来的 —— 那次渲染用的是**旧 State**
+  (闪一帧旧水表数据),随后又被真正那次覆盖;`renderAll()` 里 `updateStatusBar` 也连调
+  两次。现在水电表在数据到齐后显式渲染一次,重复调用已删
+- **自定义表/倍率的口径漏洞**:饼图明细行写死 `['hall','fire','private_room','ac']`
+  (2 表门店 → 扇区 2 项、明细 4 行,多出来的行读 `undefined` 直接抛错);
+  饼图取表值直接 `row[key]`,而自定义表存在 `row.meters` 里 → NaN%;报表与设置页
+  还有 6 处 `|| 50` / `|| 40` 字面量兜底(改成 ×100 的门店会看到「总表 ×50」)。
+  现在一律跟 `window.METER_KEYS` / `meterValue()` / `MAIN_METER_MULT`·`SUB_METER_MULT` 走,
+  并有静态护栏禁止字面量倍率兜底
 
 ### 新增
 

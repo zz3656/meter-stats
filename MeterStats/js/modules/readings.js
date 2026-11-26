@@ -143,8 +143,10 @@ function renderReadingTable(readings) {
         });
     });
 
-    // 水电表底表格渲染 (同文件内)
-    renderWaterTable();
+    // ⚠️ 这里**不要**顺带调 renderWaterTable():水电数据是 refreshAndRenderTables()
+    //    里第三个请求才回来的,在这里渲等于拿上一轮的旧 State 画一遍,随后再被
+    //    真正的渲染覆盖 —— 白重绘一次 + 闪一帧旧数据。水电表由
+    //    refreshAndRenderTables()/renderAll() 在拿到新鲜数据后各自显式渲染。
 }
 
 /** 渲染水电表底表格 (renderHistory 的后半部分) */
@@ -624,6 +626,9 @@ function refreshAndRenderTables() {
         return Api.utilities.list();
     }).then(function(water) {
         State.set("water", water.sort(function(a, b) { return a.date.localeCompare(b.date); }));
+        // 水电数据到齐之后**显式**渲染一次(以前靠 renderReadingTable 的副作用,
+        // 而那次渲染用的是还没回来的旧 State —— 录入水电后表格要等下次刷新才更新)
+        if (typeof renderWaterTable === 'function') renderWaterTable();
     }).catch(function(err) {
         showAlert('加载数据失败: ' + err);
     });
@@ -704,8 +709,8 @@ async function renderAll() {
     if (typeof refreshMonthSelectors === 'function') refreshMonthSelectors();
     if (typeof refreshDayCopySelect === 'function') refreshDayCopySelect(State.get("readings"), State.get("charges"));
 
-    // 7. 更新状态栏预警
-    updateStatusBar(State.get("readings"), State.get("charges"));
+    // 注:这里原来还有第二次 updateStatusBar(第 5 步已经调过一次),
+    //     同一份数据连画两遍没有任何收益,已删。
 
     // 8. 检查水电迁移（仅首次）
     if (typeof checkAndPromptMigration === 'function' && !window.MIGRATION_CHECKED) {

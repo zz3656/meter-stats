@@ -169,7 +169,7 @@ function switchSettingsPage(page) {
     if (typeof loadBackupStatus === 'function') loadBackupStatus();
     if (typeof loadBackupList === 'function') loadBackupList();
     // ⚠️ 图片目录 / 备份目录 / NAS 凭据是**部署级全局配置**,接口已收归管理员
-    //    (见 routing.ADMIN_ONLY_PREFIXES)。主管的面板也被隐藏了,所以这里
+    //    (见 routing.MIN_ROLE_PREFIXES)。主管的面板也被隐藏了,所以这里
     //    必须跳过请求 —— 否则主管一进数据管理页就吃 403 提示。
     var isAdmin = !!(typeof ADMIN_USER !== 'undefined' && ADMIN_USER
                      && ADMIN_USER.role === 'admin');

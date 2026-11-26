@@ -16,7 +16,7 @@ const ADMIN_DELETE_ROLES = new Set(['admin', 'supervisor']);
 const ADMIN_MANAGE_ROLES = new Set(['admin']);
 
 // 主管以上 —— 与后端 routing.MANAGER_ROLES 保持一致。
-// 数据管理(备份/恢复/NAS 同步/图片目录/保留期)全在后端的 MANAGER_ONLY_PREFIXES 里,
+// 数据管理(备份/恢复/NAS 同步/图片目录/保留期)全在后端的 MIN_ROLE_PREFIXES 里,
 // 员工点这些按钮只会拿到 403 —— 与其让人点了个没反应,不如根本不显示。
 const MANAGER_ROLES = new Set(['admin', 'supervisor']);
 
@@ -268,26 +268,64 @@ function userStoreScopeText(u) {
   }).join(' ');
 }
 
+/** 用户表格的行内按钮:在 tbody 上绑**一次**委托,不把 id/用户名拼进 onclick 字符串。
+ *
+ * ⚠️ 改成委托有两个原因,都是真事故级的:
+ *    1. **注入**:原来是 `onclick="editAdminUser(${u.id},'${u.username}')"` ——
+ *       用户名里一个单引号就能把那行按钮打断(SyntaxError,点了没反应);
+ *       而 username / name 又没转义就进了 innerHTML,管理员只要建一个
+ *       `<img src=x onerror=...>` 当用户名,任何打开「用户管理」页的人
+ *       (包括主管)都会执行它 —— 后端 add_user 不校验字符集,这里是唯一入口级防护。
+ *    2. **监听器累加**:以前每行每按钮各绑一次,表格重绘一次就多一批孤儿监听。
+ */
+function bindUsersTableActions() {
+  const tbody = document.getElementById('users-table-body');
+  if (!tbody || tbody.dataset.actionsBound === '1') return;
+  tbody.dataset.actionsBound = '1';
+  tbody.addEventListener('click', function(ev) {
+    const btn = ev.target && ev.target.closest
+      ? ev.target.closest('button[data-user-action]')
+      : null;
+    if (!btn) return;
+    const uid = parseInt(btn.dataset.uid, 10);
+    if (isNaN(uid)) return;
+    const action = btn.dataset.userAction;
+    if (action === 'edit') editAdminUser(uid, btn.dataset.username || '');
+    else if (action === 'stores') editUserStores(uid);
+    else if (action === 'delete') deleteAdminUser(uid);
+  });
+}
+
 /** 渲染用户表格(「门店」列靠 window.STORE_LIST 里的门店名)。 */
 function renderUsersTable(usersList) {
   const tbody = document.getElementById('users-table-body');
   if (!tbody) return;
-  tbody.innerHTML = usersList.map(u => `
+  const canManage = ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role);
+  const canDelete = ADMIN_DELETE_ROLES.has(ADMIN_USER?.role);
+  tbody.innerHTML = usersList.map(u => {
+    // 元素内容位置用 escapeHtml,属性值位置一律用 escapeAttr(连引号一起转义)
+    const uid = escapeAttr(String(u.id == null ? '' : u.id));
+    const username = escapeHtml(u.username);
+    const displayName = escapeHtml(u.name);
+    const roleKey = u.role || '';
+    return `
         <tr>
-          <td>${u.username}</td>
-          <td>${u.name}</td>
-          <td><span class="role-badge role-${u.role}">${ROLE_NAMES[u.role] || u.role}</span></td>
+          <td>${username}</td>
+          <td>${displayName}</td>
+          <td><span class="role-badge role-${escapeAttr(roleKey)}">${escapeHtml(ROLE_NAMES[roleKey] || roleKey)}</span></td>
           <td>${u.enabled
               ? '<span class="status-dot on"></span>启用'
               : '<span class="status-dot off"></span>禁用'}</td>
           <td>${userStoreScopeText(u)}</td>
           <td class="ta-right">
-            <button class="btn btn-primary btn-xs" onclick="editAdminUser(${u.id},'${u.username}')">编辑</button>
-            ${ADMIN_MANAGE_ROLES.has(ADMIN_USER?.role) ? `<button class="btn btn-secondary btn-xs" onclick="editUserStores(${u.id})">门店</button>` : ''}
-            ${ADMIN_DELETE_ROLES.has(ADMIN_USER?.role) && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" onclick="deleteAdminUser(${u.id})">删除</button>` : ''}
+            <button class="btn btn-primary btn-xs" data-user-action="edit" data-uid="${uid}" data-username="${escapeAttr(u.username || '')}">编辑</button>
+            ${canManage ? `<button class="btn btn-secondary btn-xs" data-user-action="stores" data-uid="${uid}">门店</button>` : ''}
+            ${canDelete && u.id !== ADMIN_USER?.id ? `<button class="btn btn-danger btn-xs" data-user-action="delete" data-uid="${uid}">删除</button>` : ''}
           </td>
         </tr>
-      `).join('');
+      `;
+  }).join('');
+  bindUsersTableActions();
 }
 
 /** 渲染「新增用户」的门店勾选框。门店 ID 进属性值 → 必须走 escapeAttr(全局 escapeHtml 是弱版)。 */
@@ -564,8 +602,10 @@ function saveMeterSettings() {
   var config = {
     electricity_price: numOr('config-elec-price', 0.9),
     water_price: numOr('config-water-price', 4.5),
-    main_mult: Math.round(numOr('config-main-mult', 50)),
-    sub_mult: Math.round(numOr('config-sub-mult', 40)),
+    // 输入框被清空时的兜底 = 当前门店的倍率(不是写死的 50/40 ——
+    // 一家把总表改成 ×100 的店,清空后保存不该又变回 50)
+    main_mult: Math.round(numOr('config-main-mult', window.MAIN_METER_MULT)),
+    sub_mult: Math.round(numOr('config-sub-mult', window.SUB_METER_MULT)),
   };
 
   Api.admin.saveMeterSettings({ meters: meters, config: config }).then(function (res) {

@@ -32,6 +32,14 @@ window.METER_KEYS = DEFAULT_METER_KEYS.slice();
 // /api/meters 返回的 config.electricity_price 覆盖这里（此处仅为不依赖后端时的兜底）。
 window.ELECTRICITY_PRICE = 0.9;
 
+// ===== 水电表倍率的兜底值 =====
+// 总表 ×50、分表 ×40 只是**默认值**;门店可以在「电表设置」里改成别的。
+// 后端 /api/meters 的 config.main_mult / sub_mult 是权威值,loadMeterConfig() 会覆盖这里。
+// ⚠️ 别在报表/图表里再写 `|| 50` / `|| 40` 这种字面量兜底 —— 改成 ×100 的门店
+//    会看到「月报底部写着总表 ×50」这类自相矛盾的文字。
+window.MAIN_METER_MULT = 50;
+window.SUB_METER_MULT = 40;
+
 window.METER_META = (key) => window.METER_CONFIG[key] || { label: key, icon: '', multiplier: 1, color: '#888' };
 window.MULTIPLIER = (key) => window.METER_META(key).multiplier;
 window.LABELS = (key) => window.METER_META(key).label;
@@ -129,6 +137,14 @@ async function loadMeterConfig() {
         window.METER_KEYS = keys;
         window.CHARGE_METERS = _chargeMetersFor(keys, cfg);
       }
+    }
+
+    // 水电表倍率:门店可能把总表改成 ×100、分表改成 ×80
+    if (data && data.config && typeof data.config.main_mult === 'number') {
+      window.MAIN_METER_MULT = data.config.main_mult;
+    }
+    if (data && data.config && typeof data.config.sub_mult === 'number') {
+      window.SUB_METER_MULT = data.config.sub_mult;
     }
 
     // 电价/水价以后端设置为权威值

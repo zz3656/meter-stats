@@ -172,18 +172,15 @@ function populateDutyMonthSelector() {
 }
 
 /** 检查值班提醒 (有待处理记录时显示横幅) */
-function checkDutyReminder() {
-    var dutyList = State.get("duty") || [];
-    var hasUnprocessed = dutyList.some(function(d) { return d.status === '未处理'; });
-    var reminder = document.getElementById('duty-reminder');
-    if (reminder) {
-        reminder.style.display = hasUnprocessed ? 'block' : 'none';
-    }
-}
+// ⚠️ checkDutyReminder 的**真实实现**在 js/core/init.js(它最后加载,一直覆盖这份)。
+//    两份逻辑不同(这份读 State.get("duty"),init.js 那份读 CURRENT_DUTY 并写提醒文案)
+//    —— 也就是说「未处理记录」提醒一直按 init.js 那套在跑。已删(2026-11 B 批)。
+
 
 // ==================== 导出 ====================
 
 if (typeof module !== 'undefined' && module.exports) {
+    // ⚠️ 不列 checkDutyReminder:它的实现在 js/core/init.js(见上方说明)。
     module.exports = { refreshDuty, addDuty, updateDuty, deleteDuty, handleDuty,
-                       renderDutyTable, populateDutyMonthSelector, checkDutyReminder };
+                       renderDutyTable, populateDutyMonthSelector };
 }

@@ -80,11 +80,35 @@ window.prevMonthKey = function prevMonthKey(monthKey) {
   return `${y}-${String(m - 1).padStart(2, '0')}`;
 };
 
-/** 复制文本到剪贴板（WKWebView 下回退到 execCommand） */
+/**
+ * 复制文本到剪贴板。
+ *
+ * ⚠️ App(WKWebView) 内必须走 Swift 原生桥:`navigator.clipboard` 在 WKWebView 里
+ *    常因缺少用户手势上下文而静默失败,`document.execCommand('copy')` 也可能被拦,
+ *    表现为「点了复制没反应」。
+ *
+ * ⚠️ 本文件原来还有一份**没有原生桥**的旧版,而 render_charts.js 里另有一份带桥的
+ *    —— 后者加载得晚,一直静默覆盖这里。也就是说:改这个文件是改不出任何效果的
+ *    (和 escapeHtml 弱版覆盖强版是同一类事故)。已把带桥的那份收敛到此处
+ *    (2026-11 B 批),render_charts.js 里的副本已删。
+ */
 window.copyTextWithFallback = function copyTextWithFallback(text, successMsg) {
+  const w = window;
+  const bridge = w.webkit && w.webkit.messageHandlers
+    && w.webkit.messageHandlers.macOSCopyToClipboard;
+  if (bridge) {
+    const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    // Swift 端的解析分支要求 html/tsv 都是 String,html 不能传 null
+    const html = '<meta charset="utf-8"><pre style="font-family:inherit;white-space:pre-wrap;'
+      + 'font-size:12pt;margin:0;">' + esc + '</pre>';
+    bridge.postMessage({ tsv: text, html: html });
+    showAlert(successMsg, 'success');
+    return;
+  }
+
   const done = () => showAlert(successMsg, 'success');
   const fail = () => {
-    // WKWebView 兼容: 隐藏 textarea + execCommand('copy')
+    // 浏览器环境兜底: 隐藏 textarea + execCommand('copy')
     try {
       const ta = document.createElement('textarea');
       ta.value = text;

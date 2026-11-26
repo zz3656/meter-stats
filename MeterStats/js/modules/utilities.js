@@ -40,69 +40,17 @@ function deleteWaterReading(date) {
 // ==================== 表单提交 (替代 submitUtilityAdd) ====================
 
 /** 水电录入侧栏/弹窗通用提交函数 */
-function submitUtilityAdd(source) {
-    if (_submitting) return;
-    var ids = source === 'sidebar'
-        ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
-        : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
-    var date = document.getElementById(ids.date).value;
-    if (!date) { showAlert('请选择抄表日期', 'error'); return; }
+// ⚠️ submitUtilityAdd 的**真实实现**在 admin.js(它是运行时最后加载的那份,
+//    也就是一直真正生效的那一行代码)。这里原来还有一份几乎同名的副本,
+//    被 admin.js 静默覆盖 —— 改这一份是改不出任何效果的。
+//    已删(2026-11 B 批:消除「同名全局互相覆盖」);要改水电录入逻辑去 admin.js,
+//    或者下次把 admin.js 那份搬回来,让这份成为唯一实现。
 
-    var numU = function(id) {
-        var v = document.getElementById(id).value;
-        return v === '' ? null : parseFloat(v);
-    };
-    var mainV = numU(ids.main), subV = numU(ids.sub), waterV = numU(ids.water);
-    var vals = [mainV, subV, waterV];
-    if (vals.every(function(v) { return v === null; })) { showAlert('请至少填写总表/分表/水表一项', 'error'); return; }
-    if (vals.some(function(v) { return v !== null && isNaN(v); })) { showAlert('读数必须是数字', 'error'); return; }
-
-    var row = {
-        date: date,
-        main_meter: mainV,
-        sub_meter: subV,
-        water: waterV,
-        note: document.getElementById(ids.note).value.trim(),
-    };
-
-    // 检查是否已有该日期的水电记录,如有则弹窗确认覆盖
-    Api.utilities.list().then(function(all) {
-        var existing = all.find(function(r) { return r.date === row.date; });
-        if (existing) {
-            showModal({
-                title: '覆盖已有数据', icon: '⚠️', iconKind: 'warn',
-                body: '<strong>' + row.date + '</strong> 已有水电表底,是否覆盖?<br><br>' +
-                    '<span style="opacity:0.7">现有:</span> 总表 ' + (existing.main_meter != null ? existing.main_meter : '—') + ' · 分表 ' + (existing.sub_meter != null ? existing.sub_meter : '—') + ' · 水表 ' + (existing.water != null ? existing.water : '—') + '<br>' +
-                    '<span style="opacity:0.7">新数据:</span> 总表 ' + (row.main_meter != null ? row.main_meter : '—') + ' · 分表 ' + (row.sub_meter != null ? row.sub_meter : '—') + ' · 水表 ' + (row.water != null ? row.water : '—'),
-                confirmText: '覆盖', confirmKind: 'primary'
-            }).then(function(overOK) {
-                if (!overOK) return;
-                doSaveWater();
-            });
-        } else {
-            doSaveWater();
-        }
-
-        function doSaveWater() {
-            setSubmitting(true);
-            Api.utilities.create(row).then(function() {
-                showAlert('✓ ' + date + ' 水电已保存', 'success');
-                var paths = source === 'sidebar'
-                    ? { date: 'utility-date', main: 'main_meter', sub: 'sub_meter', water: 'water', note: 'utility-note' }
-                    : { date: 'utility-add-date', main: 'utility-add-main_meter', sub: 'utility-add-sub_meter', water: 'utility-add-water', note: 'utility-add-note' };
-                ['main', 'sub', 'water', 'note'].forEach(function(k) { document.getElementById(paths[k]).value = ''; });
-                if (source === 'modal') closeReadingAddModal();
-                refreshAndRender();
-            }).catch(function(err) {
-                showAlert('保存失败: ' + err.message, 'error');
-            }).finally(function() { setSubmitting(false); });
-        }
-    });
-}
 
 // ==================== 导出 ====================
 
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { refreshUtilities, addWaterReading, updateWaterReading, deleteWaterReading,
-                       submitUtilityAdd };
+    // submitUtilityAdd 不在本文件定义(见上方说明),不要写进导出 ——
+    // 导出里放一个未定义的标识符会让 Node 下 require 直接抛 ReferenceError。
+    module.exports = { refreshUtilities, addWaterReading, updateWaterReading, deleteWaterReading };
 }

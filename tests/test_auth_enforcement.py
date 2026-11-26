@@ -228,6 +228,69 @@ class TestRolePolicy(AuthBase):
             self.assertNotIn(h.response_status, (401, 403), f"{path} 拦住了主管")
 
 
+class TestEndpointRoleTable(AuthBase):
+    """接口最低角色表(MIN_ROLE_PREFIXES)的回归。
+
+    这张表是**唯一**的授权矩阵:以前是两个元组 + 两次 startswith,漂移出
+    5 条重复(后一组永远走不到)、4 条漏项(员工可读全站备份清单),
+    以及「前缀不按段比」(/api/admin/users 会放行 /api/admin/users-export)。
+    """
+
+    # 以前两张表里都没有 → 任何登录用户都能调
+    LEAKED_BEFORE = (
+        ("/api/admin/backup-status", "supervisor"),
+        ("/api/admin/report-cache", "admin"),
+        ("/api/admin/roles", "supervisor"),
+        ("/api/admin/sessions", "admin"),
+    )
+
+    def test_previously_unprotected_endpoints_deny_employee(self):
+        for path, _min_role in self.LEAKED_BEFORE:
+            h = self.call("GET", path, token=self.tok_emp)
+            self.assertEqual(h.response_status, 403, f"{path} 仍对员工放行")
+            self.assertIn("权限不足", h.parsed.get("error", ""))
+
+    def test_admin_only_endpoints_deny_supervisor(self):
+        """部署级配置只归管理员 —— 主管改了会波及全站。"""
+        for path, min_role in self.LEAKED_BEFORE:
+            if min_role != "admin":
+                continue
+            h = self.call("GET", path, token=self.tok_super)
+            self.assertEqual(h.response_status, 403, f"{path} 对主管放行")
+            self.assertIn("管理员", h.parsed.get("error", ""))
+
+    def test_supervisor_level_endpoints_not_blocked_for_supervisor(self):
+        for path, min_role in self.LEAKED_BEFORE:
+            if min_role != "supervisor":
+                continue
+            h = self.call("GET", path, token=self.tok_super)
+            self.assertNotIn(h.response_status, (401, 403), f"{path} 拦住了主管")
+
+    def test_prefix_boundary_is_path_segment(self):
+        """`/api/admin/users` 只该管住 users 与其子路径,不该顺带管住 users-export。"""
+        self.assertEqual(routing._min_role_for("/api/admin/users"), "admin")
+        self.assertEqual(routing._min_role_for("/api/admin/users/42"), "admin")
+        self.assertIsNone(routing._min_role_for("/api/admin/users-export"))
+        self.assertIsNone(routing._min_role_for("/api/admin/roles-export"))
+
+    def test_unlisted_endpoints_stay_open_to_any_logged_in_user(self):
+        """没列进表的接口 = 任何登录用户可读/录入(与改造前一致,别顺手收紧)。"""
+        for path in ("/api/readings", "/api/charges", "/api/snapshot",
+                     "/api/stores", "/api/meters", "/api/monthly-report"):
+            self.assertIsNone(routing._min_role_for(path), path)
+
+    def test_no_duplicate_prefixes_in_table(self):
+        prefixes = [p for p, _ in routing.MIN_ROLE_PREFIXES]
+        self.assertEqual(len(prefixes), len(set(prefixes)),
+                         "同一前缀在表里出现多次 —— 后面的永远不会生效")
+
+    def test_migrate_water_status_not_swept_in(self):
+        """`/api/admin/migrate-water`(主管)不该顺带把 status 端点也锁上:
+        前端 readings.js 在每次加载时都会问一次迁移状态。"""
+        self.assertEqual(routing._min_role_for("/api/admin/migrate-water"), "supervisor")
+        self.assertIsNone(routing._min_role_for("/api/admin/migrate-water-status"))
+
+
 class TestSessionTtlTouch(AuthBase):
     """通过校验的请求应续期会话,和装饰器旧行为保持一致。"""
 

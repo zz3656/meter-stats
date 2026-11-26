@@ -145,45 +145,10 @@ function copyDayUsage() {
   copyTextWithFallback(text, '✓ 单天用电已复制,可直接粘贴到群里');
 }
 
-// 复制文本:优先 Clipboard API(WKWebView 受限时 fallback 到 execCommand)
-function copyTextWithFallback(text, successMsg) {
-  // ⚠️ App(WKWebView) 内必须走 Swift 原生桥：
-  // navigator.clipboard 在 WKWebView 里常因缺少用户手势上下文而静默失败，
-  // document.execCommand('copy') 也可能被拦，表现为"点了复制没反应"。
-  const w = window;
-  const bridge = w.webkit && w.webkit.messageHandlers && w.webkit.messageHandlers.macOSCopyToClipboard;
-  if (bridge) {
-    const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-    // Swift 端的解析分支要求 html/tsv 都是 String，html 不能传 null
-    const html = '<meta charset="utf-8"><pre style="font-family:inherit;white-space:pre-wrap;font-size:12pt;margin:0;">' + esc + '</pre>';
-    bridge.postMessage({ tsv: text, html: html });
-    showAlert(successMsg, 'success');
-    return;
-  }
+// copyTextWithFallback 的**唯一实现**在 js/helpers/utils.js(带 macOS 原生桥)。
+// 这里原来有一份几乎相同的副本,因加载顺序靠后被运行时采用 —— 改了 utils.js
+// 那份等于白改(和 escapeHtml 弱版覆盖强版同一类事故)。已删(2026-11 B 批)。
 
-  const done = () => showAlert(successMsg, 'success');
-  const fail = () => {
-    // 浏览器环境兜底：隐藏 textarea + execCommand('copy')
-    try {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      ta.style.position = 'fixed';
-      ta.style.opacity = '0';
-      document.body.appendChild(ta);
-      ta.focus();
-      ta.select();
-      const ok = document.execCommand('copy');
-      document.body.removeChild(ta);
-      if (ok) { done(); return; }
-    } catch (e) { /* 继续走下方报错 */ }
-    showAlert('复制失败,请手动选择复制', 'error');
-  };
-  if (navigator.clipboard && window.ClipboardItem) {
-    navigator.clipboard.writeText(text).then(done, fail);
-  } else {
-    fail();
-  }
-}
 
 // 每日用电折线图 — 4 块表各自折线 + 充电叠加
 function renderTrendChart(readings, charges) {

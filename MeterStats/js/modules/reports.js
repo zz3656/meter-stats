@@ -143,12 +143,12 @@ function renderMonthlyUtilities(data) {
     box.innerHTML =
         '<div class="stat-grid" style="margin-top:8px;">' +
           '<div class="stat-card hall">' +
-            '<div class="label">总表 ×' + (data.mult_main || 50) + '</div>' +
+            '<div class="label">总表 ×' + (data.mult_main || window.MAIN_METER_MULT) + '</div>' +
             '<div class="value">' + fmt(data.main_kwh, '度') + '</div>' +
             '<div class="sub">' + (data.prev_date ? data.prev_date + ' → ' + data.cur.date : '缺上月表底') + '</div>' +
           '</div>' +
           '<div class="stat-card fire">' +
-            '<div class="label">分表 ×' + (data.mult_sub || 40) + '</div>' +
+            '<div class="label">分表 ×' + (data.mult_sub || window.SUB_METER_MULT) + '</div>' +
             '<div class="value">' + fmt(data.sub_kwh, '度') + '</div>' +
             '<div class="sub">' + (data.cur.sub_meter == null ? '未录入' : '表底 ' + data.cur.sub_meter) + '</div>' +
           '</div>' +
@@ -164,7 +164,7 @@ function renderMonthlyUtilities(data) {
           '</div>' +
         '</div>' +
         '<div class="sub" style="color:var(--text-muted);font-size:12px;margin-top:8px;">' +
-          '总表/分表/水表每月抄一次(读数递增),总表 ×' + (data.mult_main || 50) + '、分表 ×' + (data.mult_sub || 40) +
+          '总表/分表/水表每月抄一次(读数递增),总表 ×' + (data.mult_main || window.MAIN_METER_MULT) + '、分表 ×' + (data.mult_sub || window.SUB_METER_MULT) +
           ' 后为实际用电,厨房用电 = 总表实际 − 分表实际(不直接抄)。电价 ' + data.price_electricity +
           ' 元/度 · 水价 ' + data.price_water + ' 元/吨。' +
         '</div>';
@@ -385,8 +385,8 @@ function renderYearlyResult(yearData) {
         }
         html += '</tbody></table></div>';
         html += '<div class="sub" style="color:var(--text-muted);font-size:12px;margin-top:8px;">' +
-                '总表 ×' + ((yearData.months.find(function(m){return m.utilities && m.utilities.mult_main;}) || {utilities:{}}).utilities.mult_main || 50) +
-                '、分表 ×' + ((yearData.months.find(function(m){return m.utilities && m.utilities.mult_sub;}) || {utilities:{}}).utilities.mult_sub || 40) +
+                '总表 ×' + ((yearData.months.find(function(m){return m.utilities && m.utilities.mult_main;}) || {utilities:{}}).utilities.mult_main || window.MAIN_METER_MULT) +
+                '、分表 ×' + ((yearData.months.find(function(m){return m.utilities && m.utilities.mult_sub;}) || {utilities:{}}).utilities.mult_sub || window.SUB_METER_MULT) +
                 ' 为实际用电；厨房用电 = 总表实际 − 分表实际。</div>';
     }
 
@@ -475,41 +475,12 @@ function renderUtilitiesHTML(data) {
 // triggerVisiblePie，导致占比饼图永远不渲染。
 
 
-function refreshDayCopySelect(readings, charges) {
-    var sel = document.getElementById('day-copy-date');
-    if (!sel) return;
-    var rs = (readings || []).filter(function(r) { return rowHasMeterValues(r); }).sort(function(a, b) { return a.date.localeCompare(b.date); });
-    if (rs.length < 2) { sel.innerHTML = '<option value="">(需至少两次抄表)</option>'; return; }
-    var first = new Date(rs[0].date);
-    var last = new Date(rs[rs.length - 1].date);
-    var copyDates = [];
-    for (var d = new Date(first); d < last; d.setDate(d.getDate() + 1)) { copyDates.push(formatDate(d)); }
-    sel.innerHTML = copyDates.map(function(dd) { return '<option value="' + dd + '">' + dd + '</option>'; }).join('');
-    sel.value = copyDates.length ? copyDates[copyDates.length - 1] : '';
-}
+// ⚠️ refreshDayCopySelect / calcDayUsage 的**真实实现**在 render_charts.js
+//    (render_charts.js 在 index.html 里晚于本文件加载,一直覆盖这里的副本)。
+//    这里原来各有一份内容不同的副本:改它们不会有任何效果 —— 已删(2026-11 B 批)。
+//    要改「单天用电/复制日期下拉」的逻辑,去 render_charts.js。
 
-function calcDayUsage(readings, charges, day) {
-    var rs = (readings || []).filter(function(r) { return rowHasMeterValues(r); }).sort(function(a, b) { return a.date.localeCompare(b.date); });
-    var a = null, b = null;
-    for (var i = 0; i < rs.length - 1; i++) {
-        if (day >= rs[i].date && day < rs[i + 1].date) { a = rs[i]; b = rs[i + 1]; break; }
-    }
-    if (!a || !b) return null;
-    var spanDays = Math.round((new Date(b.date) - new Date(a.date)) / 86400000);
-    if (spanDays <= 0) return null;
-    var per = {};
-    var totalKwh = 0, totalCost = 0;
-    for (var i = 0; i < CHARGE_METERS.length; i++) {
-        var m = CHARGE_METERS[i];
-        if (a[m.key] == null || b[m.key] == null) { per[m.key] = null; continue; }
-        var total = realKwh(a[m.key] - b[m.key], m.key) + sumChargesBetween(charges, m.key, a.date, b.date);
-        var kwh = total / spanDays;
-        var cost = kwh * ELECTRICITY_PRICE;
-        per[m.key] = { kwh: kwh, cost: cost };
-        totalKwh += kwh; totalCost += cost;
-    }
-    return { date: day, prevDate: a.date, nextDate: b.date, spanDays: spanDays, per: per, totalKwh: totalKwh, totalCost: totalCost };
-}
+
 
 // ==================== 状态栏和选择器刷新 (从旧版 app.js 迁移) ====================
 
@@ -611,8 +582,8 @@ function refreshMonthSelectors() {
     //   下拉却显示 2026-11。填完下拉必须重绘三张表，两边才对得上。
     if (typeof renderReadingTable === 'function') renderReadingTable(State.get('readings'));
     if (typeof renderChargeTable === 'function') renderChargeTable(State.get('charges'));
-    // renderWaterTable() 只在 renderReadingTable() 有数据时才会被顺带调用，
-    // 这里显式调用一次：选中的月份没有抄表但有水电时，水电表也要跟着过滤。
+    // 水电表也要跟着 #record-month 过滤:选中月份没有抄表、只有水电时同样要重绘。
+    // (renderReadingTable 不再顺带渲染水电表 —— 那条路径拿到的是旧 State。)
     if (typeof renderWaterTable === 'function') renderWaterTable();
 
     // 月度报告月份
@@ -923,9 +894,12 @@ function copyYearlyTSV() {
 // ==================== 导出 ====================
 
 if (typeof module !== 'undefined' && module.exports) {
+    // ⚠️ 只列**本文件定义**的函数。原来这里还塞了 renderTrendChart / triggerVisiblePie /
+    //    renderMonthlyPie / renderDailyPie / copyDayUsage(住在 render_charts.js /
+    //    render_pie_charts.js / accessibility.js)以及 refreshDayCopySelect / calcDayUsage
+    //    (住在 render_charts.js)—— 导出里放未定义的标识符,Node 下 require 直接
+    //    ReferenceError,浏览器里则悄悄拿到 undefined。
     module.exports = { loadMonthlyReport, loadYearlyReport, loadMonthlyUtilities, getSnapshot,
                        renderMonthlyReportTable, renderYearlyResult, renderUtilitiesHTML,
-                       renderTrendChart, triggerVisiblePie, renderMonthlyPie, renderDailyPie,
-                       refreshDayCopySelect, calcDayUsage, copyDayUsage,
                        updateStatusBar, refreshMonthSelectors, checkAndPromptMigration };
 }
