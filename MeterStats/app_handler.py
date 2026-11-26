@@ -87,9 +87,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_OPTIONS(self):
         self._dispatch("OPTIONS")
 
+    def do_HEAD(self):
+        """HEAD = 与 GET 相同的状态码与响应头,但不发 body。
+
+        ⚠️ 以前没有这个方法,http.server 直接回 501 Unsupported method ——
+        `curl -I`、许多监控探针(Uptime Kuma / 各类 uptime 检查)、
+        以及部分反向代理的健康检查都走 HEAD,拿到 501 会把服务判成"挂了"。
+        """
+        self._head_only = True
+        self._dispatch("HEAD")
+
     def _dispatch(self, method: str):
         import time
         start = time.time()
+        # HEAD 走 GET 的路由(状态码/头一致),body 由各写出点按 _head_only 抑制
+        route_method = "GET" if method == "HEAD" else method
         if self.path.startswith("/api/"):
             # 请求体大小限制: 防止超大 body 拖垮服务 (1MB)
             content_length = int(self.headers.get("Content-Length", 0))
@@ -100,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             try:
                 from routing import route
-                handled = route(method, self, self.path)
+                handled = route(route_method, self, self.path)
                 if handled is False:
                     # ⚠️ 绝不能什么都不做就返回：不发响应会让客户端收到空连接，
                     # 在 WKWebView/浏览器里表现为 "TypeError: Load failed"（-1005 Connection reset）。
@@ -211,7 +223,8 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(k, v)
         _add_cors(self)
         self.end_headers()
-        self.wfile.write(body)
+        if not getattr(self, "_head_only", False):
+            self.wfile.write(body)
 
 
 # 供测试模块调用 (向后兼容)

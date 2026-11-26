@@ -71,7 +71,9 @@ def send_json(handler, status: int, payload: Any) -> None:
     handler.send_header("Cache-Control", "no-store")
     _add_cors(handler)
     handler.end_headers()
-    handler.wfile.write(body)
+    # HEAD:头照发(含 Content-Length),body 不发 —— 让 curl -I / 监控探针能正常判活
+    if not getattr(handler, "_head_only", False):
+        handler.wfile.write(body)
 
 
 def send_csv(handler, filename: str, headers: list, rows: list) -> None:

@@ -189,6 +189,40 @@ class TestLiveServing(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("no-store", headers.get("Cache-Control", ""))
 
+    def test_head_requests_supported(self) -> None:
+        """HEAD 必须返回 200 + 同样的头、空 body。
+
+        以前没有 do_HEAD,http.server 直接回 501 —— `curl -I`、多数监控探针
+        (Uptime Kuma 一类)与部分反代健康检查都走 HEAD,会被判成"服务挂了"。
+        """
+        import http.client
+
+        for path, expect_type in (("/", "text/html"), ("/js/core/api.js", "javascript")):
+            conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+            try:
+                conn.request("HEAD", path)
+                resp = conn.getresponse()
+                self.assertEqual(resp.status, 200, f"HEAD {path} → {resp.status}")
+                self.assertIn(expect_type, resp.getheader("Content-Type", ""))
+                self.assertTrue(resp.getheader("Content-Length"),
+                                f"HEAD {path} 缺 Content-Length")
+                self.assertEqual(resp.read(), b"", f"HEAD {path} 不该有 body")
+            finally:
+                conn.close()
+
+    def test_head_on_api_endpoint(self) -> None:
+        """API 的 HEAD 也不该 501(健康检查常打 /api/health)。"""
+        import http.client
+
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        try:
+            conn.request("HEAD", "/api/health")
+            resp = conn.getresponse()
+            self.assertEqual(resp.status, 200)
+            self.assertEqual(resp.read(), b"")
+        finally:
+            conn.close()
+
     def test_frontend_assets_still_served(self) -> None:
         """收口不能收过头:页面、脚本、样式、图片必须照常。"""
         checks = {

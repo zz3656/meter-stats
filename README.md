@@ -184,9 +184,10 @@ docker compose pull && docker compose up -d
 ├── Package.swift                # SwiftPM 依赖(Chart.js 等)
 ├── .github/workflows/           # CI/CD
 │   ├── docker-publish.yml       # push main → 自动构建并推送镜像
+│   ├── tests.yml                # push/PR → 跑全量单元测试(Python 3.9 + 3.11)
 │   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
-├── tests/                       # 单元测试(147 用例)
+├── tests/                       # 单元测试(788 项)
 ├── docs/                        # 架构文档
 │   ├── ARCHITECTURE.md
 │   └── architecture-api-contract.md
@@ -228,7 +229,7 @@ docker compose pull && docker compose up -d
 📐 **架构文档**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 模块清单、关键算法、安全模型、扩展指南、常见坑。
 
 ```bash
-# 单元测试
+# 单元测试(788 项,约 30 秒;CI 在 push/PR 时跑 Python 3.9 与 3.11 双版本)
 python3 -m unittest discover -s tests -v
 
 # Docker 开发(本地重建镜像)
