@@ -106,19 +106,9 @@ function loadReadingsCache() {
     return raw ? JSON.parse(raw) : [];
   } catch { return []; }
 }
-function loadChargesCache() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_CHARGES);
-    return raw ? JSON.parse(raw) : [];
-  } catch { return []; }
-}
 function cacheReadings(data) {
   localStorage.setItem(STORAGE_KEY_READINGS, JSON.stringify(data));
 }
-function cacheCharges(data) {
-  localStorage.setItem(STORAGE_KEY_CHARGES, JSON.stringify(data));
-}
-
 // 异步加载数据 (通过 Api.* 封装,带 LocalStorage 缓存回退)
 async function api(method, path, body) {
   const opts = { method, cache: 'no-store', headers: { 'Content-Type': 'application/json' } };
@@ -209,11 +199,6 @@ async function fetchReadings() {
   try { const data = await Api.readings.list(); cacheReadings(data); return data; }
   catch (e) { console.warn('后端不可用,使用本地缓存:', e); return loadReadingsCache(); }
 }
-async function fetchCharges() {
-  try { const data = await Api.charges.list(); cacheCharges(data); return data; }
-  catch (e) { console.warn('后端不可用,使用本地缓存:', e); return loadChargesCache(); }
-}
-
 // 水电表底（重构时丢失，admin.js 的水电页依赖）
 async function fetchWaterReadings() {
   try {
@@ -243,41 +228,8 @@ const STORAGE_KEY_CHARGES = 'meter_charges_v1';
 
 // 年度汇总图表实例（renderCharts 里 resize 用，由报表模块赋值）
 
-async function fetchItems() {
-  try { const data = await Api.items.list(); CURRENT_ITEMS = Array.isArray(data) ? data : (data.data || []); return CURRENT_ITEMS; }
-  catch (e) { console.warn('后端不可用,items 用空数组:', e); CURRENT_ITEMS = []; return []; }
-}
-
-async function fetchPurchases() {
-  try { const data = await Api.purchases.list(); CURRENT_PURCHASES = Array.isArray(data) ? data : (data.data || []); return CURRENT_PURCHASES; }
-  catch (e) { console.warn('后端不可用,purchases 用空数组:', e); CURRENT_PURCHASES = []; return []; }
-}
-
 async function fetchDuty() {
   try { const data = await Api.duty.list(); CURRENT_DUTY = Array.isArray(data) ? data : (data.data || []); return CURRENT_DUTY; }
   catch (e) { console.warn('后端不可用,duty 用空数组:', e); CURRENT_DUTY = []; return []; }
 }
 
-// 一次拉全部数据 (5 个 GET → 1 个 GET,启动时调用)
-async function fetchSnapshot() {
-  try {
-    const data = await Api.reports.snapshot({});
-    CURRENT_READINGS = data.readings || [];
-    CURRENT_CHARGES = data.charges || [];
-    CURRENT_WATER_READINGS = data.readings_water || [];
-    CURRENT_ITEMS = data.items || [];
-    CURRENT_PURCHASES = data.purchases || [];
-    CURRENT_DUTY = data.duty || [];
-    cacheReadings(CURRENT_READINGS);
-    cacheCharges(CURRENT_CHARGES);
-    return data;
-  } catch (e) {
-    console.warn('snapshot 失败,回退到本地缓存:', e);
-    CURRENT_READINGS = loadReadingsCache();
-    CURRENT_CHARGES = loadChargesCache();
-    CURRENT_ITEMS = [];
-    CURRENT_PURCHASES = [];
-    CURRENT_DUTY = [];
-    return null;
-  }
-}

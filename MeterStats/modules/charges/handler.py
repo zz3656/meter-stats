@@ -270,5 +270,3 @@ def _save_charges(data):
     with lock:
         save_json(get_data_paths()["charges"], data)
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('charges')

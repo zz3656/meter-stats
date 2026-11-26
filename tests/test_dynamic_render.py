@@ -35,7 +35,7 @@ INDEX_HTML = METERSTATS / "index.html"
 
 MODULES = [
     "reports.js", "render_charts.js", "render_pie_charts.js",
-    "render_weekly.js", "render_weekly_trend.js", "alerts.js",
+    "render_weekly.js", "alerts.js",
 ]
 
 

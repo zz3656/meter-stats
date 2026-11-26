@@ -9,10 +9,6 @@ const _dateEl = document.getElementById('date'); if (_dateEl) _dateEl.value = to
 const _chargeDateEl = document.getElementById('charge-date'); if (_chargeDateEl) _chargeDateEl.value = todayStr();
 const _utilityDateEl = document.getElementById('utility-date'); if (_utilityDateEl) _utilityDateEl.value = todayStr();
 
-// 设置值班时间字段为当前时间
-function nowDateTimeStr() {
-  return formatDateTime(new Date());
-}
 // datetime-local 格式: YYYY-MM-DDTHH:MM(浏览器会按本地时区解释)
 function nowDateTimeLocalStr() {
   return formatDateTimeLocal(new Date());

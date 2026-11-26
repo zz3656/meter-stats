@@ -35,12 +35,6 @@ _FAKE_FAVICON = bytes.fromhex(
 _DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
-def _write_cors_headers(handler, headers: dict) -> None:
-    """批量写入 CORS 头。"""
-    for k, v in headers.items():
-        handler.send_header(k, v)
-
-
 def _add_cors(handler) -> None:
     """动态写入 CORS 头：回显请求的 Origin 头。
 
@@ -104,6 +98,29 @@ def send_favicon(handler) -> None:
     _add_cors(handler)
     handler.end_headers()
     handler.wfile.write(_FAKE_FAVICON)
+
+
+# 查询串里需要脱敏的参数名 —— 它们一旦进日志就等于把会话/凭据抄了一份。
+_SECRET_QUERY_KEYS = ("token", "password", "nas_pass", "pass")
+
+
+def mask_secret_query(path: str) -> str:
+    """把 URL 查询串里的敏感参数值抹成 ***,保留参数名便于排查。
+
+    >>> mask_secret_query("/api/x?a=1&token=deadbeef")
+    '/api/x?a=1&token=***'
+    """
+    if not path or "?" not in path:
+        return path
+    head, _, query = path.partition("?")
+    parts = []
+    for kv in query.split("&"):
+        name, sep, _value = kv.partition("=")
+        if sep and name.lower() in _SECRET_QUERY_KEYS:
+            parts.append(f"{name}=***")
+        else:
+            parts.append(kv)
+    return head + "?" + "&".join(parts)
 
 
 def read_body(handler) -> dict:

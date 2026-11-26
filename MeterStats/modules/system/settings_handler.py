@@ -15,7 +15,7 @@ _DEFAULT_USER = "admin"
 _DEFAULT_PASS = "admin123"
 
 # 权限级别 (从 constants 导入，避免重复定义)
-from constants import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE, ROLES
+from constants import ROLE_ADMIN
 
 
 def _get_settings_file(data_dir: Path) -> Path:
@@ -343,35 +343,9 @@ def _store_ids_signature(user: Dict[str, Any]) -> List[str]:
     return sorted(str(x) for x in ids)
 
 
-def migrate_users_to_pbkdf2(users: List[dict]) -> bool:
-    """扫描所有用户，将旧版 sha256: 哈希升级为 pbkdf2。
-
-    返回 True 表示有用户被迁移（settings 已保存，调用方无需再 save）。
-    """
-    import hashlib
-    migrated = False
-    for u in users:
-        hashed = u.get("password", "")
-        if not _needs_migration(hashed):
-            continue
-        # 从 legacy 哈希中提取原始密码是不可能的，
-        # 所以我们标记用户为"需要改密码"状态，并生成一个随机临时密码。
-        # 更好的方式: 让用户在下次登录时改密码（已在 admin.py 中实现）。
-        # 这里只记录日志，实际迁移靠 login 时的静默升级。
-        log(f"  [MIGRATE] 用户 {u.get('username')} 仍在使用旧版 sha256: 哈希")
-        migrated = True
-    return migrated
-
-
 def delete_user(users: List[dict], uid: int) -> bool:
     original = len(users)
     users[:] = [u for u in users if u["id"] != uid]
-    return len(users) < original
-
-
-def delete_user_by_username(users: List[dict], username: str) -> bool:
-    original = len(users)
-    users[:] = [u for u in users if u["username"] != username]
     return len(users) < original
 
 

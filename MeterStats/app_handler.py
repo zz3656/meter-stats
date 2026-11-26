@@ -6,7 +6,7 @@
 """
 from __future__ import annotations
 
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from utils.api import inject_version_to_html as _inject_version_to_html
@@ -118,14 +118,17 @@ class Handler(BaseHTTPRequestHandler):
                     # 在 WKWebView/浏览器里表现为 "TypeError: Load failed"（-1005 Connection reset）。
                     # 路由未命中必须显式返回 404 JSON。
                     from storage import log
-                    log(f"[404] {method} {self.path}")
+                    from utils.api import mask_secret_query
+                    log(f"[404] {method} {mask_secret_query(self.path)}")
                     from utils import send_json
                     send_json(self, 404, {"error": f"未知接口: {self.path.split('?')[0]}"})
             except Exception as e:
                 from storage import log
                 elapsed = time.time() - start
                 client_ip = self.headers.get("X-Forwarded-For", self.client_address[0] if hasattr(self, 'client_address') else "?")
-                log(f"[{elapsed*1000:.0f}ms] {method} {self.path} 4xx/5xx from {client_ip}: {e}")
+                from utils.api import mask_secret_query
+                log(f"[{elapsed*1000:.0f}ms] {method} {mask_secret_query(self.path)} "
+                    f"4xx/5xx from {client_ip}: {e}")
                 import traceback
                 log(traceback.format_exc())
                 from utils import send_json

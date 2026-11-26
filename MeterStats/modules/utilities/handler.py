@@ -134,5 +134,3 @@ def handle_delete_readings_water(handler, path_clean: str):
     log(f"  -- 删除水电表底 {date}")
     send_json(handler, 200, {"ok": True})
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('readings_water')

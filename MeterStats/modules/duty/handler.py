@@ -4,10 +4,9 @@ from __future__ import annotations
 import os
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
-from storage import log, load_json, save_json, get_lock, get_data_dir
+from storage import log, get_data_dir
 from modules._base import JsonModelHandler
 
 _now = datetime.now
@@ -95,7 +94,6 @@ def handle_delete_duty(handler, path_clean: str):
     如果删除的是"处理"类型记录，自动将原始报修记录恢复为"未处理"状态。
     同时删除该记录关联的图片附件。
     """
-    import os as _os
     from utils import send_json, read_body
     try:
         rid = _h._extract_id(path_clean)
@@ -475,5 +473,3 @@ def handle_post_duty_handle(handler, path_clean: str):
         log(traceback.format_exc())
         send_json(handler, 500, {"error": f"服务器内部错误: {e}"})
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('duty')

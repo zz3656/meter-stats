@@ -237,5 +237,3 @@ def _save_readings(data):
     with lock:
         save_json(get_data_paths()["readings"], data)
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('readings')

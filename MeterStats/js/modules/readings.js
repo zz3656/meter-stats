@@ -62,15 +62,6 @@ function refreshWaterReadings() {
     });
 }
 
-/** 删除水电记录 */
-function deleteWaterReadingRemote(date) {
-    Api.utilities.delete(date).then(function() {
-        refreshWaterReadings();
-    }).catch(function(err) {
-        showAlert("删除失败: " + err);
-    });
-}
-
 /** 保存/更新水电记录 */
 function saveWaterReadingRemote(row) {
     return Api.utilities.create(row).then(function() {

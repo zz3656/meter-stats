@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from urllib.parse import parse_qs, urlparse
 
 from utils import send_json, read_body
 from storage import log, load_json, save_json, get_lock
@@ -269,7 +268,7 @@ def _check_delete(handler):
     """
     from modules.system.permissions_handler import _get_token
     from modules.system.auth_handler import get_session, _touch_session
-    from modules.system.settings_handler import ROLE_ADMIN, ROLE_SUPERVISOR
+    from constants import ROLE_ADMIN, ROLE_SUPERVISOR
     from utils import send_json
 
     token = _get_token(handler)
@@ -284,5 +283,3 @@ def _check_delete(handler):
         send_json(handler, 403, {"error": "权限不足: 需要管理员或主管权限"})
         return
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('items')

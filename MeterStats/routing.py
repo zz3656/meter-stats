@@ -487,7 +487,10 @@ def _route(method: str, handler, path: str) -> bool:
             return fn(*args, **kwargs)
         except Exception as e:
             from storage import log
-            log(f"[ERROR] {label} {handler.path}: {e}")
+            from utils.api import mask_secret_query
+            # ⚠️ 必须脱敏:path 里常带 ?token=,原样写日志等于把会话 token 抄进日志
+            #    (Docker 环境里 `docker logs` 谁都能看,issue 里也常整段贴日志)。
+            log(f"[ERROR] {label} {mask_secret_query(handler.path)}: {e}")
             log(traceback.format_exc())
             send_json(handler, 500, {"error": "服务器内部错误"})
 

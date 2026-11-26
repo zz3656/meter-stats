@@ -248,28 +248,9 @@ window.uploadImages = function uploadImages(files, maxCount, scope, skipCompress
 /** 待提交的图片（按弹窗区分），打开弹窗时清空 */
 window.__pendingImages = { lend: [], return: [], purchase: [] };
 
-/** 点「📷 图片」按钮 */
-window.pickItemImage = function pickItemImage(kind) {
-  var el = document.getElementById(kind + '-image-input');
-  if (el) el.click();
-};
+;
 
-/** 选中文件后：上传 + 刷新预览 */
-window.onItemImagePicked = function onItemImagePicked(input, kind) {
-  if (!input.files || !input.files.length) return;
-  var bucket = window.__pendingImages[kind] || (window.__pendingImages[kind] = []);
-  var room = 3 - bucket.length;
-  var files = Array.prototype.slice.call(input.files).slice(0, Math.max(0, room));
-  input.value = '';
-  if (!files.length) { showAlert('最多 3 张图片', 'warn'); return; }
-  uploadImages(files, 3, kind).then(function (names) {
-    window.__pendingImages[kind] = bucket.concat(names);
-    renderItemImagePreview(kind);
-  }).catch(function (e) {
-    showAlert('图片上传失败: ' + (e && e.message ? e.message : e), 'error');
-    renderItemImagePreview(kind);
-  });
-};
+;
 
 /** 重绘某个弹窗的图片预览（带删除按钮） */
 window.renderItemImagePreview = function renderItemImagePreview(kind) {
@@ -295,11 +276,7 @@ window.removeItemImage = function removeItemImage(kind, filename) {
   renderItemImagePreview(kind);
 };
 
-/** 打开弹窗前清空该弹窗的待提交图片 */
-window.resetItemImages = function resetItemImages(kind) {
-  window.__pendingImages[kind] = [];
-  renderItemImagePreview(kind);
-};
+;
 
 
 /* ============================================================

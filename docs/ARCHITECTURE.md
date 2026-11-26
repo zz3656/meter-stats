@@ -230,7 +230,6 @@
 | `modules/render_charts.js` | 344 | 通用图表渲染 |
 | `modules/render_pie_charts.js` | 155 | 占比图 |
 | `modules/render_weekly.js` | 245 | 每周汇报图表 |
-| `modules/render_weekly_trend.js` | 194 | 每周趋势 |
 | `modules/render_weekly_utils.js` | 134 | 每周计算工具 |
 
 ### shared/(通用 UI)
@@ -503,7 +502,8 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 ### 添加新的报表页面
 
-参考 `render_weekly_trend.js` 加到每周汇报的实际经验:
+参考 `render_weekly.js` + `render_weekly_utils.js` 加每周汇报的实际经验
+(注:曾有一个 `render_weekly_trend.js`,入口函数无人调用,2026-11-27 已整份删除):
 
 1. **后端**(如需新计算):
    - 在 `report.py` 加计算函数(参考 `calculate_monthly_report` 的结构)
@@ -609,4 +609,4 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 - `AGENTS.md` — 给 AI 协作代理的项目约定与坑位清单
 - `docs/superpowers/specs/2026-11-25-multi-store-design.md` — 多门店改造的设计规格
 - `docs/ui-optimization-plan.md` — UI 层待办(未完成项)
-- `tests/` — **801 项**单元测试,覆盖算法/权限/备份/前端静态护栏
+- `tests/` — **806 项**单元测试,覆盖算法/权限/备份/前端静态护栏

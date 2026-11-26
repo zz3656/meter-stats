@@ -12,7 +12,7 @@ import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from utils import send_json, send_csv, opt_float, read_body
+from utils import send_json, send_csv
 from modules.stores.meters import row_values
 from storage import log, get_lock, load_json, save_json
 from modules._base import get_data_paths

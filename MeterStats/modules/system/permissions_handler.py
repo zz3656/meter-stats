@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 from modules.system.admin_handler import get_session, _touch_session
-from modules.system.settings_handler import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE
+from constants import ROLE_ADMIN, ROLE_SUPERVISOR, ROLE_EMPLOYEE
 
 # 角色等级
 ROLE_LEVEL = {ROLE_ADMIN: 3, ROLE_SUPERVISOR: 2, ROLE_EMPLOYEE: 1}
@@ -88,16 +88,3 @@ def _get_token(handler) -> str:
     return ""
 
 
-def check_write_permission(fn):
-    """装饰器: 仅允许读/写操作（员工及以上）。"""
-    return check_permission("write")(fn)
-
-
-def check_delete_permission(fn):
-    """装饰器: 仅允许删除操作（主管及以上）。"""
-    return check_permission("delete")(fn)
-
-
-def check_admin_permission(fn):
-    """装饰器: 仅允许管理操作（管理员）。"""
-    return check_permission("admin")(fn)

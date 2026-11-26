@@ -726,21 +726,6 @@ def get_all_model_names() -> List[str]:
     return list(DATA_FILES.keys())
 
 
-def get_file_count(data_dir: Path) -> Dict[str, int]:
-    """获取各数据文件当前记录数。"""
-    counts = {}
-    for name in get_all_model_names():
-        filepath = data_dir / DATA_FILES[name]
-        if filepath.exists():
-            try:
-                counts[name] = len(load_json(filepath))
-            except Exception:
-                counts[name] = 0
-        else:
-            counts[name] = 0
-    return counts
-
-
 # ============ 数据迁移 ============
 
 # 旧版水电字段（存储在 readings.json 中）

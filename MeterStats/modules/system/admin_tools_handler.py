@@ -8,8 +8,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from utils import send_json, read_body
-from storage import log, load_json, DATA_FILES
+from utils import send_json
+from storage import log, load_json
 from modules._base import get_data_paths as _get_data_paths
 from constants import ROLE_ADMIN, ROLE_SUPERVISOR
 

@@ -207,5 +207,3 @@ def handle_delete_purchases(handler, path_clean: str):
     log(f"  -- 删除申购 {pid}")
     send_json(handler, 200, {"ok": True})
 
-from modules._storage import ModuleStorage
-_storage = ModuleStorage('purchases')
