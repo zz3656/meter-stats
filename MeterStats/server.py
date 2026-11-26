@@ -47,6 +47,7 @@ import sys
 import threading
 from http.server import ThreadingHTTPServer
 from pathlib import Path
+from typing import Optional
 
 # 确保当前目录（运行时文件所在目录）优先于系统模块被导入。
 # macOS 上 /usr/lib/python3/constants.py 会覆盖项目 constants.py，
@@ -124,6 +125,47 @@ def _remove_pid():
             pid_file.unlink()
     except Exception:
         pass
+
+
+# 这些绑定地址只有本机能访问。空串 / 0.0.0.0 / :: 都表示"所有网卡",按对外处理。
+_LOOPBACK_HOSTS = frozenset({
+    "127.0.0.1", "localhost", "::1", "[::1]", "0:0:0:0:0:0:0:1",
+})
+
+
+def _is_loopback_host(host: str) -> bool:
+    """绑定地址是否"只有本机能访问"。认不出的主机名按**可能对外**处理。"""
+    h = str(host or "").strip().lower()
+    if not h:
+        return False                      # 空串 = 绑定所有网卡
+    if h in _LOOPBACK_HOSTS:
+        return True
+    try:
+        import ipaddress
+        return ipaddress.ip_address(h.strip("[]")).is_loopback
+    except ValueError:
+        return False
+
+
+def _public_bind_notice(host: str, port: int) -> Optional[str]:
+    """绑定到非回环地址时返回一条启动警示;回环地址返回 None。
+
+    为什么需要:这套服务默认 `METER_BIND=0.0.0.0`(多机共用的部署必须如此),
+    但它**不走 HTTPS**,登录限速也只是内存计数、按用户名计。
+    最危险的场景是有人把端口映射到公网或在公共网络上开起来 —— 而日志里
+    原来没有任何提示。这条警示就是让"对外暴露"这件事在启动日志里看得见。
+    """
+    if _is_loopback_host(host):
+        return None
+    return (
+        "[WARN] 服务监听 {host}:{port} —— 该地址对**同网段的所有机器**可见,不只有本机。\n"
+        "       现状:除 /api/health、/api/version、/api/auth/login 外都需要登录;\n"
+        "       但本服务**不走 HTTPS**,局域网内的令牌可被嗅探;登录限速是内存计数、按用户名计。\n"
+        "       请确认: 1) 只在可信内网使用,或在前置反向代理上做 TLS;\n"
+        "                2) admin 口令不是默认值(admin123 必须改);\n"
+        "                3) 没有把该端口映射到公网。\n"
+        "       只想本机访问 → METER_BIND=127.0.0.1"
+    ).format(host=host or "0.0.0.0", port=port)
 
 
 def main():
@@ -221,6 +263,11 @@ def main():
 
     bind_host = os.environ.get("METER_BIND", "0.0.0.0")
     server = ThreadingHTTPServer((bind_host, PORT), app_handler.Handler)
+
+    # 绑定成功之后再提示 —— 端口占用会先抛 OSError,不该留下一条误导性的 WARN
+    _notice = _public_bind_notice(bind_host, PORT)
+    if _notice:
+        log(_notice)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
