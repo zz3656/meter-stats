@@ -188,9 +188,10 @@ docker compose pull && docker compose up -d
 │   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
 ├── tests/                       # 单元测试(788 项)
-├── docs/                        # 架构文档
-│   ├── ARCHITECTURE.md
-│   └── architecture-api-contract.md
+├── docs/                        # 架构与设计文档
+│   ├── ARCHITECTURE.md          # 模块/算法/安全模型/接口权限速查
+│   ├── ui-optimization-plan.md  # UI 待办清单
+│   └── superpowers/specs/       # 多门店改造的设计规格(历史设计决策)
 ├── scripts/                     # 辅助脚本(图标生成等)
 ├── Assets/                      # macOS 应用图标资源
 ├── CHANGELOG.md                 # 更新日志

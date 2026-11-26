@@ -581,9 +581,32 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 
 ---
 
+## 接口与权限:权威来源在哪
+
+> 这里原来有一份 `docs/architecture-api-contract.md`(56 个接口的表格),已经删除 ——
+> 它是手抄的,删之前实测:代码里有 **94** 个路径,文档漏掉了整个门店 API
+> (`/api/stores`、`/api/stores/current`、`/api/stores/overview`、`/api/admin/nas-config`)。
+> 手抄接口表永远追不上代码,留着比没有更危险(看的人以为那是权威)。
+
+**权威来源(按需要查):**
+
+| 想知道什么 | 看哪里 |
+|---|---|
+| 某个 URL 对应哪个 handler | `MeterStats/routing.py` 的 `_GET` / `_POST` / `_PUT` / `_DELETE` 四张表 |
+| 这个接口要求什么角色 | `routing.MIN_ROLE_PREFIXES`(**唯一**授权矩阵,按路径段前缀匹配;未列出的 = 任何登录用户) |
+| 哪些接口允许匿名 | `routing.PUBLIC_API_PATHS`(只有 `/api/health`、`/api/version`、`/api/auth/login`) |
+| 请求/响应长什么样 | 对应 handler 的 docstring(每个 handler 都写了 body 形状与返回示例) |
+| 权限边界到底对不对 | `tests/test_auth_enforcement.py`(员工/主管/管理员三档实测) |
+
+新增接口时:路由表加一行即可,**鉴权默认生效**(`_auth_gate` 挂在唯一入口上),
+只有需要更高角色时才往 `MIN_ROLE_PREFIXES` 里加一条。
+
 ## 📚 相关文档
 
 - `README.md` — 用户视角(功能/部署/快速开始)
-- `README.Docker.md` — Docker 部署细节
-- `OPTIMIZATION_REPORT.md` — 优化历程(已修复的 P0/P1/P2 清单)
-- `tests/` — 88 个单元测试,覆盖核心算法与边界
+- `README.Docker.md` — Docker 部署细节(**CI 自动生成**,别手改)
+- `CHANGELOG.md` — 每个版本改了什么、为什么
+- `AGENTS.md` — 给 AI 协作代理的项目约定与坑位清单
+- `docs/superpowers/specs/2026-11-25-multi-store-design.md` — 多门店改造的设计规格
+- `docs/ui-optimization-plan.md` — UI 层待办(未完成项)
+- `tests/` — **792 项**单元测试,覆盖算法/权限/备份/前端静态护栏
