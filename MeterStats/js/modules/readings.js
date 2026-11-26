@@ -107,7 +107,7 @@ function renderReadingTable(readings) {
                 '<td style="color:var(--text-muted);font-size:12px;">' + (r.note ? escapeHtml(r.note) : '—') + tagsHtml + '</td>' +
                 '<td>' +
                     '<button class="edit-btn" data-action="edit-reading" data-date="' + r.date + '">编辑</button> ' +
-                    '<button class="delete-btn" data-action="delete-reading" data-date="' + r.date + '" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>' +
+                    '<button class="delete-btn" data-action="delete-reading" data-date="' + r.date + '">删除</button>' +
                 '</td>' +
             '</tr>'
         );
@@ -171,7 +171,7 @@ function renderWaterTable() {
                 '<td style="color:var(--text-muted);font-size:12px;">' + (w.note ? escapeHtml(w.note) : '—') + '</td>' +
                 '<td>' +
                     '<button class="edit-btn" data-action="edit-water" data-date="' + w.date + '">编辑</button> ' +
-                    '<button class="delete-btn" data-action="delete-water" data-date="' + w.date + '" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;">删除</button>' +
+                    '<button class="delete-btn" data-action="delete-water" data-date="' + w.date + '">删除</button>' +
                 '</td>' +
             '</tr>'
         );
@@ -434,7 +434,7 @@ function renderChargeTable(charges) {
             actions += '<button class="edit-btn" data-action="confirm-charge" data-id="' + c.id + '" style="color:var(--success);">✓ 确认到账</button> ';
         }
         actions += '<button class="edit-btn" data-action="edit-charge" data-id="' + c.id + '">编辑</button> ' +
-                  '<button class="delete-btn" data-action="delete-charge" data-id="' + c.id + '" style="color:var(--danger);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;font-size:12px;font-family:inherit;">删除</button>';
+                  '<button class="delete-btn" data-action="delete-charge" data-id="' + c.id + '">删除</button>';
         return (
             '<tr data-charge-id="' + c.id + '"' + (pending ? ' style="opacity:.75;"' : '') + '>' +
                 '<td>' + c.date + ' ' + statusCell + '</td>' +

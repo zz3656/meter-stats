@@ -19,15 +19,15 @@
     --bg-subtle: #f5f5f7;       /* 微妙表面(表单内嵌背景)*/
     --bg-hover: rgba(0,0,0,0.04);
     --card: rgba(255,255,255,0.85);
-    --border: rgba(0,0,0,0.10);
-    --border-subtle: rgba(0,0,0,0.06);
-    --text: #1a1c20;            /* 主文字(近黑)*/
-    --text-secondary: #4a4f58;  /* 次要文字(深灰)*/
-    --text-muted: #7a818c;      /* 辅助文字(中灰)*/
-    --text-faint: #a6adb8;      /* 最弱文字(浅灰)*/
-    --primary: #6366f1;         /* 紫罗兰强调色(浅色下加深一点)*/
-    --primary-bg: #6366f1;      /* CTA 背景色*/
-    --primary-hover: #818cf8;
+    --border: rgba(0,0,0,0.09);
+    --border-subtle: rgba(0,0,0,0.045);
+    --text: #23262d;            /* 主文字(近黑·14.1:1;纯黑太硬)*/
+    --text-secondary: #444b56;  /* 次要文字(深灰·8.2:1)*/
+    --text-muted: #5f6673;      /* 辅助文字(中灰·5.4:1,过 AA)*/
+    --text-faint: #67707c;      /* 最弱文字(浅灰·5.0:1;旧 #a6adb8 只有 3.9:1)*/
+    --primary: #5b5fd6;         /* 靛蓝强调色(降一档饱和度,长看不刺眼)*/
+    --primary-bg: #5b5fd6;      /* CTA 背景色(白字 5.18:1)*/
+    --primary-hover: #7378e0;
     --danger: #dc2626;          /* 警告红(浅色背景需更深)*/
     --warn: #d97706;
     --success: #059669;
@@ -804,7 +804,7 @@
     font-size: 13px;
   }
   .history-table th, .history-table td {
-    padding: 8px 10px;
+    padding: 9px 10px;
     text-align: right;
     border-bottom: 1px solid var(--border-subtle);
     font-variant-numeric: tabular-nums;
@@ -814,11 +814,11 @@
   }
   .history-table th {
     background: transparent;
-    font-weight: 510;
-    color: var(--text-muted);
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    font-weight: 520;
+    color: var(--text-secondary);   /* 表头是可读文字,不该用最弱的 muted */
+    font-size: 12px;
+    text-transform: none;           /* 中文大写变换无意义,只会显小 */
+    letter-spacing: 0.2px;
     border-bottom: 1px solid var(--border);
   }
   .history-table tr:hover { background: var(--bg-hover); }
@@ -1591,20 +1591,20 @@
 
 /* ===== 深色主题 ===== */
 [data-theme="dark"] {
-    --bg: #0d0f14;               /* 深黑背景 */
-    --bg-elevated: #1a1d24;       /* 卡片背景(深灰) */
-    --bg-surface: #252830;        /* 高亮表面(中灰) */
-    --bg-subtle: #2a2d35;         /* 微妙表面(表单内嵌背景) */
+    --bg: #14161c;               /* 底色(提一档,不再纯黑 —— 暗光下纯黑边缘更刺眼)*/
+    --bg-elevated: #1b1e26;       /* 卡片背景(深灰) */
+    --bg-surface: #23262f;        /* 高亮表面(中灰) */
+    --bg-subtle: #262932;         /* 微妙表面(表单内嵌背景) */
     --bg-hover: rgba(255,255,255,0.04);
     --card: rgba(26,29,36,0.95);
-    --border: rgba(255,255,255,0.10);
-    --border-subtle: rgba(255,255,255,0.06);
-    --text: #e8eaf0;              /* 主文字(近白) */
-    --text-secondary: #a0a5b0;    /* 次要文字(浅灰) */
-    --text-muted: #6b7280;        /* 辅助文字(中灰) */
-    --text-faint: #4a5058;        /* 最弱文字(暗灰) */
-    --primary: #818cf8;           /* 紫罗兰(深色下稍亮) */
-    --primary-bg: #6366f1;
+    --border: rgba(255,255,255,0.09);
+    --border-subtle: rgba(255,255,255,0.045);
+    --text: #d5d9e2;              /* 主文字(柔白·12.8:1;旧 #e8eaf0 是 15.9:1,过曝)*/
+    --text-secondary: #a4aab6;    /* 次要文字(7.8:1) */
+    --text-muted: #8b93a3;        /* 辅助文字(5.9:1;旧 #6b7280 只有 3.96:1) */
+    --text-faint: #868ea0;        /* 最弱文字(5.1:1;旧 #4a5058 只有 2.35:1) */
+    --primary: #8f97f2;           /* 靛蓝(降饱和,长看不发紫光) */
+    --primary-bg: #5b5fd6;
     --primary-hover: #a5b4fc;
     --danger: #f87171;
     --warn: #fbbf24;
@@ -3121,3 +3121,95 @@ a:hover {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+ * 安静化(2026-11-27):降低"长时间观看"的视觉负荷
+ *
+ * 依据 PRODUCT.md 的设计原则:「长时间可读优先于第一眼惊艳」。
+ * 这里只做三件事,不动布局与信息架构:
+ *   1. 行内操作(编辑/删除)从"每行两个彩色按钮"降为中性文字,hover 才上色
+ *      —— 一张 12 行的表原本有 24 个彩色元素在抢注意力
+ *   2. 尊重 prefers-reduced-motion(此前完全没有)
+ *   3. 移动端把可点区域抬到 ≥40px(触屏误触是"烦躁"的重要来源)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* 行内操作:中性 → hover 才有语义色 */
+.history-table .edit-btn,
+.history-table .delete-btn,
+.history-table .del-btn {
+  min-height: 30px;
+  padding: 4px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  font: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.history-table .edit-btn:hover,
+.history-table .delete-btn:hover,
+.history-table .del-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border);
+  color: var(--text);
+}
+.history-table .delete-btn:hover,
+.history-table .del-btn:hover {
+  color: var(--danger);
+  border-color: var(--danger-border);
+  background: var(--danger-soft);
+}
+.history-table .edit-btn:active,
+.history-table .delete-btn:active,
+.history-table .del-btn:active { transform: translateY(0.5px); }
+
+/* 触屏:可点区域放大(桌面保持紧凑) */
+@media (max-width: 768px) {
+  .history-table .edit-btn,
+  .history-table .delete-btn,
+  .history-table .del-btn { min-height: 40px; padding: 8px 12px; }
+}
+
+/* 动效:只保留状态反馈,强度降到"几乎察觉不到位置变化" */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── 安静化 第二批 ─────────────────────────────────────────────────────── */
+
+/* 「大字」是辅助开关,不是主操作:实心紫让它成了全屏最响的元素。
+   改成幽灵按钮,把"实心主色"这一个强信号独家留给真正的主动作(抄表/保存)。 */
+.header-backup-btn.accessibility-btn {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+  font-weight: 500;
+}
+.header-backup-btn.accessibility-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+  border-color: var(--border);
+}
+.header-backup-btn.accessibility-btn.active {
+  background: var(--tint-3);
+  color: var(--primary);
+  border-color: var(--tint-border);
+}
+.header-backup-btn.accessibility-btn.active:hover {
+  background: var(--tint-4);
+  color: var(--primary);
+}
+
+/* 侧栏 emoji:保留辨识,但降低饱和度 —— 6 个高饱和 emoji 并排时"颜色太杂"的主要来源 */
+.item-icon { filter: saturate(0.82); }
+.item-icon { font-size: 15px; }
+
+/* 4 张表的色条:3px 饱和 → 2px,色相不变(仍能一眼区分哪块表) */
+.stat-card { border-left-width: 2px; }
