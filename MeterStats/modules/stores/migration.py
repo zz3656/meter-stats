@@ -122,9 +122,66 @@ def migrate_to_stores(data_dir: Path) -> dict[str, Any]:
             return result
         result["created"] = True
 
+    # 布局就绪 = 各店 store.json 里已有自己的表集合/电价,顶层遗留的那份可以归档了
+    # (幂等;失败不影响启动 —— 它只是"清理误导",不是功能路径)
+    with contextlib.suppress(Exception):
+        archive_legacy_global_meter_settings()
+
     log(f"[MIGRATE] 多门店布局就绪: stores/{DEFAULT_STORE_ID}/ "
         f"(迁移={result['migrated']}, 新建={result['created']}, 门店数={result['stores']})")
     return result
+
+
+# settings.json 顶层遗留的「全局电表配置」—— 分店改造后已不再是权威来源
+LEGACY_SETTINGS_KEYS = ("meter", "config")
+
+
+def archive_legacy_global_meter_settings() -> bool:
+    """把 settings.json 顶层的 meter / config 归档到 `_legacy_meter_config`。
+
+    为什么不再留在顶层:分店改造后「表集合 + 电价/水价/水电倍率」是**每店一份**
+    (`stores/<id>/store.json`)。顶层这两项只在迁移时当过种子,之后还读它们的
+    只剩迁移代码本身。留着会让人以为那是"全局电表配置" —— 手改它毫无效果,
+    更容易在改错之后以为改到了。
+
+    为什么归档而不是删除:它们是迁移前的唯一来源。删掉后若有人要回滚到旧版本
+    (旧版本按全局 config 算钱),自定义电价就找不回来了。挪到 `_legacy_` 前缀下
+    既离开"看起来生效"的位置,又保留可恢复性。
+
+    幂等:顶层已经没有这两个键就什么都不做。返回是否真的归档了。
+    调用时机:必须等 `stores/<默认店>/store.json` 写完 —— 否则迁移的种子还没落地。
+    """
+    from modules.system import settings_handler
+
+    try:
+        settings = settings_handler.get_settings()
+    except Exception as e:
+        log(f"[MIGRATE] 归档遗留电表配置失败(读 settings): {e}")
+        return False
+    if not isinstance(settings, dict):
+        return False
+
+    present = [k for k in LEGACY_SETTINGS_KEYS if k in settings]
+    if not present:
+        return False
+
+    archived = settings.get("_legacy_meter_config")
+    if not isinstance(archived, dict):
+        archived = {}
+    for key in present:
+        archived[key] = settings.pop(key)
+    archived["archived_at"] = datetime.now().replace(microsecond=0).isoformat()
+    settings["_legacy_meter_config"] = archived
+
+    try:
+        settings_handler.save_settings(settings)
+    except Exception as e:
+        log(f"[MIGRATE] 归档遗留电表配置失败(写 settings): {e}")
+        return False
+
+    log(f"[MIGRATE] 已把顶层 {', '.join(present)} 归档到 _legacy_meter_config"
+        " —— 每店的表集合/电价现以 stores/<id>/store.json 为准")
+    return True
 
 
 def migrate_settings_stores(data_dir: Path) -> dict[str, Any]:

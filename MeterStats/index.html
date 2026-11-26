@@ -787,7 +787,7 @@
   <section id="section-settings-users" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>👥 用户管理</h2>
+        <h2>👥 用户管理 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></h2>
       </div>
       <div id="users-stat-grid" class="trend-stat-grid"></div>
       <div class="settings-toolbar">
@@ -832,7 +832,7 @@
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">📝 电表设置
+        <div class="settings-block-title">📝 电表设置 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span>
           <span id="meter-settings-store" class="settings-unit" style="font-weight:400;margin-left:8px;"></span>
         </div>
         <div class="settings-block-desc">本店有几块电表、各自的名称 / 倍率 / 图标。改动会同步到所有报表、图例、抄表与充值表单</div>
@@ -844,7 +844,7 @@
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">💰 计费单价</div>
+        <div class="settings-block-title">💰 计费单价 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span></div>
         <div class="settings-block-desc">用于把用电量、用水量换算成金额</div>
         <div class="settings-inline">
           <label class="settings-field">电价
@@ -859,7 +859,7 @@
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">🔢 水电表倍率</div>
+        <div class="settings-block-title">🔢 水电表倍率 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span></div>
         <div class="settings-block-desc">抄见差 × 倍率 = 实际用量；厨房恒为「总表 − 分表」，无需设置</div>
         <div class="settings-inline">
           <label class="settings-field">总表倍率
@@ -901,7 +901,7 @@
       <div class="settings-grid-2">
       <!-- 1) 备份与恢复 -->
       <div class="settings-panel">
-        <div class="panel-title"><span>💾 备份与恢复</span></div>
+        <div class="panel-title"><span>💾 备份与恢复 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div id="backup-dir-display" class="panel-desc data-line">加载中...</div>
         <div id="backup-dir-input-wrap" class="data-input-wrap">
           <input type="text" id="backup-dir-input" placeholder="完整路径；留空 = 数据目录下的 backup/" class="field-control">
@@ -916,7 +916,7 @@
         <div class="auto-backup-row">
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
           <div class="auto-backup-label">
-            <div class="panel-title">自动备份</div>
+            <div class="panel-title">自动备份 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></div>
             <div class="panel-desc">每次启动时自动备份一次（当天只备份一次），超出保留个数自动清理旧的</div>
           </div>
           <div class="auto-backup-retention">
@@ -929,11 +929,15 @@
 
       <!-- 2) 图片目录 -->
       <div class="settings-panel">
-        <div class="panel-title"><span>📷 图片目录</span></div>
+        <div class="panel-title"><span>📷 图片目录 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div id="image-dir-display" class="panel-desc data-line">加载中...</div>
         <div id="image-dir-stats" class="panel-desc data-line data-muted"></div>
         <div id="image-dir-input-wrap" class="data-input-wrap">
-          <input type="text" id="image-dir-input" placeholder="必须是数据目录内的子目录，例如 .../images" class="field-control">
+          <input type="text" id="image-dir-input" placeholder="留空 = 每店各自的 stores/&lt;店&gt;/images/" class="field-control">
+        </div>
+        <div class="panel-desc data-hint" style="color:var(--warn);">
+          ⚠️ 这一项是**全局覆盖**:填了一个可写路径,所有门店的值班照片会混进同一个目录 ——
+          与「照片按店隔离」正好相反。留空(推荐)= 每店各自的 stores/&lt;店&gt;/images/。
         </div>
         <div class="data-actions">
           <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()" id="pick-image-dir-btn">📂 选择目录</button>
@@ -943,7 +947,7 @@
 
       <!-- 3) 从 NAS 同步 -->
       <div class="settings-panel">
-        <div class="panel-title"><span>🔄 从 NAS 同步</span></div>
+        <div class="panel-title"><span>🔄 从 NAS 同步 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div class="data-actions">
           <input type="text" id="nas-sync-url-input" placeholder="外网 lin.icafe.top　内网 172.16.254.250:8765" class="field-control data-grow">
           <button class="btn btn-primary btn-xs" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
@@ -964,7 +968,7 @@
       <!-- 4) 备份列表 -->
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
-          <span>📁 备份列表</span>
+          <span>📁 备份列表 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span>
           <button class="btn btn-secondary btn-xs" onclick="loadBackupList()">🔄 刷新</button>
         </div>
         <div id="backup-list" class="panel-desc data-hint">加载中...</div>

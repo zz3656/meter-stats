@@ -568,6 +568,11 @@
   .badge-status.danger  { background: var(--danger-soft);    color: var(--danger); }
   .badge-status.info    { background: var(--tint-3);         color: var(--primary); }
 
+  /* 设置项作用范围徽标:🌐 全局 vs 🏪 本店。
+     分店改造后「表集合 / 电价 / 水电倍率」是按店的,「用户 / 门店注册表 /
+     备份 / NAS」是全局的。界面上不标出来,用户改错地方也看不出来。 */
+  .scope-badge { margin-left: 8px; font-weight: 500; }
+
   /* 表单 */
   .form-row {
     display: flex;
