@@ -133,9 +133,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.7
+## 📦 工程部管理系统 v0.5.8
 
-提交 `dc07713`
+提交 `09d978a`
 
 **升级 Docker 容器**:
 ```bash
@@ -144,33 +144,55 @@ docker compose up -d
 ```
 
 
-### 新增
+### 安全
 
-- **文档一致性护栏 `tests/test_docs_consistency.py`(9 项)**:把「文档必须与现实相符」变成断言,
-  不再靠人记得。守七件事:
-  - 每个 `modules/*/` 目录、每个顶层 `*.py` 都必须出现在 `AGENTS.md` / `README.md` 的结构树里
-  - 文档里写的用例数 / 测试文件数必须等于实际值(本次就靠它把 792→801、43→44 同步过来)
-  - `VERSION` 必须等于 CHANGELOG 顶部章节号
-  - **已发布能力必须在 README 功能表里有入口**(多门店/抄表/充值/报表/备份)
-  - 升级说明必须写清「自动迁移 / 新数据目录 / 回滚」
-  - `ServerManager.swift` 必须枚举 `*.py`,不许退回硬编码清单(否则新增模块漏包 → 启动即崩)
-  - 单个文档不超过 2000 行(曾经 4 份实施计划占全部文档 70%)
-- **`CONTRIBUTING.md` 新增「发布清单」(12 项)**:每一项都注明**用什么验证**——能写成断言的
-  都指向具体测试,剩下三条需要人看(口径/权限变更要在 CHANGELOG 写清根因、本地构建启动一次、推送后抽查产物)
+- **错误日志会把 `?token=` 明文写进日志**:前端大量用 `?token=` 拼图片/下载链接,
+  而错误分支里的 `log(f"… {handler.path}")` 会把完整查询串落盘 ——
+  Docker 环境里 `docker logs` 谁都能看,报 issue 时也常整段贴日志。
+  实测复现:一次 500 错误(`X-API-Migration` 响应头写中文触发)把
+  `GET /api/admin/backup-download?zip_name=…&token=0203b1…` 整行写进了日志。
+  现在 `utils.api.mask_secret_query()` 把 `token/password/nas_pass/pass` 的值抹成 `***`,
+  三处日志点(`routing` 的 ERROR、`app_handler` 的 404 与 5xx)全部过它。
+  新增 `tests/test_log_redaction.py`:4 项函数级用例 + 1 项源码护栏
+  (再出现"把 path 直接写日志"会红)
 
-### 背景
+### 清理(僵尸代码)
 
-用户反馈「项目介绍和更新日志里看不到分店功能」。核实结果:CHANGELOG 0.5.0 写得很全,
-但**README 一个字都没提**,结构树还缺 `modules/stores/`。功能做完了、门面没跟上,
-而且没有任何机制会发现 —— 这版就是补上这个机制。
+- **Python**:删 7 个零引用函数 —— `permissions_handler` 里三个随接口鉴权收口而失效的装饰器
+  (`check_write/delete/admin_permission`)、`settings_handler` 的 `delete_user_by_username` /
+  `migrate_users_to_pbkdf2`、`storage.get_file_count`、`utils.api._write_cors_headers`
+- **删掉第二套存储抽象 `modules/_storage.py`**(65 行):6 个 handler 在文件尾部
+  `ModuleStorage('xxx')` 实例化了它却**从未调用**;它的 `invalidate()` 还把模型名当缓存键传
+  (真实缓存键是绝对路径)→ 谁照着它写新 handler 就会"失效假生效"
+- **18 处未使用 import**;顺带解开一处错误耦合:`permissions_handler` / `items` 原先是
+  `from modules.system.settings_handler import ROLE_*`(settings_handler 当时只是个中转站),
+  改为直接从 `constants` 取
+- **JS 删 22 个零引用函数 + 整个 `render_weekly_trend.js`(194 行)**:该模块的入口
+  `renderWeeklyMeterTrend` 从来没有调用点(每周汇报走的是 `render_weekly.js`),
+  按可达性删到第 3 轮才收敛;文件删空后整份移除,并同步 `index.html` / `test_dynamic_render.py` /
+  `ARCHITECTURE.md`
+- **CSS 未动,原因写在这里**:扫描出 32 个零引用 class,但它们**全部嵌在复合选择器里**
+  (如 `.card h2 .badge`、`.history-table tr.edit-row .cell-input`)。试过更激进的判据
+  「选择器里只要有一个死类就整条删」——那会连带删掉 `.ok` / `.up` 这类活状态的**唯一**样式
+  (`color:…`),验证脚本当场拦下。判断依据:删除必须能证明"没有任何元素能命中",
+  而这些需要逐条人工判断,收益(~30 条规则)不抵风险
+
+### 记录(本次审计认为"不该现在动"的)
+
+- 并发读-改-写丢更新(`_base.handle_delete` 用新 list 整体覆盖):需要把读改写整体放进锁内,
+  属于存储层改造,单用户场景下概率极低
+- JSON 文件缓存 20 条 < 3 店工作集(每店 7 个文件):开到第 3 家店之前不受影响
+- `/api/admin/dir-listing` 参数错配(前端 `?dir=` / 后端读 `?path=`)+ 前端零调用点:
+  整条功能是死的,建议下次一并删掉(需要同步 `test_supervisor_scope.py` 的权限断言)
 
 ### ⬆️ 升级
 
+⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.6...v0.5.7
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.7...v0.5.8
 
