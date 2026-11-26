@@ -73,3 +73,24 @@ DOCKER-HUB-SECRETS-GUIDE.md
 
 # Hermes agent workspace (local only)
 .hermes/
+
+# 工具状态与缓存(这些目录会自带 `.gitignore *`,但不能依赖它们 ——
+# 工具版本升级/换缓存位置时就漏了,而 `git add -A` 会把它们全加进来)
+*.mypy_cache/
+*.ruff_cache/
+.pytest_cache/
+.venv/
+venv/
+.tox/
+
+# AI / 子代理工作目录(SDD 工作流会产生大量 task brief/report)
+.superpowers/
+
+# 构建与临时产物(补充)
+*.orig
+*.rej
+*.swp
+*.swo
+*.tmp
+*.dSYM/
+DerivedData/
