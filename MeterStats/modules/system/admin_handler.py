@@ -50,7 +50,6 @@ from modules.backup.admin_handler import (
 
 # Admin tools
 from modules.system.admin_tools_handler import (
-    handle_get_dir_listing,
     handle_get_audit_log,
     handle_get_migrate_status,
     handle_post_migrate_water,
@@ -93,7 +92,6 @@ __all__ = [
     "handle_post_sync_from_nas",
     "handle_get_proxy_nas_data",
     # Admin tools
-    "handle_get_dir_listing", "handle_get_audit_log",
     "handle_get_migrate_status", "handle_post_migrate_water",
     # Auth helpers
     "get_session", "create_session", "destroy_session", "get_active_session_count",

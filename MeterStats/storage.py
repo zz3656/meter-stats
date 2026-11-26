@@ -574,7 +574,11 @@ def _try_restore_from_backup(path: Path):
 
 _json_cache: "OrderedDict[str, tuple]" = OrderedDict()
 _json_cache_lock = RLock()
-_JSON_CACHE_SIZE = 20  # 最多缓存 20 个文件
+# 缓存容量。**每个门店固定占 7 个文件**(6 个数据模型 + store.json),
+# 多门店布局下 20 条只够 2 家店多一点 —— 开到第 3 家店就开始永久抖动:
+# 每次请求都可能把别店的文件挤出去、导致全量重解析(还叠加 /api/health 每 30s 轮询)。
+# 64 = 9 家店的余量,内存代价可忽略(缓存的是解析后的 dict,量级几百 KB)。
+_JSON_CACHE_SIZE = 64
 
 
 def _cache_get(path_str: str):
@@ -858,15 +862,34 @@ def migrate_readings_to_readings_water(data_dir: Path) -> int:
 
 
 def run_startup_migration(data_dir: Path):
-    """启动时运行所有数据迁移。
+    """启动时运行所有数据迁移(在 init_data_files() 之后调用)。
 
-    在 init_data_files() 之后调用，此时所有数据文件已创建。
+    ⚠️ **按布局分派**:多门店布局下应用读的是 `stores/<id>/`,顶层 `readings.json`
+    只是「总店的旧位置」。只对数据根目录跑会同时犯两个错:
+      - 白改一个没人读的文件(还可能让人以为顶层仍是权威来源);
+      - **漏掉每个门店自己的数据** —— 老部署里门店的 readings.json 若还留着
+        内联的水电字段,不迁移就永远进不了 readings_water.json。
     """
+    targets = [data_dir]
     try:
-        result = migrate_readings_to_readings_water(data_dir)
-        if result > 0:
-            log(f"[MIGRATE] 启动迁移完成，共迁移 {result} 条记录")
-    except Exception as e:
-        log(f"[MIGRATE] 迁移失败: {e}")
-        import traceback
-        log(traceback.format_exc())
+        from modules.stores.context import multi_store_layout, stores_root
+        if multi_store_layout():
+            targets = [p for p in sorted(stores_root().iterdir())
+                       if p.is_dir() and not p.name.startswith(".")]
+    except Exception as e:                      # 判不出布局 → 按单店处理(保守)
+        log(f"  [MIGRATE] 判定门店布局失败,按单店处理: {e}")
+
+    total = 0
+    for target in targets:
+        try:
+            n = migrate_readings_to_readings_water(target)
+        except Exception as e:
+            log(f"[MIGRATE] {target} 迁移失败: {e}")
+            import traceback
+            log(traceback.format_exc())
+            continue
+        if n:
+            total += n
+            log(f"[MIGRATE] {target.name or target}: 水电字段迁移 {n} 条")
+    if total:
+        log(f"[MIGRATE] 启动迁移完成,共 {total} 条记录")

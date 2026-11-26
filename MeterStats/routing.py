@@ -57,7 +57,7 @@ from modules.backup.admin_handler import (
     handle_get_nas_config, handle_put_nas_config,
 )
 from modules.system.admin_tools_handler import (
-    handle_get_dir_listing, handle_get_audit_log,
+    handle_get_audit_log,
     handle_get_migrate_status, handle_post_migrate_water,
 )
 from modules.stores.handler import (
@@ -127,7 +127,6 @@ MIN_ROLE_PREFIXES: "Tuple[Tuple[str, str], ...]" = (
     # ---- 主管及以上 ----
     ("/api/admin/audit", "supervisor"),
     ("/api/admin/data-files", "supervisor"),
-    ("/api/admin/dir-listing", "supervisor"),
     ("/api/admin/migrate-water", "supervisor"),
     ("/api/admin/meter", "supervisor"),
     ("/api/admin/roles", "supervisor"),
@@ -454,7 +453,6 @@ _GET_ADMIN = {
     "/api/admin/backup-download": handle_get_backup_download,
     "/api/admin/backup-delete": handle_get_backup_delete,
     "/api/admin/backup-config": handle_get_backup_config,
-    "/api/admin/dir-listing": handle_get_dir_listing,
     "/api/admin/audit": handle_get_audit_log,
     "/api/admin/migrate-water-status": handle_get_migrate_status,
     "/api/admin/data-files": handle_get_data_files,

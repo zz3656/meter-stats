@@ -119,24 +119,6 @@ class TestSupervisorKeepsOwnStore(SupervisorTestBase):
         self.assertEqual(foreign, [], "主管拿到了别家门店的数据文件: %s" % foreign)
 
 
-class TestDirListingScope(SupervisorTestBase):
-    def test_cannot_browse_other_store_dir(self) -> None:
-        target = self.data_dir / "stores" / "main"
-        h = self._call("GET", "/api/admin/dir-listing?path=" + str(target), token=self._sup())
-        self.assertEqual(h.response_status, 403,
-                         "主管能浏览别家门店目录: %s" % h.parsed)
-
-    def test_can_browse_own_store_dir(self) -> None:
-        target = self.data_dir / "stores" / "s002"
-        h = self._call("GET", "/api/admin/dir-listing?path=" + str(target), token=self._sup())
-        self.assertEqual(h.response_status, 200, h.parsed)
-
-    def test_admin_can_browse_data_root(self) -> None:
-        h = self._call("GET", "/api/admin/dir-listing?path=" + str(self.data_dir),
-                       token=self._admin())
-        self.assertEqual(h.response_status, 200, h.parsed)
-
-
 class TestAuditLogScope(SupervisorTestBase):
     def _write_logs(self) -> None:
         context.set_current_store("main")

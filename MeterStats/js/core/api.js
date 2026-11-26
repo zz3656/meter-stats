@@ -254,7 +254,6 @@ var Api = (() => {
         backupDelete: function(name) { return _request('GET', '/api/admin/backup-delete?name=' + encodeURIComponent(name)); },
         backupDownload: function(name) { return _request('GET', '/api/admin/backup-download?name=' + encodeURIComponent(name)); },
         dataFiles: function() { return _request('GET', '/api/admin/data-files'); },
-        dirListing: function(dir) { return _request('GET', '/api/admin/dir-listing?dir=' + encodeURIComponent(dir)); },
         // 其他管理 (3个)
         auditLog: function() { return _request('GET', '/api/admin/audit'); },
         sessions: function() { return _request('GET', '/api/admin/sessions'); },

@@ -2,6 +2,33 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.9] — 2026-11-27
+
+### 修复
+
+- **多门店布局下的水电字段迁移从来没生效过**:`run_startup_migration()` 只对**数据根目录**跑,
+  而多门店布局下应用读的是 `stores/<id>/`。后果有两层:
+  - 门店的 `readings.json` 里若还留着内联的 `main_meter` / `sub_meter` / `water`,
+    **永远不会**被搬进该店的 `readings_water.json` → 水电月报空着,而且不报错;
+  - 与此同时它还在无谓重写顶层的 `readings.json`(那是"总店的旧位置",没人读),
+    容易让人误以为顶层仍是权威来源。
+  现在按布局分派:**多门店 → 逐个门店目录;单店 → 数据根目录**。
+  新增 `tests/test_startup_migration.py`(5 项):单店迁移、多店逐店迁移、顶层遗留文件不被改写、幂等、
+  以及缓存容量护栏
+
+### 清理
+
+- **删掉整条死接口 `/api/admin/dir-listing`**(`admin_tools_handler.py` −101 行):
+  前端发 `?dir=`、后端读 `?path=`,本来恒 400;而且前端**零调用点** —— 两端都是死的。
+  一并移除:路由表条目、`MIN_ROLE_PREFIXES` 里的 `supervisor` 条目、`api.js` 的 `dirListing` 封装、
+  `test_supervisor_scope.py::TestDirListingScope`(3 项)、`AGENTS.md` 鉴权段落里的"目录列表"字样。
+  权限面没有放松:等价的门店范围断言仍在 `data-files` / `backup-download` / `backup-delete` 三处
+  (`test_data_files_only_own_store` 等)
+- **JSON 缓存容量 20 → 64**:每店固定占 7 个文件(6 个模型 + `store.json`),
+  20 条只够 2 家店 —— 开到第 3 家店就是永久抖动(每次请求都可能全量重解析,
+  再叠加 `/api/health` 每 30s 轮询)。64 = 9 家店余量,内存代价可忽略。
+  新增护栏:`_JSON_CACHE_SIZE` 必须 ≥ 3 店 × 7 文件
+
 ## [0.5.8] — 2026-11-27
 
 ### 安全
