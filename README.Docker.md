@@ -118,9 +118,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.4.2
+## 📦 工程部管理系统 v0.4.3
 
-提交 `47783fb`
+提交 `a45dcbc`
 
 **升级 Docker 容器**:
 ```bash
@@ -129,39 +129,30 @@ docker compose up -d
 ```
 
 
-前端实时刷新三连修 + NAS 同步鉴权改造。全部是修复类改动，无破坏性变更。
-
-### 新增
-
-- **NAS 同步支持远端鉴权**：远端从 v0.4.1 起所有 `/api/*` 强制会话，原来的代理裸请求 `/api/admin/data-files` 必然 401。现在本机保存远端账号密码，代理先登录换 token、再带 `Authorization: Bearer` 拉取。新增 `GET/PUT /api/admin/nas-config`（主管及以上）读写凭据：GET 只回 `nas_pass_set` 布尔值、绝不回传密码；PUT 的 `nas_pass` 不传＝保持原值、空串＝明确清除。密码明文存于本机 `settings.json`，但已被 `_BACKUP_EXCLUDED_SETTINGS_KEYS` 排除，不会进备份 ZIP
-- **Docker 镜像内含版本号**：`Dockerfile` 把 `MeterStats/VERSION` 复制进镜像，`server.py` 启动时读取并经公开接口 `GET /api/version` 暴露（登录页底部与侧栏都会显示）。CI 同时推送 `latest` 与 `0.4.x` 两个标签，二者指向同一 digest
-- **Docker 一键升级脚本**：`scripts/docker-update.sh` —— 拉取新镜像、重建容器，并打印更新前后的版本号对比；兼容 `docker compose`（v2）与 `docker-compose`（v1，DSM 6/7.0）
-
 ### 修复
 
-- **余量预警卡不实时刷新**：`renderChargeAlert()` 只在 `renderAll()` 里被调用，而录入/修改/删除抄表、确认充值走的都是 `refreshAndRender()` → 数据更新了但卡片没重绘，表现为「已录入今日抄表，『含 N 度已到账未抄表』的绿色提示却不消失」。已在 `refreshAndRenderTables()` 同步 `CURRENT_*` 之后重绘预警卡
-- **「每日趋势」页永远显示空态、概况卡全空**：`renderTrendChart()` 的空态分支用 `ctx.canvas.parentElement.innerHTML = …` 渲染空态，把整个 `<canvas id="chart-trend">` 从 DOM 里**永久删掉**；之后每次调用都在下一行 `getContext` 处抛 `TypeError(null.getContext)`，而调用方（`renderAll` / `_afterSectionShown`）都用 `try/catch` 静默吞掉，所以控制台一片干净、页面却是坏的。触发条件正是 App 重启后首屏 snapshot 401 → `renderAll()` 带着空数组调用 → canvas 当场被删，登录后再也回不来。现在 canvas 与空态节点并存、只切换显隐，canvas 缺失时可自愈重建
-- **抄表列表月份下拉与表格内容对不上**：`renderAll()` 首屏先渲染表格（第 2 步）、后填月份下拉（第 6 步），表格过滤读到的是空值 → 不过滤 → 渲染出**所有月份**的记录；下拉随后被填成 2026-11，表格却没跟着重绘。现在 `refreshMonthSelectors()` 填完 `#record-month` 立即重绘三张表
-- **水电迁移提示整条链路是死的**：`reports.js` 调用 `Api.adminTools.migrateWaterStatus()` / `Api.adminTools.migrateWater()`，而 `Api.adminTools` 对象根本不存在（2026-10-24 模块化重构遗留），每次页面加载抛 TypeError。已改到 `Api.migrate.*`
-- **NAS 同步一次就把远端凭据冲掉**：`handle_post_sync_from_nas` 的 `settings.json` 分支原本整份覆盖，而远端并不知道本机的 `nas_sync_*` / `backup_dir` 字段 → 同步一次凭据即失效。改为走 `_merge_settings_after_restore()` 合并
-- **NAS 同步后读到旧数据**：同步写入后失效 storage 文件缓存与月报缓存
+- **把抄表读数误填进充值栏，会把所有用电统计顶飞**（实测事故 2026-11-11）：`charges.json` 里多了一条 `date=2026-11-11` 的充值记录，四个数 `205.7 / 1706.5 / 197.6 / 138.9` **正好是当天的抄表读数**。系统照单全收，按「预付费表表底下降=用电、上升=刚到账」的口径把这笔「充值」算进了 11-11 → 11-12 区间 —— 大厅凭空多出 205.7 × 160 = **32912 度**，「每日趋势」页复制出去的单天用电变成 **89588.8 度 / ¥80629.92**（真实 1130.3 度 / ¥1017.27），2026-11 月报被顶到 **102700.7 度**（真实 14242.2 度）。物理上这笔钱不可能到账：205.7 表字若在 11-11 进表，11-12 表底应是 205.7 + 205.7 − 3.4 ≈ 408，实际抄到的是 202.3 —— 表底不升反降，钱根本没进表
+
+  新增三条防线（前后端同一套规则）：
+
+  1. **录入即拦截**：`POST /api/charges` / `PUT /api/charges/{id}` / 确认到账前，先拿当前抄表复核 —— 充值额和当天抄表读数一模一样（八成是抄错了栏），或归属区间的用电量离谱到超过该表历史日均 3 倍，直接 400 拒绝并提示「是不是把抄表读数填进充值栏了」。前端 `submitChargeAdd()` 也先自查，用弹窗给出可读的原因
+  2. **统计自动排除**：与抄表对不上的充值不计入用电量，并在月报结果里带出 `conflicts` 供界面提示；「每日趋势」页单天复制出来的文本会追加一行 ⚠️ 提醒去「用电记录 → 充值」核对删除
+  3. **余量预警同步排除**：钱没进表的充值不再算进表显余量，建议充值金额不再被顶飞
+
+- **钱晚点才进表的充值被算错区间**（同一轮顺带修掉）：充值申请日当天抄表时钱还没到、到账日又晚于下一次抄表时，旧口径把这笔充值硬塞进「申请日 → 下一次抄表」区间，那一段用电凭空多出几万度、钱真正进表的那天反而算成 0。现在按「表底真正跳升的那一段」重新归属 —— 钱没进表的区间算真值（544 度），钱进表的区间算真值（528 度）
 
 ### 调整
 
-- **Docker 升级方式纠正**：README.Docker.md / README.md 原写 `docker compose down && docker compose up -d`，这**不会拉取新镜像** —— 本地已有镜像时 Docker 不会去查仓库，这就是「镜像没有新版本提示」的根源。正确姿势是 `docker compose pull && docker compose up -d`
-- 根 `docker-compose.yml` 的头部注释与实际 image 标签对齐（该文件用的是本地构建标签 `meter-stats:local`，不是 `latest`）
-
-### 文档
-
-- 新增 `tests/test_nas_sync.py`（18）、`tests/test_alert_refresh.py`（3）、`tests/test_frontend_refresh.py`（7），全量 **147 项**
+- **月度报告结果新增 `conflicts` 字段**：列出与抄表对不上的充值记录（`charge_id` / `date` / `meter` / `amount` / `implied_kwh` / `reason`），界面可据此提示用户去修那条记录
 
 ### ⬆️ 升级
 
+⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.4.1...v0.4.2
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.4.2...v0.4.3
 
