@@ -30,13 +30,21 @@ permissions:
 jobs:
   unittest:
     name: 测试 (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # 3.9 = AGENTS.md 声明的最低支持版本;3.11 = Docker 镜像 (python:3.11-slim) 的版本。
         # 两个都跑:防止「本地 3.12 能过、容器里 3.11 炸」这类部署事故。
-        python-version: ["3.9", "3.11"]
+        #
+        # ⚠️ 3.9 必须固定到 ubuntu-22.04:GitHub 的 ubuntu-latest 已升到 24.04/26.04,
+        #    那里 setup-python 拿不到 3.9("The version '3.9' … was not found for
+        #    Ubuntu 26.04"),首次上线时这条腿就是这样挂的(不是代码问题)。
+        include:
+          - python-version: "3.9"
+            os: ubuntu-22.04
+          - python-version: "3.11"
+            os: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
