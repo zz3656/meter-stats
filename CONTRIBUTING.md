@@ -163,6 +163,30 @@ chore: 清理调试代码
 `git commit` 没设 hook 时,如果你不想用模板,可以手动写。
 编辑器注释行(`#` 开头)在 commit 时会被 git 自动删除。
 
+## 发布清单（发版前逐项过）
+
+> 大部分条目**已经有测试兜底**(见每行末尾),跑一遍 `python3 -m unittest discover -s tests` 即可;
+> 没兜底的几条需要人看一眼。清单本身不要写成"记得检查"——凡是能写成断言的都写成了断言。
+
+| # | 检查项 | 怎么验 |
+|---|---|---|
+| 1 | **VERSION 与 CHANGELOG 顶部章节一致** | `tests/test_docs_consistency.py::TestVersionConsistency` |
+| 2 | **新功能能在 README 里找到入口**:功能表加了行没有? | `tests/test_docs_consistency.py::TestCapabilitiesAreDiscoverable` |
+| 3 | **结构树与真实目录一致**:新增 `modules/xxx/` 或顶层 `*.py` 必须同步两份文档 | `tests/test_docs_consistency.py::TestStructureTreesMatchReality` |
+| 4 | **文档里的用例数/测试文件数是真的**(改完测试记得更新) | `tests/test_docs_consistency.py::TestDocumentedCountsAreReal` |
+| 5 | **打包链路仍是枚举 `*.py`**,没退回硬编码清单 | `tests/test_docs_consistency.py::TestPackagingStaysGeneric` |
+| 6 | **单个文档没长成"实施计划"**(>2000 行要归档/拆分) | `tests/test_docs_consistency.py::TestDocsDoNotBlowUp` |
+| 7 | 口径回归:**2026-06 月报 = 71226.1 度** | `tests/test_monthly_report.py` |
+| 8 | 全量测试绿(CI 会跑 Python 3.9 + 3.11 两条腿) | `python3 -m unittest discover -s tests -v` |
+| 9 | 新增顶层模块/静态资源后,**本地构建一次 .app 并启动** | `./build-app.sh release`(先备份生产数据,`--install` 会清 Application Support) |
+| 10 | 改了口径/权限/备份规则 → CHANGELOG 要写清**根因与症状**,不只写"修复 X" | 人工 |
+| 11 | 推送 `main` 后确认三条流水线绿 | `gh run list`(测试 / Docker 镜像 / DMG Release) |
+| 12 | 推送后抽查发布结果 | `curl -s <host>/api/version`、`docker pull zz3656/meter-stats:latest`、GitHub Releases 页面 |
+
+**为什么第 2/3 条重要**:2026-11-27 出现过「多门店功能已上线、CHANGELOG 写得很全,但 README
+一个字都没提、结构树还缺 `modules/stores/`」——功能做完了门面没跟上,用户以为没这个功能。
+现在这两条由测试守着,漏了会直接红。
+
 ## 报告问题
 
 请使用 GitHub Issues 报告问题，包含：
