@@ -94,6 +94,19 @@ async function onStoreContextChanged(state, reason) {
     } catch (e) {
       console.warn('切店后重载表配置失败:', e);
     }
+    // 电表设置页:表单是按上一家店加载的,切店必须重载。
+    // 不重载的话表单还留着上一家店的数值、「当前门店」标签也不变 ——
+    // 用户会以为改动"串到别家店了";更糟的是此时按保存,会把上一家店的
+    // 表集合/倍率写进刚切过去的门店(保存的 ?store= 取的是实时门店)。
+    try {
+      var meterSection = document.getElementById('section-settings-meter');
+      if (meterSection && meterSection.style.display !== 'none'
+          && typeof loadMeterSettings === 'function') {
+        loadMeterSettings();
+      }
+    } catch (e) {
+      console.warn('切店后重载电表设置页失败:', e);
+    }
     try {
       if (typeof window.loadAppData === 'function') window.loadAppData();
     } catch (e) {

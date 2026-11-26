@@ -291,6 +291,23 @@
     });
   }
 
+  /**
+   * 设置页保存前的门店一致性判定。
+   *
+   * 为什么需要:电表设置页的表单是在**打开页面时**按当时门店加载的,而保存时
+   * `api.js::_appendStore()` 取的是**实时**门店。中间若在侧栏切过店,
+   * 表单里还是上一家店的数值 → 保存就把 A 店的表集合/倍率写进 B 店。
+   * 不报错、只让两家店的度数一起错。
+   *
+   * @returns {boolean} true = 可以保存(门店一致);false = 门店已变,必须先重载
+   */
+  function sameStore(loadedStoreId, liveStoreId) {
+    // 任一为空(单店布局 / 上下文未就绪)时不拦 —— 宁可放过也不能拦住正常保存
+    if (!loadedStoreId || !liveStoreId) return true;
+    return String(loadedStoreId) === String(liveStoreId);
+  }
+
+  MeterForm.sameStore = sameStore;
   MeterForm.SETTINGS_ICONS = SETTINGS_ICONS;
   MeterForm.settingsPayload = settingsPayload;
   MeterForm.nextMeterKey = nextMeterKey;

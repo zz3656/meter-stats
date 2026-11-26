@@ -442,6 +442,9 @@ function deleteAdminUser(uid) {
 /** 当前编辑中的表定义(渲染与增删共用一份,避免表单与状态不同步) */
 var _meterSettingsList = [];
 
+/** 这份表单是按哪家店加载的。保存前要和**实时**门店比对 —— 不等就拒绝。 */
+var _meterSettingsStoreId = '';
+
 /** 表单里的输入 → _meterSettingsList(用户可能已经改过名字,增删前必须先同步) */
 function _syncMeterListFromForm(form) {
   if (!form || !window.MeterForm) return;
@@ -514,12 +517,29 @@ function loadMeterSettings() {
       return Object.assign({ key: k }, meters[k] || {});
     });
     _meterSettingsList = list;
+    if (typeof StoreContext !== 'undefined' && StoreContext) {
+      _meterSettingsStoreId = String(StoreContext.getStoreId() || '');
+    }
     _renderMeterCells(form, _meterSettingsList);
     _renderMeterStoreName();
   }).catch(function (e) { showAlert('加载电表设置失败: ' + (e && e.message ? e.message : ''), 'error'); });
 }
 
 function saveMeterSettings() {
+  // ⚠️ 先校验门店:表单是按加载时那家店填的,而保存会写到**当前**门店。
+  //    切过店却没重载时直接保存 = 把 A 店的表集合/倍率写进 B 店。
+  var liveStore = '';
+  try {
+    if (typeof StoreContext !== 'undefined' && StoreContext) {
+      liveStore = String(StoreContext.getStoreId() || '');
+    }
+  } catch (e) { /* ignore */ }
+  if (window.MeterForm && !window.MeterForm.sameStore(_meterSettingsStoreId, liveStore)) {
+    showAlert('当前门店已切换,页面还是上一家店的设置。已重新加载,请确认后再保存。', 'error');
+    loadMeterSettings();
+    return;
+  }
+
   var form = document.getElementById('meter-settings-form');
   if (form) _syncMeterListFromForm(form);
   if (!_meterSettingsList.length) { showAlert('至少要有 1 块表', 'error'); return; }

@@ -67,6 +67,27 @@ class TestSettingsStaticGuards(unittest.TestCase):
         self.assertIn("MeterForm.readSettings", self.admin)
         self.assertIn("MeterForm.settingsPayload", self.admin)
 
+    def test_switch_reloads_settings_page(self) -> None:
+        """切门店时必须重载电表设置页。
+
+        不重载 → 表单还留着上一家店的数值、「当前门店」标签也不变,
+        用户会以为改动串到别家店了;而此时按保存会把 A 店的值写进 B 店
+        (保存的 ?store= 取的是实时门店)。
+        """
+        src = (METERSTATS / "js" / "modules" / "storeSwitcher.js").read_text(encoding="utf-8")
+        block = src[src.index("async function onStoreContextChanged"):]
+        block = block[:block.index("showAlert('账号未分配门店")]
+        # 必须是**未被注释**的实际调用 —— 只做字符串包含的话,
+        # 把调用注释掉(/* loadMeterSettings(); */)也能通过,护栏就空了。
+        self.assertRegex(block, r"(?m)^\s*loadMeterSettings\(\);\s*$",
+                         "切店后没有真正调用 loadMeterSettings() —— 会显示上一家店的数值")
+
+    def test_save_guards_against_store_switch(self) -> None:
+        """保存前必须校验「表单加载时的门店」与「实时门店」是否一致。"""
+        self.assertIn("_meterSettingsStoreId", self.admin)
+        self.assertIn("sameStore", self.admin,
+                      "saveMeterSettings 没有门店一致性校验 —— 切店后保存会串写")
+
     def test_surfaces_backend_error(self) -> None:
         """后端 400(0 块表 / 倍率非法 / key 非法)要把原因显示出来。"""
         self.assertIn("res.error", self.admin)
@@ -167,6 +188,16 @@ const form = s.document.getElementById('meter-settings-form');
   };
 }
 
+// ⑥b 保存前的门店一致性判定
+{
+  out.sameStore = {
+    same: s.MeterForm.sameStore('S002', 'S002'),
+    diff: s.MeterForm.sameStore('S002', 'main'),
+    noLoaded: s.MeterForm.sameStore('', 'main'),
+    noLive: s.MeterForm.sameStore('S002', ''),
+  };
+}
+
 // ⑥ 载荷是数组且字段齐全
 {
   out.payload = s.MeterForm.settingsPayload([
@@ -229,6 +260,14 @@ class TestSettingsBehaviour(unittest.TestCase):
         self.assertEqual(k["usedOne"], "m2")
         self.assertEqual(k["usedGap"], "m2")
         self.assertEqual(k["usedMany"], "m4")
+
+    def test_same_store_guard(self) -> None:
+        """门店一致才允许保存;任一为空时不拦(单店布局不能误伤)。"""
+        g = self.out["sameStore"]
+        self.assertTrue(g["same"], "同一门店却判定为不一致")
+        self.assertFalse(g["diff"], "门店不同却放行 —— 会把 A 店的表集合写进 B 店")
+        self.assertTrue(g["noLoaded"], "加载时门店为空不应拦住保存(单店布局)")
+        self.assertTrue(g["noLive"], "实时门店为空不应拦住保存")
 
     def test_payload_is_array_with_all_fields(self) -> None:
         p = self.out["payload"]
