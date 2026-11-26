@@ -167,12 +167,17 @@ function switchSettingsPage(page) {
   if (page === 'meter' && typeof loadMeterSettings === 'function') loadMeterSettings();
   if (page === 'data') {
     if (typeof loadBackupStatus === 'function') loadBackupStatus();
-    // ⚠️ 图片目录与备份目录都要主动加载，否则面板一直停在"加载中..."
-    if (typeof loadImageDirConfig === 'function') loadImageDirConfig();
-    if (typeof loadBackupDirConfig === 'function') loadBackupDirConfig();
     if (typeof loadBackupList === 'function') loadBackupList();
-    // NAS 同步凭据(远端 v0.4.1 起接口需要登录,面板要显示是否已配置)
-    if (typeof loadNasConfig === 'function') loadNasConfig();
+    // ⚠️ 图片目录 / 备份目录 / NAS 凭据是**部署级全局配置**,接口已收归管理员
+    //    (见 routing.ADMIN_ONLY_PREFIXES)。主管的面板也被隐藏了,所以这里
+    //    必须跳过请求 —— 否则主管一进数据管理页就吃 403 提示。
+    var isAdmin = !!(typeof ADMIN_USER !== 'undefined' && ADMIN_USER
+                     && ADMIN_USER.role === 'admin');
+    if (isAdmin) {
+      if (typeof loadImageDirConfig === 'function') loadImageDirConfig();
+      if (typeof loadBackupDirConfig === 'function') loadBackupDirConfig();
+      if (typeof loadNasConfig === 'function') loadNasConfig();
+    }
   }
   if (page === 'roles' && typeof loadRolesInfo === 'function') loadRolesInfo();
   // 门店管理:拉一次门店列表再渲染

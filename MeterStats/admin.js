@@ -35,6 +35,14 @@ function applyRoleVisibility() {
     var ok = Object.prototype.hasOwnProperty.call(allowed, need) && allowed[need];
     items[i].style.display = ok ? '' : 'none';
   }
+
+  // 部署级全局配置(备份目录 / 自动备份 / 图片目录 / NAS 凭据)仅管理员可改:
+  // 它们写的是顶层 settings.json,一家店的主管改了会波及全站。
+  // 主管仍保留「备份本店 / 恢复本店范围 / 备份列表」。
+  var adminOnly = document.querySelectorAll('[data-admin-only]');
+  for (var j = 0; j < adminOnly.length; j++) {
+    adminOnly[j].style.display = (role === 'admin') ? '' : 'none';
+  }
 }
 
 // ===== 初始化: 有token则验证, 否则显示登录页 =====

@@ -903,17 +903,17 @@
       <div class="settings-panel">
         <div class="panel-title"><span>💾 备份与恢复 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div id="backup-dir-display" class="panel-desc data-line">加载中...</div>
-        <div id="backup-dir-input-wrap" class="data-input-wrap">
+        <div id="backup-dir-input-wrap" class="data-input-wrap" data-admin-only="1">
           <input type="text" id="backup-dir-input" placeholder="完整路径；留空 = 数据目录下的 backup/" class="field-control">
         </div>
         <div class="data-actions">
-          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn">📂 选择目录</button>
-          <button class="btn btn-primary btn-xs" onclick="saveBackupSettings()" id="save-backup-btn">保存</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn" data-admin-only="1">📂 选择目录</button>
+          <button class="btn btn-primary btn-xs" onclick="saveBackupSettings()" id="save-backup-btn" data-admin-only="1">保存</button>
           <span class="data-actions-sep"></span>
           <button class="btn btn-primary btn-xs" onclick="adminBackup()" id="admin-backup-btn">💾 备份</button>
           <button class="btn btn-secondary btn-xs" onclick="adminRestore()">↩️ 恢复</button>
         </div>
-        <div class="auto-backup-row">
+        <div class="auto-backup-row" data-admin-only="1">
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
           <div class="auto-backup-label">
             <div class="panel-title">自动备份 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></div>
@@ -927,8 +927,8 @@
         </div>
       </div>
 
-      <!-- 2) 图片目录 -->
-      <div class="settings-panel">
+      <!-- 2) 图片目录(管理员专属:全局覆盖项) -->
+      <div class="settings-panel" data-admin-only="1">
         <div class="panel-title"><span>📷 图片目录 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div id="image-dir-display" class="panel-desc data-line">加载中...</div>
         <div id="image-dir-stats" class="panel-desc data-line data-muted"></div>
@@ -945,8 +945,8 @@
         </div>
       </div>
 
-      <!-- 3) 从 NAS 同步 -->
-      <div class="settings-panel">
+      <!-- 3) 从 NAS 同步(管理员专属:凭据是全站的) -->
+      <div class="settings-panel" data-admin-only="1">
         <div class="panel-title"><span>🔄 从 NAS 同步 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
         <div class="data-actions">
           <input type="text" id="nas-sync-url-input" placeholder="外网 lin.icafe.top　内网 172.16.254.250:8765" class="field-control data-grow">

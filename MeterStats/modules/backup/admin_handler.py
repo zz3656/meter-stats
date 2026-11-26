@@ -241,6 +241,14 @@ def handle_post_backup_delete(handler, use_get=False):
         send_json(handler, 403, {"ok": False, "error": "非法备份文件名"})
         return
 
+    # 门店范围闸:与**下载**同一条规则 —— 你能下载的才允许删。
+    # 备份包是盘上已有的文件,自动备份还是全量的;删掉一个含别家门店数据的包
+    # 等于替别人做了不可逆操作,所以同样要按调用方范围校验。
+    scope_ok, scope_err = _backup_zip_scope_ok(handler, zip_path)
+    if not scope_ok:
+        send_json(handler, 403, {"ok": False, "error": scope_err})
+        return
+
     try:
         zip_path.unlink()
         log(f"[BACKUP] 删除备份: {zip_name}")

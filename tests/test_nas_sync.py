@@ -297,9 +297,17 @@ class TestNasConfigPermissions(unittest.TestCase):
         h = self._call("GET", "/api/admin/nas-config", token=self._session("employee"))
         self.assertEqual(h.response_status, 403)
 
-    def test_supervisor_allowed(self):
-        h = self._call("GET", "/api/admin/nas-config", token=self._session("supervisor"))
-        self.assertEqual(h.response_status, 200)
+    def test_supervisor_rejected(self):
+        """NAS 凭据是**部署级全局配置**:主管也不再允许读写。
+
+        它写的是顶层 settings.json,一家店的主管改了会波及全站(而且凭据是明文)。
+        分店主管仍保留本店范围的备份/恢复能力,见 tests/test_supervisor_scope.py。
+        """
+        for method in ("GET", "PUT"):
+            h = self._call(method, "/api/admin/nas-config",
+                           {"nas_user": "x", "nas_pass": "y", "nas_url": "z"} if method == "PUT" else None,
+                           token=self._session("supervisor"))
+            self.assertEqual(h.response_status, 403, "%s 应当被拒: %s" % (method, h.parsed))
 
     def test_admin_allowed(self):
         h = self._call("GET", "/api/admin/nas-config", token=self._session("admin"))

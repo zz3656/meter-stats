@@ -9,6 +9,8 @@
   - resource: 操作资源 (readings/charges/users/admin/meter/backup)
   - detail: 简要描述
   - ip: 客户端 IP (来自 request REMOTE_ADDR)
+  - store: 操作发生在哪个门店(多门店布局下的隔离依据;
+           历史记录没有这个字段 —— 读接口按范围过滤时按"不可见"处理)
 """
 from __future__ import annotations
 
@@ -34,6 +36,15 @@ def init_audit_log(data_dir: Path) -> None:
         _audit_file.write_text("[]", encoding="utf-8")
 
 
+def _current_store_id() -> str:
+    """尽力取当前门店 id —— 取不到就空串,绝不让审计写入失败。"""
+    try:
+        from modules.stores.context import get_current_store
+        return str(get_current_store() or "")
+    except Exception:
+        return ""
+
+
 def log_audit(
     action: str,
     resource: str,
@@ -53,6 +64,8 @@ def log_audit(
         "resource": resource,
         "detail": detail,
         "ip": ip,
+        # 门店隔离依据:本店主管读审计时只应看到本店的操作
+        "store": _current_store_id(),
     }
     with _audit_lock:
         try:

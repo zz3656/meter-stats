@@ -49,21 +49,41 @@ def handle_get_dir_listing(handler):
         send_json(handler, 400, {"error": "缺少 path 参数"})
         return
 
-    # 4. 白名单校验:仅允许 data_dir 和 backup_dir
+    # 4. 白名单 + **门店范围**校验
+    #
+    # 只校验"在 data_dir 之下"是不够的:多门店布局下 data_dir 里就有 stores/,
+    # 于是只管 s002 的主管能把 stores/main/ 等别家门店目录列出来。
+    # 所以按调用方的门店范围再收一道:
+    #   - 总部/单店(不按门店过滤)→ 仍只允许 data_dir(及自定义的备份目录)
+    #   - 受限主管 → 只允许「自己名下的 stores/<id>/」与备份目录
     try:
         from storage import get_data_dir
         from modules.backup.handler import _resolve_backup_parent
+        from modules.stores.handler import caller_store_scope
+
         data_dir = get_data_dir()
         backup_dir = _resolve_backup_parent(data_dir)
-
-        allowed_root = data_dir.resolve()
-        # 获取请求路径的解析结果
         p = Path(target_path).resolve()
 
-        # 允许浏览 data_dir 及其子目录
-        if not str(p).startswith(str(allowed_root)):
-            send_json(handler, 403, {"error": f"不允许浏览该路径(仅允许访问 {data_dir})"})
+        scope_ok, allowed_ids, _scope_err = caller_store_scope(handler)
+        if not scope_ok:
+            send_json(handler, 403, {"error": "无法确认门店范围,拒绝访问"})
             return
+
+        def _within(path: Path, root: Path) -> bool:
+            return path == root or root in path.parents
+
+        if allowed_ids is not None:
+            from modules.stores.context import store_dir
+            roots = [store_dir(str(sid)).resolve() for sid in allowed_ids]
+            roots.append(backup_dir.resolve())
+            if not any(_within(p, r) for r in roots):
+                send_json(handler, 403, {"error": "只能浏览本门店的数据目录与备份目录"})
+                return
+        else:
+            if not (_within(p, data_dir.resolve()) or _within(p, backup_dir.resolve())):
+                send_json(handler, 403, {"error": f"不允许浏览该路径(仅允许访问 {data_dir})"})
+                return
     except Exception:
         send_json(handler, 403, {"error": "无法验证路径权限"})
         return
@@ -100,11 +120,36 @@ def handle_get_dir_listing(handler):
 # ============ 审计日志 ============
 
 def handle_get_audit_log(handler):
-    """GET /api/admin/audit?count=100 → {logs: [...]}"""
+    """GET /api/admin/audit?count=100 → {logs: [...]}
+
+    **按调用方的门店范围过滤**:本店主管只应看到本店的操作记录。
+    历史记录没有 store 字段(改造前写的),按 fail-closed 处理 ——
+    只有总部账号(不按门店过滤)能看到它们。
+    """
     qs = parse_qs(urlparse(handler.path).query)
-    count = int(qs.get("count", ["100"])[0])
+    try:
+        count = int(qs.get("count", ["100"])[0])
+    except (TypeError, ValueError):
+        count = 100
+
     from utils.audit import get_audit_log
     logs = get_audit_log(count)
+
+    try:
+        from modules.stores.handler import caller_store_scope
+        scope_ok, allowed_ids, err = caller_store_scope(handler)
+    except Exception as e:
+        scope_ok, allowed_ids, err = False, None, str(e)
+
+    if not scope_ok:
+        # 判不出范围就拒绝,绝不回退成"全部门店"(否则等于把全站审计泄出去)
+        send_json(handler, 403, {"error": "无法确认门店范围: " + (err or "未知原因")})
+        return
+
+    if allowed_ids is not None:
+        allow = {str(x) for x in allowed_ids}
+        logs = [e for e in logs if str(e.get("store") or "") in allow]
+
     send_json(handler, 200, {"logs": logs})
 
 

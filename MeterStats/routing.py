@@ -87,8 +87,23 @@ PUBLIC_API_PATHS = frozenset({"/api/health", "/api/version", "/api/auth/login"})
 # 删除类操作允许的角色,与前端 ADMIN_DELETE_ROLES 保持一致
 DELETE_ROLES = frozenset({"admin", "supervisor"})
 
-# 用户管理仅管理员:否则任何登录用户都能新建管理员账号自我提权
-ADMIN_ONLY_PREFIXES = ("/api/admin/users",)
+# 仅管理员的接口。
+#
+# - /api/admin/users:否则任何登录用户都能新建管理员账号自我提权
+# - 下面这 5 个是**部署级全局配置**,写的是顶层 settings.json、影响所有门店:
+#     备份目录 / NAS 账号密码 / 自动备份开关 / 保留份数 / 图片目录
+#   分店主管改了会波及全站(比如关掉自动备份、改错备份目录、读到 NAS 凭据;
+#   图片目录还是"全局覆盖项",一设就会让所有门店的照片混进同一目录)。
+#   主管仍保留**本店范围**的备份/恢复能力(/api/backup、/api/restore、
+#   backup-download、backup-delete、data-files —— 它们各自带门店范围闸)。
+ADMIN_ONLY_PREFIXES = (
+    "/api/admin/users",
+    "/api/admin/backup-config",
+    "/api/admin/nas-config",
+    "/api/admin/auto-backup",
+    "/api/admin/backup-retention",
+    "/api/admin/images",
+)
 
 # 管理类接口至少主管:审计日志、备份删除/恢复、NAS 同步、电价倍率与图片目录配置
 # 这些不该由"只能录入抄表"的员工角色触碰,与前端 ADMIN_MANAGE_ROLES 的意图对齐。
@@ -175,7 +190,7 @@ def _auth_gate(method: str, path_clean: str, handler) -> Optional[Dict[str, Any]
         return None
 
     if path_clean.startswith(ADMIN_ONLY_PREFIXES) and role != "admin":
-        send_json(handler, 403, {"error": "权限不足: 用户管理需要管理员权限"})
+        send_json(handler, 403, {"error": "权限不足: 该操作需要管理员权限"})
         return None
 
     if path_clean.startswith(MANAGER_ONLY_PREFIXES) and role not in MANAGER_ROLES:
