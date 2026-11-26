@@ -18,6 +18,48 @@ function shortDate(s) {
     return m ? m[1] : s;
 }
 
+/**
+ * 把报表区清成"空态"。
+ *
+ * 为什么必须有:切门店后 loadAppData() 会按**新门店**的抄表数据重建月份下拉。
+ * 若新门店一条抄表都没有(刚建的分店),下拉被清空 → loadMonthlyReport() 读到
+ * 空月份直接 early return(**不重拉**)→ 屏幕上还留着**上一家店**的表格与概况。
+ * 用户看到的就是「分店页面里显示总店的数据」。
+ *
+ * 所以"没有数据"必须显式渲染成空态,而不是什么都不做。
+ */
+function resetReportView() {
+    // 月度:表格隐藏 + 空态文案。
+    // ⚠️ 不能靠 renderMonthlyReportTable(null) —— 它开头就是 `if (!report) return;`,
+    //    传 null 什么都不做(实施中踩过:测试直接抓到表格没隐藏)。
+    var tableWrap = document.getElementById('monthly-report-table');
+    if (tableWrap) tableWrap.style.display = 'none';
+    var reportBody = document.getElementById('report-body');
+    if (reportBody) reportBody.innerHTML = '';
+    var reportEmpty = document.getElementById('report-empty');
+    if (reportEmpty) {
+        reportEmpty.style.display = 'block';
+        reportEmpty.textContent = '该门店该月暂无抄表数据';
+    }
+    var grid = document.getElementById('monthly-stat-grid');
+    if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }
+
+    // 水电区
+    var util = document.getElementById('utilities-result');
+    if (util) util.innerHTML = '<div class="report-empty">该月未录入水电表底</div>';
+    var utilCopy = document.getElementById('btn-copy-utilities');
+    if (utilCopy) utilCopy.style.display = 'none';
+
+    // 年报区
+    var yearly = document.getElementById('yearly-result');
+    if (yearly) yearly.innerHTML = '<div class="report-empty">该年份没有数据</div>';
+    var yearlyCopy = document.getElementById('btn-copy-yearly');
+    if (yearlyCopy) yearlyCopy.style.display = 'none';
+
+    // 复制用的缓存也要清 —— 否则「复制月报」复制出来的还是上一家店的数字
+    try { if (typeof resetReportCaches === 'function') resetReportCaches(); } catch (e) { /* ignore */ }
+}
+
 function loadMonthlyReport(month) {
     if (!month) month = document.getElementById('report-month').value;
     if (!month) return Promise.resolve(null);

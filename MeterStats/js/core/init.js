@@ -43,12 +43,25 @@ function loadAppVersion() {
 // 因此这部分不能在启动时无条件跑,改由 admin.js 的 setLoggedIn() 在鉴权通过后调用。
 window.loadAppData = async function loadAppData() {
   await renderAll();
+
+  // 报表区**先清成空态**:切门店后新门店可能没有任何数据,而下面的
+  // loadMonthlyReport() 在月份为空时会直接 return、不重拉 —— 不清就会留着
+  // 上一家店的表格与概况卡(用户报过「分店页面显示总店数据」)。
+  // 另外年报区/水电区不在 loadMonthlyReport 的重绘范围内,也必须一起清,
+  // 否则切到另一家有数据的门店时,年报还显示上一家店的数字。
+  try { if (typeof resetReportView === 'function') resetReportView(); } catch (e) { /* ignore */ }
+
   // 报表分析: 加载月份和年份选项，供用户切换时渲染
   const reportMonth = document.getElementById('report-month');
   if (reportMonth) {
     const months = [...new Set((CURRENT_READINGS || []).map(r => r.date.slice(0, 7)))].sort().reverse();
     reportMonth.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
-    if (months.length > 0) { reportMonth.value = months[0]; }
+    if (months.length > 0) {
+      reportMonth.value = months[0];
+    } else {
+      // 新门店一条抄表都没有 → 下拉清空(报表区已在上面清成空态)
+      reportMonth.value = '';
+    }
   }
   const yearlyYear = document.getElementById('yearly-year');
   if (yearlyYear) {
