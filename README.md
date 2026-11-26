@@ -1,6 +1,6 @@
 # 📊 工程部管理系统 — Meter Stats
 
-> 面向酒吧工程部的电表数据管理工具。支持 4 表抄表、充值、月度/年度报表、物品借还、申购、值班工作记录，三级权限管理。Docker 和 macOS 双端部署，开箱即用。
+> 面向酒吧工程部的电表数据管理工具。**支持多门店**——每店一套表集合与电价、员工按门店授权、门店用电横向总览；另含抄表/充值、月度·年度报表、物品借还、申购、值班工作记录、字段级图片上传与三级权限。Docker 与 macOS 双端部署，开箱即用。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue.svg)](https://www.docker.com/)
@@ -10,20 +10,38 @@
 
 | 模块 | 功能 |
 |------|------|
-| 📝 **抄表管理** | 4 块表(大厅/消防/包厢/空调)每日读数录入 + 月底水电录入(总表/分表/水表);自动计算日均用电与预计断电日期 |
-| 💰 **充值管理** | 4 表分别充值记录;实时余量预警(按日均推算剩余天数 + 建议充值金额) |
+| 🏪 **多门店** | 单实例跑多家店:每店独立数据目录与表集合/电价,**侧栏一键切店**,总部账号可跨店、分店员工绑定本店;门店总览页横向对比各店用电与费用;增删改门店仅管理员 |
+| 📝 **抄表管理** | **每店可自定义表集合**(默认 4 块:大厅/消防/包厢/空调)每日读数录入 + 月底水电录入(总表/分表/水表);自动计算日均用电与预计断电日期 |
+| 💰 **充值管理** | 按当前门店的表集合分别记录充值;实时余量预警(按日均推算剩余天数 + 建议充值金额) |
 | 📊 **报表分析** | 日报(每日用电趋势 + 当日占比)、月报(按日分表用电 + 当月占比)、水电月报、年报汇总;支持复制到剪贴板(Numbers/Excel 表格格式) |
 | 🧮 **充值计算器** | 按预充天数 × 本月日均,自动算出每块表需充值表读数 + 金额(实时联动) |
 | 📦 **物品管理** | 工具/耗材登记、借出/归还流水;新增弹窗支持勾选「批量」连续录入(提交后不关弹窗);备注可传图片;借出人支持「填名字」或「直接传照片」;归还支持部分归还;借出/归还记录可删除(未归还部分自动扣回可借数量,仅主管/管理员);PC 端悬停缩略图即预览大图,移动端点击放大 |
 | 🛒 **申购管理** | 申购→确认购买→自动入库三步流程;跟踪待购/已购/已入库状态;购买时可选「同时添加到物品记录」 |
 | 🔧 **值班工作记录** | 类型(维修/更换/拆除)+ 故障区域 + 班次(白/中/夜班) + 处理状态;故障信息必填,支持文字 + 照片同时填写 |
 | 🖼️ **图片上传** | 图片归到具体字段(借出人/归还人/申购物品名称/物品备注/故障信息/处理方案);上传前自动压缩(最长边 1600px);文件名带来源前缀;表格显示缩略图(PC 悬停预览 / 移动端点击放大) |
-| 🔐 **三级权限** | 员工(读写)/ 主管(读+写+删)/ 管理员(全部 + 用户管理);SHA-256 密码 + Session Token |
-| 💾 **数据备份** | 启动时 + 每日 0 点自动备份,按**保留个数**清理(默认最新 5 个);支持手动备份/恢复/下载;备份目录与图片目录均可配置 |
+| 🔐 **三级权限** | 员工(读写)/ 主管(读+写+删)/ 管理员(全部 + 用户管理);**账号可绑定门店,越权访问一律 403**;PBKDF2 密码 + Session Token |
+| 💾 **数据备份** | 启动时 + 每日 0 点自动备份,按**保留个数**清理(默认最新 5 个);支持手动备份/恢复/下载;**备份含全部门店与值班照片**;按门店范围过滤导出 |
 | 🔄 **NAS 同步** | 从 NAS Docker 实例拉取全部数据到本地;解决 WKWebView 跨域问题;支持配置远程地址 |
 | 📋 **App 内复制** | 月度报告复制到剪贴板,Numbers/Excel 自动成表;App 内通过 Swift 桥接写入 .string + .tabularText + .html |
 | 🎨 **UI** | 浅色/深色/跟随系统三档主题;完整移动端响应式;侧栏分组 + 抽屉;弹窗底部 sheet |
 | 📤 **导出** | CSV 导出(自定义列);月报 TSV 复制 |
+
+## 🏪 多门店（0.5.0 起）
+
+单实例跑多家店,一店一套数据与配置,互不干扰:
+
+| 能力 | 说明 |
+|---|---|
+| 数据隔离 | 每店独立目录 `stores/<store_id>/`(抄表/充值/物品/申购/值班/门店配置/**照片**)。门店 ID `[A-Za-z0-9_-]{1,32}`,区分大小写,路径穿越一律拒绝 |
+| 门店管理 | 管理员新增/编辑门店(名称/编码/地址/启停);默认店 `main` 不可删除 |
+| 门店切换器 | 侧栏顶部切换当前门店;总部账号(`all_stores=true`)可见全部,单店员工自动隐藏 |
+| 每店表计与电价 | 表数量/名称/图标/倍率、电价水价、水电倍率**都按店配置**(`stores/<id>/store.json`),改 A 店不影响 B 店 |
+| 门店总览 | 横向对比各店的用电与费用(各店按自己的表集合与电价汇总;合计 = 各行之和) |
+| 用户授权 | 分店员工绑定门店;越权 403、门店不存在 404、**查不到用户记录也 403**(fail-closed——账号被删但会话未过期时绝不回退成"权限还在") |
+| 备份范围 | 备份/恢复/NAS 同步覆盖 `stores/` 子树并按调用方门店范围过滤:分店主管**不能**导出别家门店的数据 |
+
+**单店部署完全不受影响**:只有一个店时界面与改造前一致,只是数据落在 `stores/main/` 下。
+从 0.4.x 升级时布局会**自动迁移**,见下方「升级」。
 
 ## 🚀 快速开始
 
@@ -119,6 +137,24 @@ docker compose pull && docker compose up -d
 # 从 GitHub Releases 下载新版 DMG 覆盖安装即可
 ```
 
+
+### 从 0.4.x 升级到 0.5.x（数据目录布局迁移）
+
+0.5.0 起数据从「数据根目录」搬到「每店一个目录」,升级时自动迁移:
+
+- **首次启动自动迁移**:顶层 `readings.json` / `charges.json` / … 6 个数据文件 + `images/` 复制到 `stores/main/`;
+  **顶层原文件保留原位**作为回滚副本;迁移前自动打一份完整备份
+- **幂等**:用完成标记 `stores/main/.migrated` 判定;中途失败(如磁盘满)下次启动会补齐,不会留下残缺门店
+- **备份失败则不迁移**:保持单店布局继续运行,不会半途而废
+- **回滚**:停服 → 删 `stores/` → 从备份恢复顶层文件 → 用 0.4.x 镜像启动
+- **升级前请先备份数据卷**:
+  ```bash
+  docker run --rm -v "$PWD/data":/data -v "$PWD":/backup alpine \
+    tar czf /backup/meterstats-data-$(date +%Y%m%d).tgz -C /data .
+  ```
+- 升级后**需重新登录一次**(会话存在服务端内存);若「图片目录」设置里还是老的 `/data/images`,
+  建议到「数据管理 → 图片目录」清空 —— 那是全局覆盖项,留着会让所有门店的照片混在同一目录
+
 ## ⚠️ data/ 目录使用注意
 
 `data/`（Docker 挂载路径）或 `MeterStats/.data/`（本地源码运行）是**运行时数据目录**，包含 `readings.json` / `charges.json` / `settings.json` 等业务文件。
@@ -154,6 +190,8 @@ docker compose pull && docker compose up -d
 │   │   ├── duty/                # 值班记录 + 图片上传
 │   │   ├── reports/             # 报表生成
 │   │   ├── backup/              # 备份/恢复/NAS 同步
+│   │   ├── stores/              # 门店:注册表/上下文/迁移/每店表计与电价 ★多门店核心
+│   │   ├── dataimport/          # CSV 导入(按当前店表集合)
 │   │   ├── system/              # 设置/用户/权限/鉴权
 │   │   └── utilities/           # 水电计算
 │   ├── utils/api.py             # send_json / read_body / CORS
@@ -187,7 +225,7 @@ docker compose pull && docker compose up -d
 │   ├── tests.yml                # push/PR → 跑全量单元测试(Python 3.9 + 3.11)
 │   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
-├── tests/                       # 单元测试(788 项)
+├── tests/                       # 单元测试(792 项)
 ├── docs/                        # 架构与设计文档
 │   ├── ARCHITECTURE.md          # 模块/算法/安全模型/接口权限速查
 │   ├── ui-optimization-plan.md  # UI 待办清单
@@ -215,6 +253,13 @@ docker compose pull && docker compose up -d
 | POST | `/api/auth/login` `/api/backup` `/api/restore` `/api/upload` | 鉴权 / 备份 |
 | GET/POST/PUT/DELETE | `/api/admin/users` `/api/admin/meter` `/api/admin/backup-config` | 管理后台 |
 | GET/POST | `/api/proxy/nas-data` `/api/admin/sync-from-nas` | NAS 数据同步 |
+| GET | `/api/stores` `/api/stores/current` `/api/stores/overview` | 门店列表 / 当前门店 / 门店总览(合计) |
+| POST/PUT/DELETE | `/api/stores` `/api/stores/{id}` | 门店增删改(**仅管理员**) |
+| GET | `/api/meters` | 当前门店的表定义与电价(非管理员也可读) |
+
+> 所有业务接口都接受 `?store=<id>` 指定门店(不传 = 用账号的默认门店);越权返回 403。
+> 权威的接口/权限清单见 `MeterStats/routing.py`(`MIN_ROLE_PREFIXES` 是唯一的授权矩阵),
+> 详见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md#接口与权限权威来源在哪)。
 
 ## 🔒 安全
 
@@ -230,7 +275,7 @@ docker compose pull && docker compose up -d
 📐 **架构文档**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 模块清单、关键算法、安全模型、扩展指南、常见坑。
 
 ```bash
-# 单元测试(788 项,约 30 秒;CI 在 push/PR 时跑 Python 3.9 与 3.11 双版本)
+# 单元测试(792 项,约 30 秒;CI 在 push/PR 时跑 Python 3.9 与 3.11 双版本)
 python3 -m unittest discover -s tests -v
 
 # Docker 开发(本地重建镜像)
