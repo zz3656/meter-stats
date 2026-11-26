@@ -22,9 +22,11 @@
 """
 from __future__ import annotations
 
+import contextlib
 import threading
 import types
 from pathlib import Path
+from typing import Iterator
 
 # 默认店(总店)的 ID。历史数据迁移后落到这个名字下。
 DEFAULT_STORE_ID = "main"
@@ -45,6 +47,33 @@ def get_current_store() -> str:
 def clear_current_store() -> None:
     """清空当前门店(单元测试用)。"""
     _ctx.store_id = None
+
+
+@contextlib.contextmanager
+def store_scope(store_id: str) -> Iterator[None]:
+    """临时切到某门店，退出时恢复**原始**值（含「从未设置过」这个状态）。
+
+    用途:总部总览要逐店跑一遍月报(P3)。`report._report_cache_key()` 用的是
+    **当前门店** —— 不切上下文就逐店计算,两家表集合相同的店会命中同一份缓存,
+    把 A 店的数字当成 B 店的,而且不报错。
+
+    ⚠️ 不能用 `get_current_store()` 当"原值"来恢复:它在未设置时返回
+    `DEFAULT_STORE_ID`("main"),拿它恢复会把「从未设置」悄悄改成「已设为 main」,
+    掩盖掉真正的初始化缺失。
+
+    ⚠️ 必须 `finally`:遍历多店时任何一家抛异常,上下文没恢复 →
+    本请求后续所有的读都会落到那家店上(表现为「总览算完之后,页面上
+    的抄表数据变成了别家店的」)。
+    """
+    prev = getattr(_ctx, "store_id", None)
+    set_current_store(store_id)
+    try:
+        yield
+    finally:
+        if prev is None:
+            clear_current_store()
+        else:
+            set_current_store(prev)
 
 
 def app_handler_module() -> types.ModuleType:

@@ -61,7 +61,7 @@ from modules.system.admin_tools_handler import (
     handle_get_migrate_status, handle_post_migrate_water,
 )
 from modules.stores.handler import (
-    handle_get_stores, handle_get_current_store,
+    handle_get_stores, handle_get_current_store, handle_get_stores_overview,
     handle_post_store, handle_put_store, handle_delete_store,
 )
 
@@ -343,9 +343,10 @@ _GET_ROUTES = {
     "/api/meters": handle_get_meters_public,
     "/api/duty": handle_get_duty,
     "/api/proxy/nas-data": handle_get_proxy_nas_data,
-    # 门店管理。/api/stores/current 必须精确登记在前面 ——
-    # 前缀匹配(/api/stores/xxx 命中 /api/stores)会把它当成门店列表。
+    # 门店管理。带路径段的接口必须精确登记在 /api/stores **之前** ——
+    # 前缀匹配(/api/stores/xxx 命中 /api/stores)会把它们当成门店列表。
     "/api/stores/current": handle_get_current_store,
+    "/api/stores/overview": handle_get_stores_overview,
     "/api/stores": handle_get_stores,
 }
 

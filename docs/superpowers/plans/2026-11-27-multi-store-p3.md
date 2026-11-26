@@ -69,13 +69,24 @@
 
 ### Task 1: 后端 —— `GET /api/stores/overview`
 
+> **状态:已完成**(2026-11-27)。新增 `tests/test_store_overview.py` 10 项;
+> 全量 **660** 项全绿;ruff 267 / mypy 793 零新增。
+>
+> 反向验证过(把 `with store_scope(sid)` 换成 `if True:` 不切上下文):
+> `test_identical_table_sets_do_not_share_cache` 与
+> `test_each_store_uses_its_own_tables_and_price` 立刻失败 —— 真实护栏,不是空转。
+>
+> 实施中修正了计划里的一条测试前提:门店闸在**请求开始**时就会按调用方可见范围
+> 设好当前门店,所以「调用前设 s002、调用后仍是 s002」这种断言不成立。
+> 改成断言「总览不会把上下文停在最后遍历的那家店上」(先走一次 /api/stores 取基准值)。
+
 **Files:**
 - Modify: `MeterStats/modules/stores/context.py`
 - Modify: `MeterStats/modules/stores/handler.py`
 - Modify: `MeterStats/routing.py`
 - Create: `tests/test_store_overview.py`
 
-- [ ] **Step 1: 先加 `store_scope` 上下文管理器**
+- [x] **Step 1: 先加 `store_scope` 上下文管理器**
 
 ```python
 @contextlib.contextmanager
@@ -94,7 +105,7 @@ def store_scope(store_id: str):
 ```
 实现要点：保存 `getattr(_ctx, "store_id", None)`，`finally` 里**有值才 set、没值就 del**。
 
-- [ ] **Step 2: 先写失败测试**
+- [x] **Step 2: 先写失败测试**
 
 `tests/test_store_overview.py`（沿用 `tests/test_store_api.py` 的 `StoreApiTestBase`），覆盖：
 
@@ -109,7 +120,7 @@ def store_scope(store_id: str):
 6. **月份校验**：`month=2026-13` / `2026-1` → 400。
 7. **上下文恢复**：调用结束后 `context.get_current_store()` 应回到调用前的值。
 
-- [ ] **Step 3: 实现 handler**
+- [x] **Step 3: 实现 handler**
 
 ```python
 def handle_get_stores_overview(handler: Any) -> None:
@@ -128,18 +139,18 @@ def handle_get_stores_overview(handler: Any) -> None:
 - 单店异常 → `except Exception as e:` 记录 `{"id", "name", "error": str(e)}`，`log()` 一条，继续下一家。
 - 响应形状**严格按规格 §3.5**，额外字段只加 `error`。
 
-- [ ] **Step 4: 注册路由**
+- [x] **Step 4: 注册路由**
 
 放在 `/api/stores/current` 与 `/api/stores` **之前**（前缀匹配：`/api/stores/overview` 会命中 `/api/stores`）。
 
-- [ ] **Step 5: 运行测试**
+- [x] **Step 5: 运行测试**
 
 ```bash
 python3 -m unittest tests.test_store_overview -v
 python3 -m unittest discover -s tests 2>&1 | tail -3
 ```
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add MeterStats/modules/stores/context.py MeterStats/modules/stores/handler.py \

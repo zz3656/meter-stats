@@ -22,8 +22,9 @@ rel_store_scope_check):备份、恢复、NAS 同步这些接口的**载荷里带
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable, List, Optional, Tuple
-from urllib.parse import unquote
+from urllib.parse import parse_qs, unquote, urlparse
 
 from utils import read_body, send_json
 
@@ -293,6 +294,106 @@ def handle_get_stores(handler: Any) -> None:
     # 前端据此决定要不要显示门店切换器 —— 总部账号即使只有 1 家店也要能看到
     # 「当前在哪家店」,所以不能只看 stores 的条数。
     send_json(handler, 200, {"ok": True, "stores": stores, "all_stores": all_stores})
+
+
+# 月份必须严格 YYYY-MM:用 \d{2} 会把 2026-13 放进来,后面 monthrange 直接抛
+_MONTH_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def handle_get_stores_overview(handler: Any) -> None:
+    """GET /api/stores/overview?month=YYYY-MM → 各店月度汇总 + 合计。
+
+    逐店用**自己的**表集合与电价跑一遍月报(P2 已参数化),再横向合并。
+    权限:任意登录用户,但只聚合**调用方有权限**的门店 —— 员工看到自己那家,
+    总部账号看到全部。这些数据本来就在他的可见范围内,不额外加主管闸。
+
+    设计取舍(见 P3 计划):
+    - 汇总只加总 total_kwh / total_cost,**不合并 by_meter** —— 各店表 key 不同,
+      硬合并会得到一个四不像的键集合(每店自己的 by_meter 仍原样返回)
+    - 单店失败不影响整体:那一行带 error,其余照常 ——
+      一家店坏了就整页 500 等于「总部什么都看不到」
+    """
+    qs = parse_qs(urlparse(handler.path).query)
+    month = (qs.get("month", [""])[0] or "").strip()
+    if not _MONTH_RE.match(month):
+        send_json(handler, 400, {"error": "month 参数格式错误,应为 YYYY-MM"})
+        return
+
+    ok, allowed_ids, msg = caller_store_scope(handler)
+    if not ok:
+        send_json(handler, 403, {"error": msg})
+        return
+
+    from modules.stores.context import (
+        current_store_paths,
+        store_scope,
+    )
+    from report import calculate_monthly_report
+    from storage import load_json, log
+
+    try:
+        stores = registry.list_stores()
+    except Exception as e:
+        log(f"[WARN] [overview] 读门店注册表失败: {e}")
+        send_json(handler, 200, {"month": month, "stores": [],
+                                 "total": {"total_kwh": 0.0, "total_cost": 0.0}})
+        return
+
+    if allowed_ids is not None:
+        stores = [s for s in stores if s.get("id") in allowed_ids]
+
+    rows: List[Dict[str, Any]] = []
+    total_kwh = 0.0
+    total_cost = 0.0
+
+    for store in stores:
+        sid = str(store.get("id") or "")
+        name = str(store.get("name") or sid)
+        try:
+            with store_scope(sid):
+                from modules.stores.config import get_report_tables, get_store_prices
+                prices = get_store_prices()
+                tables = get_report_tables()
+                paths = current_store_paths()
+                readings = load_json(paths["readings"], [])
+                charges = load_json(paths["charges"], [])
+                rep = calculate_monthly_report(
+                    readings, charges, month,
+                    tables=tables, price=prices["electricity_price"],
+                )
+                summary = rep["summary"]
+                # 水电按店取(总表/分表/水表是另一套口径)
+                try:
+                    from modules.reports.handler import calc_month_utilities
+                    utils = calc_month_utilities(month, load_json(paths["readings_water"], []))
+                except Exception:
+                    utils = {}
+            rows.append({
+                "id": sid,
+                "name": name,
+                "total_kwh": summary["total_kwh"],
+                "total_cost": summary["total_cost"],
+                "reading_days": summary["reading_days"],
+                "by_meter": summary["by_meter"],
+                "utilities": {
+                    "main_kwh": (utils or {}).get("main_kwh") if isinstance(utils, dict) else None,
+                    "water_usage": (utils or {}).get("water_usage") if isinstance(utils, dict) else None,
+                },
+            })
+            total_kwh += summary["total_kwh"] or 0
+            total_cost += summary["total_cost"] or 0
+        except Exception as e:
+            log(f"[WARN] [overview] 门店 {sid} 汇总失败: {e}")
+            rows.append({"id": sid, "name": name, "error": str(e)})
+
+    send_json(handler, 200, {
+        "month": month,
+        "stores": rows,
+        "total": {
+            "total_kwh": round(total_kwh, 1),
+            "total_cost": round(total_cost, 2),
+        },
+    })
 
 
 def handle_get_current_store(handler: Any) -> None:
