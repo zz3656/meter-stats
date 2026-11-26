@@ -663,6 +663,38 @@ def load_json(path: Path, default=None):
         return default
 
 
+# 影响报表结果的输入文件 —— 写这些文件后必须让月报缓存失效。
+#
+# 以前失效是**每个 handler 自己写一行** `invalidate_report_cache()`
+# (readings / charges / purchases 等共 11 处),问题有两个:
+#   1. 新增一条写路径(或改一个 handler 的内部实现)漏写就是脏读,而症状极难认
+#      —— 报表数字半天不变,重启或等 5 分钟 TTL 过期才"自己好了";
+#   2. 门店配置(store.json 的电价/倍率/表集合)也在其中,`registry` 建店时
+#      写 store.json 那条路径就没接上(它压根没 import report)。
+# 现在收敛到写盘这一层:写这 5 个文件 → 缓存必失效。handler 里那些显式调用
+# 保留着(双保险,且不影响正确性),但**不要**再靠"记得写一行"来保证新鲜度。
+_REPORT_INPUT_NAMES = frozenset({
+    "readings.json",    # 抄表
+    "charges.json",     # 充值
+    "purchases.json",   # 申购(统计卡片用到)
+    "store.json",       # 门店配置:电价 / 水电倍率 / 表集合
+    "settings.json",    # 全局设置(遗留电价配置等)
+})
+
+
+def _invalidate_report_cache_if_needed(filename: str) -> None:
+    """写盘后让月报缓存失效(只对报表输入文件生效,其它模型不折腾)。"""
+    if filename not in _REPORT_INPUT_NAMES:
+        return
+    try:
+        from report import invalidate_report_cache
+        invalidate_report_cache()
+    except Exception:
+        # report 尚未导入成功(首次启动的初始化路径)或存在循环 import 时序问题:
+        # 报表缓存此刻必然还是空的,不清也没关系 —— 绝不能因此让写盘失败。
+        pass
+
+
 def save_json(path: Path, data) -> None:
     """原子写入:先写临时文件,再 rename,防止中途崩溃导致损坏。
 
@@ -680,6 +712,8 @@ def save_json(path: Path, data) -> None:
     finally:
         # 失效缓存 —— 成功与失败都要失效(失败的语义见上面 docstring)
         _cache_invalidate(str(path.resolve()))
+        # 报表缓存同理:写的是报表输入文件就让月报缓存失效(集中在这里,不靠调用方记得)
+        _invalidate_report_cache_if_needed(path.name)
 
 
 def get_lock(model: str) -> threading.Lock:

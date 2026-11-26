@@ -14,7 +14,8 @@
   } catch (e) {}
 })();
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- defer:CDN 慢或挂掉时不再阻塞首屏解析(以前 <head> 里同步加载,登录页也要等它) -->
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;510;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -1513,7 +1514,7 @@
   <script src="js/modules/overview.js"></script>
   <script src="js/modules/storeSwitcher.js"></script>
   <script src="js/nas_sync.js"></script>
-  <script src="admin.js?v=<TIMESTAMP>"></script>
+  <script src="admin.js"></script>
   <script src="js/core/init.js"></script>
   <script src="js/modules/modal_bindings.js"></script>
 </body>

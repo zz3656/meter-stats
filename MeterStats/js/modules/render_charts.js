@@ -309,6 +309,8 @@ function renderTrendChart(readings, charges) {
     { label: LABELS('ac'), data: shownUsage.ac, backgroundColor: COLORS('ac') + 'dd', stack: 's', borderRadius: 3 },
   ];
 
+  // Chart.js 是 defer 加载的:没加载完就跳过制图(否则 ReferenceError 会冒出去)
+  if (typeof Chart === 'undefined') return;
   if (trendChart) trendChart.destroy();
   trendChart = new Chart(ctx, {
     type: 'bar',

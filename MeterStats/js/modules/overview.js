@@ -116,6 +116,8 @@
     }
     if (chartWrap) chartWrap.style.display = '';
 
+    // Chart.js 是 defer 加载的,没加载完就不画(图表非关键,别掐断页面渲染)
+    if (typeof Chart === 'undefined') return;
     if (_chart && typeof _chart.destroy === 'function') _chart.destroy();
     _chart = new Chart(cv.getContext('2d'), {
       type: 'bar',

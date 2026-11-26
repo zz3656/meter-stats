@@ -163,3 +163,47 @@ class TestBaseHandlerPhantomData(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReportCacheInvalidation(unittest.TestCase):
+    """写盘即失效:报表缓存的新鲜度不再依赖「每个 handler 记得写一行」。
+
+    以前 11 处 handler 各写一行 invalidate_report_cache();漏一处就是脏读,
+    典型症状是「改完电表倍率/录完抄表,报表数字半天不变,重启才好」。
+    现在收敛在 storage.save_json,这里锁死「写这 5 个文件必然失效、写别的不会」。
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.dir = Path(self.tmp.name)
+        import report as _report
+        self.report = _report
+        self.report.invalidate_report_cache()
+
+    def _seed_cache(self) -> None:
+        self.report._cache_report("2026-06", {"total": 71226.1})
+
+    def test_readings_write_clears_cache(self) -> None:
+        self._seed_cache()
+        self.assertTrue(self.report._report_cache)
+        storage.save_json(self.dir / "readings.json", [{"date": "2026-06-01"}])
+        self.assertEqual(self.report._report_cache, {}, "抄表写盘后月报缓存还留着")
+
+    def test_charges_write_clears_cache(self) -> None:
+        self._seed_cache()
+        storage.save_json(self.dir / "charges.json", [])
+        self.assertEqual(self.report._report_cache, {})
+
+    def test_store_config_write_clears_cache(self) -> None:
+        """改电价/倍率/表集合后,报表必须立刻用新口径(这条以前是断的)。"""
+        self._seed_cache()
+        storage.save_json(self.dir / "store.json", {"config": {"electricity_price": 1.2}})
+        self.assertEqual(self.report._report_cache, {})
+
+    def test_unrelated_model_does_not_clear_cache(self) -> None:
+        """物品/值班这类与报表无关的写入不该把缓存打掉(避免无谓重算)。"""
+        self._seed_cache()
+        storage.save_json(self.dir / "items.json", [{"id": "1"}])
+        storage.save_json(self.dir / "duty.json", [])
+        self.assertTrue(self.report._report_cache, "无关模型写盘把报表缓存清了")

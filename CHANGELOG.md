@@ -5,7 +5,7 @@
 ## [未发布]
 
 **备份 / 恢复加固轮(A 批止血)。** 全部是「坏了但没人发现」的既存缺陷,
-不是新功能;业务口径零改动,全量 **774** 项单测通过(A 批新增 21 项、B 批新增 21 项)。
+不是新功能;业务口径零改动,全量 **782** 项单测通过(A/B/C 三批共新增 49 项)。
 
 ### 修复
 
@@ -71,6 +71,37 @@
   还有 6 处 `|| 50` / `|| 40` 字面量兜底(改成 ×100 的门店会看到「总表 ×50」)。
   现在一律跟 `window.METER_KEYS` / `meterValue()` / `MAIN_METER_MULT`·`SUB_METER_MULT` 走,
   并有静态护栏禁止字面量倍率兜底
+
+### 工程卫生
+
+- **删掉 21 个零引用函数**:`js/shared/toast.js` 349 → 113 行(12 个 `datamgmt*` 弹窗/
+  base64/自动备份开关死函数 —— 那套弹窗早被独立页面取代,`index.html` 里连对应节点都没有),
+  `admin.js` 1715 → 1489 行(9 个死函数 + `#datamgmt-backup-list`/`#datamgmt-backup-retention`
+  死分支)。死代码不是按"看着像没用"删的:用**引用可达性**分析(根 = 顶层代码 + 别的文件 +
+  `index.html` 的 onclick),传递闭包之外的才动
+- **报表缓存失效收敛到写盘层**:以前 11 处 handler 各自写一行 `invalidate_report_cache()`,
+  漏一处就是脏读(症状:改完电价/录完抄表报表数字不变,等 5 分钟 TTL 才"自己好"),
+  而 `registry` 建店写 `store.json` 那条路根本没接上。现在 `storage.save_json()` 对
+  `readings/charges/purchases/store/settings.json` 写盘即失效,handler 里的显式调用保留作双保险
+- **CI 终于跑测试了**:新增 `.github/workflows/tests.yml`,push/PR 上跑 Python **3.9 与 3.11**
+  双版本的 `compileall` + 全量 `unittest` + `node --check`。在此之前全量测试**从来没在 CI 跑过**
+  —— 那三个 workflow 只打包 DMG 和推镜像,"测试绿不绿"全靠本地自觉
+- **静态资源真的能缓存了**(首屏 37 个请求 → 第二次起全部命中):
+  - 修 `inject_version_to_html`:`utils/api.py` 里那份是对的,但 `app_handler` 里另有一段
+    自己实现的注入逻辑(只替换 `<TIMESTAMP>` 占位符、普通路径**不加** `?v=`),实际生效的是它
+    —— 所以 30 多个 JS 里只有 `admin.js` 拿到版本号,其余全是无版本 URL + `no-store`,
+    每次刷新重下 ~620KB
+  - 现在本地资源统一注入 `?v=<内容哈希>`,`index.html` 保持 `no-store`;
+    带版本号的静态资源给 `public, max-age=31536000, immutable`(内容一改 URL 就变,
+    不会出现「CDN 糊住旧代码」)
+- **Chart.js 改 `defer`**,不再阻塞首屏解析(以前 CDN 慢,登录页也要等它);配套:
+  - 5 处 `new Chart(...)` 与 `Chart.defaults` 访问都加「Chart 未就绪就跳过」守卫,
+    CDN 挂掉只是没图,不会把后续渲染一起掐断
+  - 加有限次轮询(100ms × 100),Chart 到位后补画首屏图表 —— 否则 defer 会让
+    「首屏第一次渲染时 Chart 还没到」变成「首屏永远没有图」
+- **`_yearlyChart` 死变量**:`accessibility.js` 读的是一个**从不赋值**的 `var _yearlyChart`,
+  真实例在 `reports.js` 里叫 `window._yearlyBarChart` → 「切换深色/大字模式后年度柱图重排」
+  这段保修代码从来没生效过
 
 ### 新增
 

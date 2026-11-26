@@ -53,6 +53,17 @@ def _status(port: int, path: str) -> int:
         return -1
 
 
+def _fetch(port: int, path: str):
+    """返回 (status, headers dict, body bytes);失败返回 (-1, {}, b"")。"""
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:%d%s" % (port, path), timeout=5) as r:
+            return int(r.status), dict(r.headers), r.read()
+    except urllib.error.HTTPError as e:
+        return int(e.code), dict(e.headers), b""
+    except Exception:
+        return -1, {}, b""
+
+
 class TestSourceGuard(unittest.TestCase):
     def setUp(self) -> None:
         self.src = APP_HANDLER_PY.read_text(encoding="utf-8")
@@ -139,6 +150,44 @@ class TestLiveServing(unittest.TestCase):
     def test_config_and_caches_not_served(self) -> None:
         for path in ("/settings.json", "/audit.json", "/.gitignore"):
             self.assertEqual(_status(self.port, path), 404, "%s 仍可访问" % path)
+
+    def test_assets_are_versioned_and_cacheable(self) -> None:
+        """index.html 里的本地资源必须带 ?v=<内容哈希>,且带号的可长缓存。
+
+        以前只有 admin.js 拿到了版本号(那段注入逻辑只替换 <TIMESTAMP> 占位符,
+        对普通路径直接原样返回),其余 30 多个文件既不版本化又被 no-store ——
+        每次刷新重下 ~620KB / 37 个请求。
+        """
+        status, _headers, body = _fetch(self.port, "/")
+        self.assertEqual(status, 200)
+        html = body.decode("utf-8")
+        import re as _re
+        local = [
+            ref for ref in _re.findall(r'(?:src|href)="([^"]+)"', html)
+            if not ref.startswith(("http://", "https://", "//", "#", "data:"))
+        ]
+        self.assertGreater(len(local), 30, "index.html 的本地资源数量异常")
+        unversioned = [ref for ref in local if "?v=" not in ref]
+        self.assertEqual(unversioned, [], "这些本地资源没带版本号,无法长缓存")
+
+        # 带版本号的 JS:一年 + immutable
+        js_ref = [r for r in local if ".js?v=" in r][0]
+        status, headers, _ = _fetch(self.port, "/" + js_ref)
+        self.assertEqual(status, 200)
+        cc = headers.get("Cache-Control", "")
+        self.assertIn("immutable", cc, "带版本号的 JS 应当可长缓存,实际: %r" % cc)
+
+    def test_index_html_never_cached(self) -> None:
+        """index.html 自己绝不能缓存:它带着当前的版本号引用。"""
+        status, headers, _ = _fetch(self.port, "/")
+        self.assertEqual(status, 200)
+        self.assertIn("no-store", headers.get("Cache-Control", ""))
+
+    def test_unversioned_asset_not_cached(self) -> None:
+        """不带 ?v= 的静态资源维持 no-store(兜底,正常不会走到)。"""
+        status, headers, _ = _fetch(self.port, "/js/core/api.js")
+        self.assertEqual(status, 200)
+        self.assertIn("no-store", headers.get("Cache-Control", ""))
 
     def test_frontend_assets_still_served(self) -> None:
         """收口不能收过头:页面、脚本、样式、图片必须照常。"""

@@ -403,6 +403,9 @@ function renderYearlyResult(yearData) {
 function drawYearlyBarChart(yearData) {
     var cv = document.getElementById('chart-yearly-bar');
     if (!cv) return;
+    // Chart.js 现在是 defer 加载的:CDN 慢或挂掉时这里可能还没 Chart。
+    // 有图没图画不出来都没关系,但**不能让异常冒出去**把后续渲染一起掐断。
+    if (typeof Chart === 'undefined') return;
     var KEYS = _reportMeterKeys();
     var labels = yearData.months.map(function(m) { return String(m.month).slice(5) + '月'; });
     var datasets = KEYS.map(function(k) {

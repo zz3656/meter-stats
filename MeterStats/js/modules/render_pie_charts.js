@@ -33,6 +33,9 @@ function calcMonthPie(monthReadings, charges) {
 function drawPieChart(canvasId, data, setChart) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return;
+  // Chart.js 现在是 defer 加载的:CDN 慢或挂掉时这里可能还没 Chart。
+  // 有图没图画不出来都没关系,但**不能让异常冒出去**把后续渲染一起掐断。
+  if (typeof Chart === 'undefined') return;
   const ctx = canvas.getContext('2d');
   const labels = (window.METER_KEYS || []).map((k, i) => {
     const pct = data.total > 0 ? (data.usage[i] / data.total * 100).toFixed(1) : 0;

@@ -35,16 +35,48 @@ function toggleAccessibility() {
 
 // 重新渲染图表(颜色可能受影响)
 function renderCharts() {
+  // Chart.js 是 defer 加载的:CDN 没回来时这里没有任何图表可调,直接跳过
+  if (typeof Chart === 'undefined') return;
   const isDark = getEffectiveTheme() === 'dark';
   Chart.defaults.color = isDark ? '#6b7280' : '#7a818c';
   Chart.defaults.borderColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)';
   renderTrendChart(CURRENT_READINGS, CURRENT_CHARGES);
   // 当前可见的 section 触发对应的占比
   triggerVisiblePie();
-  if (_yearlyChart) {
-    setTimeout(() => _yearlyChart.resize(), 60);
+  // ⚠️ 实例叫 window._yearlyBarChart(reports.js 里创建),不是 _yearlyChart ——
+  //    本文件原来读的是一个**从不赋值**的 `var _yearlyChart = null`,
+  //    于是「切换深色/大字模式后年度柱图重排」这段保修代码从来没生效过。
+  if (window._yearlyBarChart) {
+    setTimeout(() => window._yearlyBarChart.resize(), 60);
   }
 }
+
+/**
+ * Chart.js 现在用 `defer` 加载(不再阻塞首屏解析)。
+ *
+ * 副作用:本文件的绘图函数在本文件执行时可能还看不到 `Chart`(defer 脚本要等
+ * HTML 解析完才跑),那些函数会主动跳过而不是抛错 —— 但"跳过"不等于稍后补画,
+ * 所以这里守一个有限次轮询:Chart 一到位就补画一次首屏图表。
+ *
+ * 为什么用轮询而不是 DOMContentLoaded:defer 脚本在 DOMContentLoaded **之前**执行,
+ * 但顺序由下载完成时间决定,监听事件可能与 Chart 到位错开。轮询 100ms × 100 次
+ * (=10 秒)足够覆盖慢网络,超时就当 CDN 挂了,保持无图(和从前一样)。
+ */
+(function waitForChartJs() {
+  // 定时器在最小测试沙箱里可能不存在 —— 缺了就不轮询,别让整个文件加载失败
+  if (typeof setInterval !== 'function' || typeof clearInterval !== 'function') return;
+  var tries = 0;
+  function done() {
+    if (typeof renderCharts === 'function') {
+      try { renderCharts(); } catch (e) { /* 图表非关键,失败不影响页面 */ }
+    }
+  }
+  if (typeof Chart !== 'undefined') { done(); return; }
+  var timer = setInterval(function () {
+    if (typeof Chart !== 'undefined') { clearInterval(timer); done(); return; }
+    if (++tries >= 100) clearInterval(timer);
+  }, 100);
+})();
 
 // 当前可见 section 的占比饼图(每日/月度)
 function triggerVisiblePie() {
@@ -210,7 +242,6 @@ const STORAGE_KEY_READINGS = 'meter_readings_v1';
 const STORAGE_KEY_CHARGES = 'meter_charges_v1';
 
 // 年度汇总图表实例（renderCharts 里 resize 用，由报表模块赋值）
-var _yearlyChart = null;
 
 async function fetchItems() {
   try { const data = await Api.items.list(); CURRENT_ITEMS = Array.isArray(data) ? data : (data.data || []); return CURRENT_ITEMS; }

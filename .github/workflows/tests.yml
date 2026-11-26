@@ -1,0 +1,64 @@
+name: Tests
+
+# 为什么要有这个 workflow:在此之前,全量单元测试**从来没在 CI 里跑过** ——
+# 三个 workflow 只负责打包 DMG 和推 Docker 镜像,"测试是否通过"完全靠开发者在本地
+# 记得敲一句 `python3 -m unittest discover -s tests`。B 批修的那些缺陷
+# (备份下载恒 400、主管能读全站备份清单、同名全局函数互相覆盖)正是这一空档的产物:
+# 它们都不是"改坏的那天"发现的,而是很久之后被人工翻出来的。
+#
+# 这个 workflow 只做一件事:把本地那套检查原样跑一遍。
+# 不装任何 Python 依赖(项目零 pip 依赖),Node 只用于 `node --check`。
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".gitignore"
+      - "docs/**"
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unittest:
+    name: 测试 (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 = AGENTS.md 声明的最低支持版本;3.11 = Docker 镜像 (python:3.11-slim) 的版本。
+        # 两个都跑:防止「本地 3.12 能过、容器里 3.11 炸」这类部署事故。
+        python-version: ["3.9", "3.11"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: 语法自检
+        run: python -m compileall -q MeterStats tests
+
+      - name: JS 语法检查
+        run: |
+          fail=0
+          for f in MeterStats/admin.js $(find MeterStats/js -name '*.js'); do
+            node --check "$f" || { echo "::error file=$f::语法错误"; fail=1; }
+          done
+          exit $fail
+
+      - name: 单元测试
+        run: python -m unittest discover -s tests -v

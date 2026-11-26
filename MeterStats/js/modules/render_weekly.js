@@ -106,7 +106,8 @@ function loadWeeklyReport() {
   if (chartWrap) {
     chartWrap.style.display = '';
     const cv = document.getElementById('chart-weekly-bar');
-    if (cv) {
+    // Chart.js 是 defer 加载的,没加载完就跳过制图(不能让异常掐断后续渲染)
+    if (cv && typeof Chart !== 'undefined') {
       if (_weeklyChart) { _weeklyChart.destroy(); _weeklyChart = null; }
       _weeklyChart = new Chart(cv.getContext('2d'), {
         type: 'bar',

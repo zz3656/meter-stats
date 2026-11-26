@@ -52,7 +52,8 @@ function syncStatusBarVisibility(hasData) {
 /**
  * section 显示后的收尾工作：图表重建 + 进入页面时按需加载数据。
  *
- * ⚠️ 图表实例在各模块里用顶层 `let` 声明（trendChart / monthlyPieChart / _yearlyChart），
+ * ⚠️ 图表实例在各模块里用顶层 `let`/`window.*` 声明（trendChart / monthlyPieChart /
+ *    window._yearlyBarChart），
  * 顶层 let 是全局词法绑定、**不会挂到 window 上**，所以不能用 window[name] 探测，
  * 必须用裸标识符 + typeof 判断。
  */

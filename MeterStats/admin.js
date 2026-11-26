@@ -207,24 +207,8 @@ function doLogout() {
   clearAuth();
 }
 
-// ===== 后台管理弹窗 =====
-function openAdminPanel() {
-  // 未登录 → 先弹窗登录
-  if (!ADMIN_TOKEN) {
-    document.getElementById('login-page').style.display = 'flex';
-    return;
-  }
-  // 已登录 → 打开用户管理独立页面
-  switchSettingsPage('users');
-}
-
 // 弹窗已删除，不再需要关闭
 function closeAdminPanel() {}
-
-// 切换后台页面（独立section）
-function switchAdminPage(page) {
-  switchSettingsPage(page);
-}
 
 // ===== 用户管理 =====
 
@@ -654,41 +638,6 @@ function loadBackupDirConfig() {
     }).catch(function() {});
 }
 
-// 选择备份目录
-async function setBackupDir() {
-  const dir = await adminPickBackupDir();
-  if (!dir) {
-    showToast('未选择目录', 'info');
-    return;
-  }
-  try {
-    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: dir });
-    if (!res.ok) {
-      showToast('保存失败: ' + (res.error || '未知错误'), 'error');
-      return;
-    }
-    showToast('✅ 备份目录已更新', 'success');
-    loadBackupDirConfig();
-  } catch (e) {
-    showToast('保存失败: ' + e.message, 'error');
-  }
-}
-
-// 恢复默认备份目录
-async function resetBackupDir() {
-  try {
-    const res = await api('PUT', '/api/admin/backup-config', { backup_dir: null });
-    if (!res.ok) {
-      showToast('保存失败: ' + (res.error || '未知错误'), 'error');
-      return;
-    }
-    showToast('✅ 已恢复默认备份目录', 'success');
-    loadBackupDirConfig();
-  } catch (e) {
-    showToast('保存失败: ' + e.message, 'error');
-  }
-}
-
 function loadBackupStatus() {
   Api.admin.backupStatus().then(function(res) {
       const cb = document.getElementById('admin-auto-backup-toggle');
@@ -708,8 +657,7 @@ function loadBackupStatus() {
       const retention = res.retention_count || 5;
       const adminRet = document.getElementById('admin-backup-retention');
       if (adminRet) adminRet.value = retention;
-      const dmRet = document.getElementById('datamgmt-backup-retention');
-      if (dmRet) dmRet.value = retention;
+      // (原来还回填 #datamgmt-backup-retention —— 那个节点不存在,已删)
       // 加载备份目录配置
       loadBackupDirConfig();
       // 渲染备份列表
@@ -719,27 +667,6 @@ function loadBackupStatus() {
 
 function loadBackupList() {
   loadBackupStatus();
-}
-
-// 保存备份保留数量
-function saveBackupRetention() {
-  const val = parseInt(document.getElementById('admin-backup-retention').value || document.getElementById('datamgmt-backup-retention').value, 10);
-  if (!val || val < 1) {
-    showAlert('保留个数必须 ≥ 1', 'error');
-    return;
-  }
-  Api.admin.setBackupRetention(val).then(function(res) {
-    if (!res.ok) {
-      showAlert('保存失败: ' + (res.error || '未知错误'), 'error');
-      return;
-    }
-    showAlert('已保存: 保留最新 ' + val + ' 个', 'success');
-    // 同步更新两个输入框
-    const adminRet = document.getElementById('admin-backup-retention');
-    if (adminRet) adminRet.value = val;
-    const dmRet = document.getElementById('datamgmt-backup-retention');
-    if (dmRet) dmRet.value = val;
-  }).catch(e => showAlert('保存失败: ' + e.message, 'error'));
 }
 
 function backupTypeTag(b) {
@@ -780,33 +707,9 @@ function renderBackupList(backups) {
       adminList.innerHTML = html;
     }
   }
-  // 渲染数据管理弹窗的备份列表
-  const dmList = document.getElementById('datamgmt-backup-list');
-  if (dmList) {
-    if (!backups || backups.length === 0) {
-      dmList.innerHTML = '暂无备份';
-    } else {
-      let html = '';
-      backups.forEach(b => {
-        const sizeStr = formatBytes(b.total_size || 0);
-        const isZip = b.format === 'zip' || b.zip_name;
-        const fmtLabel = b.format === 'dir' ? '（旧格式）' : '';
-        html += `<div class="backup-item">
-          <div>
-            <span class="b-name">${b.name}</span>
-            ${backupTypeTag(b)}
-            <span class="b-meta">${fmtLabel}${b.file_count} 文件 · ${sizeStr}</span>
-          </div>
-          <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : ''}
-            <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
-          </div>
-        </div>`;
-      });
-      dmList.innerHTML = html;
-    }
-  }
+  // 注:这里原来还有一段「渲染数据管理弹窗备份列表」(#datamgmt-backup-list)的分支。
+  //    那个弹窗早改成独立页面了,index.html 里 `datamgmt` 出现 0 次 →
+  //    getElementById 永远是 null,整段是死代码。已删(2026-11 C 批)。
 }
 
 function formatBytes(bytes) {
@@ -901,107 +804,6 @@ async function restoreBackup(zipName) {
   }
 }
 
-// 从备份列表恢复（下载 ZIP 到本地后恢复，保留原函数用于向后兼容）
-async function adminRestoreFromZip(zipName) {
-  // 先下载到本地
-  showAlert('正在下载备份文件…', 'info');
-  const token = currentAuthToken();
-  const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
-
-  const btn = document.querySelector('#admin-page-data button[onclick^="adminRestore"]');
-  const original = btn ? btn.textContent : '恢复数据';
-  if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      showAlert('下载失败', 'error');
-      return;
-    }
-    const blob = await response.blob();
-    const file = new File([blob], zipName, { type: 'application/zip' });
-
-    // 确认恢复
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认恢复数据？',
-      body: `将从 <b>${zipName}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
-      confirmText: '确认恢复',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) return;
-
-    // 上传并恢复
-      const res = await Api.adminRestore.upload(file);
-      const data = await res;
-
-      if (!data.ok) {
-        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-        return;
-      }
-
-      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-      closeAdminPanel();
-      if (window.renderAll) window.renderAll();
-    } catch (e) {
-      showAlert('恢复失败: ' + e.message, 'error');
-  } finally {
-    if (btn) { btn.textContent = original; btn.disabled = false; }
-  }
-}
-
-// 数据管理弹窗中从备份列表恢复
-async function datamgmtRestoreFromZip(zipName) {
-  showAlert('正在下载备份文件…', 'info');
-  const token = currentAuthToken();
-  const url = `/api/admin/backup-download?zip_name=${encodeURIComponent(zipName)}${token ? '&token=' + encodeURIComponent(token) : ''}`;
-
-  const btn = document.getElementById('datamgmt-restore-btn');
-  const original = btn ? btn.textContent : '恢复数据';
-  if (btn) { btn.textContent = '⏳ 恢复中…'; btn.disabled = true; }
-
-  try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      showAlert('下载失败', 'error');
-      return;
-    }
-    const blob = await response.blob();
-    const file = new File([blob], zipName, { type: 'application/zip' });
-
-    const ok = await showModal({
-      icon: '⚠️',
-      iconKind: 'warn',
-      title: '确认恢复数据？',
-      body: `将从 <b>${zipName}</b> 恢复数据？<br>恢复前系统会自动备份当前数据，可随时回滚。`,
-      confirmText: '确认恢复',
-      cancelText: '取消',
-      confirmKind: 'danger',
-    });
-    if (!ok) return;
-
-    try {
-      const res = await Api.adminRestore.upload(file);
-      const data = await res;
-
-      if (!data.ok) {
-        showAlert('恢复失败: ' + (data.error || '未知错误'), 'error');
-        return;
-      }
-
-      showAlert('✅ 已恢复 ' + data.restored.length + ' 个文件', 'success');
-      closeAdminPanel();
-      if (window.renderAll) window.renderAll();
-    } catch (e) {
-      showAlert('恢复失败: ' + e.message, 'error');
-    }
-  } finally {
-    if (btn) { btn.textContent = original; btn.disabled = false; }
-  }
-}
-
 // 备份/恢复 (浏览器环境用 app.js 中的 browser file picker)
 async function adminPickBackupDir() {
   return new Promise(resolve => {
@@ -1013,26 +815,6 @@ async function adminPickBackupDir() {
       resolve(dir);
     };
     window.webkit.messageHandlers.pickBackupDir.postMessage('pick');
-  });
-}
-
-// 浏览器环境: 选择文件上传
-function browserPickFiles() {
-  return new Promise(resolve => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.json';
-    input.onchange = async () => {
-      const files = Array.from(input.files);
-      if (!files.length) { resolve(null); return; }
-      const fileContents = {};
-      for (const file of files) {
-        fileContents[file.name] = await file.text();
-      }
-      resolve({ files: fileContents, _browser: true });
-    };
-    input.click();
   });
 }
 
@@ -1661,14 +1443,6 @@ function submitTopupApplication() {
   }).catch(function(err) {
     showAlert('提交失败: ' + (err.message || err), 'error');
   });
-}
-
-// Tab 切换 (从旧 forms_tab.js 迁移)
-function switchReadingTab(tab) {
-  var tabs = document.querySelectorAll('#reading-add-tabs .tab-btn');
-  tabs.forEach(function(btn) { btn.classList.toggle('active', btn.dataset.tab === tab); });
-  var panels = document.querySelectorAll('#reading-add-modal-backdrop .tab-panel');
-  panels.forEach(function(p) { p.style.display = (p.dataset.panel === tab ? '' : 'none'); });
 }
 
 // 水电录入侧栏/弹窗共用提交函数 (从旧 forms_submit.js 迁移)

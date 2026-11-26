@@ -123,9 +123,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_static(self, method: str):
         path = self.path
-        # 去掉 query string(用于 ?v=<token> 绕过 CDN 缓存)
+        query = ""
+        # 拆出 query:它决定这个资源能不能长缓存(带 ?v=<内容哈希> 才敢 immutable)
         if "?" in path:
-            path = path.split("?", 1)[0]
+            path, _, query = path.partition("?")
+        has_version = "v=" in query
 
         if path == "/" or path == "":
             path = "/index.html"
@@ -165,28 +167,18 @@ class Handler(BaseHTTPRequestHandler):
             mime = "image/svg+xml; charset=utf-8"
 
         is_html = file_path.suffix == ".html"
-        is_js_or_css = file_path.suffix in (".js", ".css")
 
         if is_html:
-            # index.html 走动态注入:把启动时计算的 ?v=<token> 加到 <script>/<link>
-            # 这样 CDN(如 Cloudflare)缓存的旧 app.js 永远用不到,新版本每次都能加载。
+            # index.html 走动态注入:把启动时算的 `?v=<内容哈希>` 加到本地
+            # <script>/<link> 上。URL 随内容变 → 静态资源可以放心长缓存。
+            #
+            # ⚠️ 这里原来有一段**自己实现**的注入逻辑,而它只替换 <TIMESTAMP> 占位符、
+            #    给普通路径**不加** ?v=(src 里没有 "?" 时直接原样返回)。于是 30 个
+            #    JS 文件里只有 admin.js 拿到版本号,其余全是无版本 URL + no-store
+            #    —— 每次刷新重下 ~620KB/37 个请求。上面 import 的
+            #    `_inject_version_to_html`(实现是对的)一直没被调用。
             html = file_path.read_text(encoding="utf-8")
-            if STATIC_VERSION_TOKEN:
-                import re
-                def _add_v(match):
-                    attr = match.group(1)
-                    quote = match.group(2)
-                    src = match.group(3)
-                    if src.startswith(("https://", "http://", "//")):
-                        return match.group(0)
-                    if "?" in src and "<TIMESTAMP>" not in src:
-                        return match.group(0)
-                    # 处理 <TIMESTAMP> 占位符：替换为当前时间戳
-                    if "<TIMESTAMP>" in src:
-                        import time
-                        src = src.replace("<TIMESTAMP>", str(int(time.time())))
-                    return f'{attr}={quote}{src}{quote}'
-                html = re.sub(r'(src|href)=(["\'])([^"\']+)\2', _add_v, html)
+            html = _inject_version_to_html(html, STATIC_VERSION_TOKEN)
             body = html.encode("utf-8")
         else:
             body = file_path.read_bytes()
@@ -198,9 +190,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("X-Frame-Options", "DENY")
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-XSS-Protection", "1; mode=block")
-        # ⚠️ 关键: js/css/html 都不要缓存(避免 CDN/浏览器缓存旧版代码)
-        # Cloudflare 默认会缓存这些静态文件,即使我们没有显式声明 cache-control。
-        if is_html or is_js_or_css:
+        # 缓存策略:
+        # - index.html:**永不缓存**(它带着当前的 ?v=,缓存了就等于缓存了旧版引用)
+        # - 带 ?v=<内容哈希> 的静态资源:**一年 + immutable** —— URL 随内容变,
+        #   内容一改 URL 就变,不会出现「CDN 糊住旧代码」。首屏 37 个请求从
+        #   「每次全量重下」变成「第二次起 0 请求」。
+        # - 不带版本号的静态资源:维持 no-store(兜底,正常不会走到)
+        if is_html:
+            self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
+            self.send_header("Pragma", "no-cache")
+            self.send_header("Expires", "0")
+        elif has_version:
+            self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+        else:
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.send_header("Pragma", "no-cache")
             self.send_header("Expires", "0")

@@ -475,7 +475,12 @@ class TestStoreSwitcherWiring(unittest.TestCase):
         idx_ctx = html.find("js/core/storeContext.js")
         idx_api = html.find("js/core/api.js")
         idx_switch = html.find("js/modules/storeSwitcher.js")
-        idx_admin = html.find("admin.js?v=")
+        # 不再依赖「admin.js?v=<TIMESTAMP>」这个历史占位符:
+        # 版本号现在由服务端统一注入(utils.api.inject_version_to_html),
+        # index.html 里写的就是普通的 admin.js。
+        idx_admin = html.find('src="admin.js"')
+        if idx_admin < 0:
+            idx_admin = html.find("admin.js")
         self.assertTrue(idx_ctx >= 0 and idx_api >= 0, "缺少 storeContext.js / api.js")
         self.assertTrue(idx_switch >= 0 and idx_admin >= 0, "缺少 storeSwitcher.js / admin.js")
         self.assertLess(idx_ctx, idx_api, "storeContext.js 必须排在 api.js 之前")

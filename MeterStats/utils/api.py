@@ -151,26 +151,39 @@ ZIP_MAX_FILE_COUNT = 5000
 
 
 def inject_version_to_html(html: str, token: str) -> str:
-    """在 index.html 的 <script>/<link> 标签里加 ?v=<TOKEN>,破坏 CDN/浏览器缓存。
+    """给 index.html 里**本地**的 <script src> / <link href> 加 `?v=<TOKEN>`。
 
-    重要场景:容器重启后,如果 CDN 缓存了旧 app.js,用户浏览器
-    会一直拿到旧代码导致 bug 修不好。注入版本 token 后,index.html 引用变成
-    app.js?v=abc123,URL 变化 → 浏览器/CDN 必须回源拉新文件。
+    为什么必须加:token 是启动时按 JS/CSS/HTML 内容算的哈希,内容一变 URL 就变,
+    所以静态资源可以放心用 `immutable` 长缓存(见 app_handler 的 Cache-Control);
+    CDN/浏览器也不会拿旧代码糊住用户(以前容器重启后 CDN 缓存旧 app.js,
+    修好的 bug 在用户那边"没修好")。
+
+    三种情况分别处理:
+    - 外链(https:// / http:// / //)→ 不动,那是 CDN 的事;
+    - URL 里已有 `?v=<TIMESTAMP>` 占位符 → 换成真实 token(老写法,index.html 里
+      历史遗留;占位符原样发给浏览器会让 URL 永远不变);
+    - 其它本地 URL 且不带 query → 追加 `?v=<token>`。
     """
     if not token:
         return html
     import re
+
     def _add_v(match):
         full = match.group(0)
         attr = match.group(1)   # src / href
         quote = match.group(2)  # " / '
         src = match.group(3)
-        if src.startswith(("https://", "http://", "//")):
+        # 外链 / 锚点 / 伪协议一律不动(给 "#" 或 "javascript:" 加 ?v= 会把它们打断)
+        if src.startswith(("https://", "http://", "//", "#", "data:", "blob:", "javascript:", "mailto:")):
             return full
+        if "<TIMESTAMP>" in src:
+            return f'{attr}={quote}{src.replace("<TIMESTAMP>", token)}{quote}'
         if "?" in src:
             return full
         return f'{attr}={quote}{src}?v={token}{quote}'
-    return re.sub(r'(src|href)=("[^"]+"|' + r"'[^']+')" , _add_v, html)
+
+    # 三个捕获组:属性名、引号、URL —— 反向引用 \2 保证引号配对
+    return re.sub(r"""(src|href)=(["'])([^"']+)\2""", _add_v, html)
 
 
 def _validate_zip_safely(zip_path, extract_to, max_size: int = ZIP_MAX_DECOMPRESSED_SIZE):
