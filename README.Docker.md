@@ -118,9 +118,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.3
+## 📦 工程部管理系统 v0.5.4
 
-提交 `d711433`
+提交 `2530478`
 
 **升级 Docker 容器**:
 ```bash
@@ -129,35 +129,25 @@ docker compose up -d
 ```
 
 
-**「从 NAS 同步」在多门店布局下写进了没人读的位置 —— 界面报成功、数据没变化。**
+### 清理
 
-### 修复
-
-- **NAS 同步不再把数据写进孤儿路径**:本地已是 0.5.x 多门店布局时,应用读的是
-  `stores/<id>/`,而 NAS 上多半还跑着 0.4.x 单店布局(`/api/admin/data-files` 回的是
-  顶层文件名)。同步接口原来把顶层 `readings.json` 原样写进数据根目录 ——
-  文件确实写了,但**没有任何代码读它**,用户看到的是「同步成功,数据一点没变」。
-  (实测发生在 2026-11-27 凌晨:同步一次后顶层 readings.json 多了当天的抄表记录,
-  而 `stores/main/readings.json` 一个字节没动。)
-  现在同步的落盘**直接复用恢复路径**的 `_write_restore_files`:
-  顶层文件桥接到 `stores/<main>/`(顶层仍留一份可回滚副本)、`settings.json` 合并
-  (保留本机 NAS 凭据与备份目录)、响应里明确写出「已桥接到 stores/main/」
-- 缓存失效从「逐个文件」改为整盘 `_cache_clear()` —— 同步是直接写文件、绕过
-  `save_json` 的,漏掉一个路径就是读到旧内容;文件缓存命中率本来就不高,清干净最稳
-
-### 新增测试
-
-- `tests/test_nas_sync.py::TestSyncBridgesToStoreDir`(3 项):顶层载荷必须落进
-  `stores/main/`、顶层保留回滚副本、显式 `stores/<id>/` 载荷不重复桥接
+- **删掉 39 个零引用的 CSS class**(style.css 3500 → 3116 行,`!important` 191 → 183)。
+  判据是机械可验的:先把注释等长抹白(注释里带分号,直接解析会把注释尾巴当成选择器、
+  连后面的活规则一起吞掉 —— 这是第一版脚本的翻车原因),再按注释抹白后的结构算选择器,
+  只删「选择器里所有 class 在全仓库(HTML/JS/Python/Swift)零引用**且**没有任何
+  字符串拼接/模板字面量能拼出它」的规则
+- 三重验证:① 被删的 72 条选择器逐条确认只含死类;② **199 个被引用的 class 全部保留
+  其样式规则**;③ 登录页 headless 截图与改动前**逐像素一致(0/1,296,000)**
+- 没动的:191 个 `!important`、6 处 `@media (max-width:768px)` 分散块 —— 这类合并
+  没有视觉回归测试兜底,留给有截图对比需求时单独做
 
 ### ⬆️ 升级
 
-⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.2...v0.5.3
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.3...v0.5.4
 
