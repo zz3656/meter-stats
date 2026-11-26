@@ -1087,15 +1087,7 @@
     justify-content: center;
   }
   .alert.show { display: block; }
-  .alert {
-    padding: 9px 13px;
-    border-radius: 6px;
-    margin-bottom: 12px;
-    font-size: 12px;
-    display: none;
-    font-weight: 510;
-  }
-      
+        
   /* ===== 全局 Toast 提示覆盖层 ===== */
   .toast-overlay {
     position: fixed;
@@ -1186,7 +1178,6 @@
   z-index: 2;
 }
 /* 历史对比表 */
-.compare-table th .badge { margin-left: 4px; }
 .report-grid-table thead th {
   background: var(--bg-surface);
   font-weight: 600;
@@ -2061,7 +2052,7 @@
    浏览器打印(P)或 Ctrl+P 时触发。 */
 @media print {
   /* 隐藏非打印元素 */
-  .sidebar, .sidebar-overlay, .sidebar-toggle-btn, .button-row, .modal-backdrop, #status-bar, #meter-reminder, .alert, .card-header select, .field-control, .del-btn, .save-btn, .btn, [data-action], .header-backup-btn {
+  .sidebar, .sidebar-overlay, .sidebar-toggle-btn, .button-row, .modal-backdrop, #status-bar, #meter-reminder, .card-header select, .field-control, .del-btn, .save-btn, .btn, [data-action], .header-backup-btn {
     display: none !important;
   }
 
@@ -2367,10 +2358,6 @@ a:hover {
 }
 
 /* 大字模式：alert 提示 */
-[data-accessibility="on"] .alert {
-  font-size: 15px !important;
-  padding: 12px 16px !important;
-}
 
 /* 大字模式：内联字段 */
 

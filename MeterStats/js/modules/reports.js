@@ -675,7 +675,7 @@ async function checkAndPromptMigration() {
                 '<li>每月水电费用计算完全准确</li>' +
                 '<li>自动备份当前数据（可随时回滚）</li></ul>' +
                 (status.conflicts_with_existing > 0
-                    ? '<p style="color:var(--warning);font-size:13px;">⚠️ 已有 ' + status.conflicts_with_existing + ' 条独立水电记录将被覆盖</p>'
+                    ? '<p style="color:var(--warn);font-size:13px;">⚠️ 已有 ' + status.conflicts_with_existing + ' 条独立水电记录将被覆盖</p>'
                     : '') +
                 '<p style="margin-top:12px;">是否立即执行升级？</p>',
             confirmText: '立即升级',
