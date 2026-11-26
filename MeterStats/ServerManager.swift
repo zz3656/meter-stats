@@ -66,7 +66,18 @@ final class ServerManager {
         // (如 0.1.0 内部多次构建修复 UI),否则 runtime 会一直用旧文件。
         // 改为始终按 mtime 对比,有变化的文件才复制(数据文件不在列表内,不受影响)。
 
-        let files = ["server.py", "app_handler.py", "report.py", "storage.py", "routing.py", "constants.py", "index.html", "style.css", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
+        // 非 Python 的固定资源(HTML/CSS/图标/entitlements)
+        let staticFiles = ["index.html", "style.css", "admin.js", "favicon.svg", "favicon-16.png", "favicon-32.png", "Linclub.entitlements"]
+        // ⚠️ Python 模块必须**枚举** bundle 里的 *.py,不能写死清单:
+        //    这里原来硬编码了 ["server.py", "app_handler.py", "report.py",
+        //    "storage.py", "routing.py", "constants.py"] —— 新增一个顶层模块
+        //    (例如 backup_paths.py)只要忘了往这个数组里加,runtime 目录就缺文件,
+        //    而 routing.py 在启动时就会 import 它 → 应用一启动就 ImportError,
+        //    表现为"点了图标没反应 / 日志里 ModuleNotFoundError"。
+        let pyFiles = ((try? FileManager.default.contentsOfDirectory(atPath: bundleResources.path)) ?? [])
+            .filter { $0.hasSuffix(".py") }
+            .sorted()
+        let files = staticFiles + pyFiles
         for filename in files {
             let src = bundleResources.appendingPathComponent(filename)
             let dst = runtime.appendingPathComponent(filename)
