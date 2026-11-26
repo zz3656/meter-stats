@@ -118,9 +118,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.5
+## 📦 工程部管理系统 v0.5.6
 
-提交 `7cc5249`
+提交 `66a4530`
 
 **升级 Docker 容器**:
 ```bash
@@ -129,36 +129,25 @@ docker compose up -d
 ```
 
 
-### 修复
+### 改进
 
-- **`--warning` 这个 CSS 变量根本不存在**(只有 `--warn`)：充值「待确认」提示用了
-  `color:var(--warning)`,而 `var()` 引用了未定义变量时整条声明在计算值阶段失效 →
-  那段提示一直是**默认文字色**而不是警示色。改为 `var(--warn)`
-- **图标按钮补 `aria-label`**：登录页/主界面的主题切换按钮、余额提醒的关闭按钮
-  原来只有 `title`(悬停提示),读屏软件读不到名字。补 3 处(`sidebar-toggle` 本来就有)
-
-### 清理
-
-- 删掉 4 处 `.alert` 死规则 + 1 处 `.compare-table .badge`(共 17 行)。这些规则对应的
-  DOM 早在 0.5.x 之前就没了(`.alert*` 在全仓库零引用)——「待确认」提示改用 Toast 后,
-  旧 alert 区块的样式一直没人删
-
-### 文档
-
-- `docs/ui-optimization-plan.md` 从「待确认方案」重写为**现状盘点**：逐项对着代码核实,
-  分成「已完成/已不成立」「仍待做(带我的建议)」。结论是原方案的 P0 三条现在都不成立,
-  剩下的多为口味问题与长期重构;唯一建议优先的是 `:focus-visible`
-- 该文件记下了本轮的验证手法(headless 截图像素对比 + CSS 删除的结构化校验),
-  以后动样式可以照做
+- **键盘焦点可见性**:按钮 / 链接 / 可聚焦容器补 `:focus-visible` —— 主题色 2px 描边
+  (`outline-offset: 2px`)。此前这些元素完全依赖浏览器默认焦点环,浅色主题下是几乎看不见的
+  浅色光晕(截图对比:差异 1082 像素,全部落在按钮的焦点环上)
+  - **刻意不含表单控件**(input / select / textarea):规范里文本控件即便鼠标点击也命中
+    `:focus-visible`,加上描边会变成「每点一次输入框就多一圈环」;而它们本来就有
+    「边框变主色 + 3px 柔光环 + 背景提亮」,深浅两套主题都配好了
+  - 只在支持 `:focus-visible` 的浏览器生效(macOS 12+ / Safari 15.4+),老浏览器行为不变
+- 验证手法:临时写了一个「焦点探针」页(autofocus 按钮)+ headless 截图对比,确认
+  ① 焦点环确实变清晰 ② 输入框区域零变化 ③ 其它像素零变化,然后才提交(探针页已删)
 
 ### ⬆️ 升级
 
-⚠️ **建议升级**:本次包含问题修复
 - 🍎 macOS:下载下方 DMG 覆盖安装
 - 🐳 Docker:`docker compose pull && docker compose up -d`
 - 🌐 Web:浏览器强制刷新 (`Ctrl/Cmd+Shift+R`)
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.4...v0.5.5
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.5...v0.5.6
 
