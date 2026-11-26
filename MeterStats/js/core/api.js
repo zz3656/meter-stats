@@ -380,6 +380,10 @@ var Api = (() => {
     var stores = {
         list: function() { return _request('GET', '/api/stores'); },
         current: function() { return _request('GET', '/api/stores/current'); },
+        // 总部总表(P3):各店当月用电与费用。不带 ?store= —— 它本身是跨店聚合。
+        overview: function(month) {
+            return _request('GET', '/api/stores/overview?month=' + encodeURIComponent(month || ''));
+        },
         create: function(data) { return _request('POST', '/api/stores', data); },
         update: function(id, data) { return _request('PUT', '/api/stores/' + encodeURIComponent(id), data); },
         remove: function(id) { return _request('DELETE', '/api/stores/' + encodeURIComponent(id)); },

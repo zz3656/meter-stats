@@ -120,6 +120,7 @@
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
           <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
         </div>
+        <button class="sidebar-item" data-section="settings-overview" id="nav-overview" style="display:none;" onclick="switchSettingsPage('overview')"><span class="item-icon">🏬</span><span class="item-label">门店总览</span></button>
         <button class="sidebar-item" data-section="settings-stores" onclick="switchSettingsPage('stores')"><span class="item-icon">🏪</span><span class="item-label">门店管理</span></button>
         <button class="sidebar-item" data-section="settings-users" data-roles="admin" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
         <button class="sidebar-item" data-section="settings-meter" data-roles="manager" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
@@ -747,6 +748,37 @@
     </section>
 
   <!-- ===== 门店管理（独立页面） ===== -->
+  <section id="section-settings-overview" class="content-section" style="display:none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>🏬 门店总览</h2>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="month" id="overview-month" class="field-control" style="width:auto;" />
+          <button class="btn btn-secondary btn-sm" onclick="loadStoresOverview()">刷新</button>
+        </div>
+      </div>
+      <div id="overview-empty" class="report-empty">选择月份查看各门店汇总</div>
+      <div class="table-container" id="overview-table-wrap" style="display:none;">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>门店</th>
+              <th>用电(度)</th>
+              <th>电费(元)</th>
+              <th>抄表天数</th>
+              <th>总表用电</th>
+              <th>用水(吨)</th>
+            </tr>
+          </thead>
+          <tbody id="overview-body"></tbody>
+        </table>
+      </div>
+      <div id="overview-chart-wrap" style="display:none;margin-top:16px;">
+        <canvas id="overview-chart" height="120"></canvas>
+      </div>
+    </div>
+  </section>
+
   <section id="section-settings-stores" class="content-section" style="display:none;">
     <div id="stores-page" style="display:flex;flex-direction:column;gap:20px;"></div>
   </section>
@@ -1474,6 +1506,7 @@
   <script src="js/modules/render_weekly.js"></script>
   <script src="js/modules/backup.js"></script>
   <script src="js/modules/stores.js"></script>
+  <script src="js/modules/overview.js"></script>
   <script src="js/modules/storeSwitcher.js"></script>
   <script src="js/nas_sync.js"></script>
   <script src="admin.js?v=<TIMESTAMP>"></script>

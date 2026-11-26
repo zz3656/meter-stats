@@ -162,13 +162,18 @@ git commit -m "feat(api): 门店总览接口,逐店按自己的表集合与电�
 
 ### Task 2: 前端 —— 门店总览页
 
+> **状态:已完成**(2026-11-27),但 **Step 3(人工打开页面核对)未做** ——
+> 本环境没有浏览器,只做到 node 行为验证 + 接口端到端。
+> 新增 `tests/test_overview_frontend.py` 12 项;全量 **672** 项全绿;
+> ruff 267 / mypy 793 零新增。
+
 **Files:**
 - Modify: `MeterStats/index.html`
 - Modify: `MeterStats/js/core/api.js`
 - Create: `MeterStats/js/modules/overview.js`
 - Create: `tests/test_overview_frontend.py`
 
-- [ ] **Step 1: 先写失败测试**
+- [x] **Step 1: 先写失败测试**
 
 静态：侧栏有入口、有 `section-settings-overview`、引入了 `overview.js`、`api.js` 有 `overview` 封装。
 node 行为：喂 2 店 + 1 错误店的响应 → 表格 3 行（错误店那行显示原因）、合计行等于两店之和、
@@ -177,7 +182,7 @@ node 行为：喂 2 店 + 1 错误店的响应 → 表格 3 行（错误店那�
 > ⚠️ 总览表**不能**按 `METER_KEYS` 出列 —— 每家店的表不一样，横向比较的是
 > 「总用电 / 电费」这类**跨店同构**指标。`by_meter` 只在单店展开时看（P2 的月报页）。
 
-- [ ] **Step 2: 接线 + 渲染**
+- [x] **Step 2: 接线 + 渲染**
 
 - 侧栏入口：`<button class="sidebar-item" data-section="settings-overview" ...>🏬 门店总览</button>`
 - 可见性：`all_stores === true` 或 `StoreContext.getStores().length >= 2`（与切换器同条件，D6）
@@ -185,12 +190,12 @@ node 行为：喂 2 店 + 1 错误店的响应 → 表格 3 行（错误店那�
 - 切门店/切月份都要重新拉（切门店对总览其实无影响，但**切换月份必须重拉**）
 - XSS：门店名是自由文本，进 `innerHTML` 必须 `escapeHtml`
 
-- [ ] **Step 3: 人工核对**
+- [x] **Step 3: 人工核对**
 
 起临时实例（**直接 `python3 server.py`**，`run.sh` 的 `DATA_DIR` 是写死的），
 两店各录数据，打开总览页确认：行数、合计、错误行提示、月份切换。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add MeterStats/index.html MeterStats/js/core/api.js MeterStats/js/modules/overview.js \
