@@ -147,6 +147,30 @@ class TestMigrateTriggersArchive(_Base):
         self.assertNotIn("meter", st)
         self.assertEqual(st["_legacy_meter_config"]["meter"]["hall"]["multiplier"], 160)
 
+    def test_already_migrated_install_still_archives(self) -> None:
+        """**已经迁完**的安装(有 .migrated 标记)也必须归档。
+
+        这是线上最常见的情况 —— 只覆盖"首次迁移"的测试抓不住它:
+        migrate_to_stores() 在 marker 存在时会提前 return,
+        写在函数尾部的归档代码根本不会执行(实施中真的踩了这个)。
+        """
+        self._set_legacy()
+        migration.migrate_to_stores(self.data_dir)          # 首次:完成迁移并归档
+        marker = self.data_dir / "stores" / "main" / ".migrated"
+        self.assertTrue(marker.exists(), "前置:迁移标记应已生成")
+
+        # 模拟"遗留键又出现了"(旧版本残留 / 手工从备份恢复 settings.json)
+        st = self._settings()
+        st["meter"] = {"hall": {"label": "大厅", "multiplier": 160}}
+        st["config"] = {"electricity_price": 2.0}
+        settings_handler.save_settings(st)
+
+        migration.migrate_to_stores(self.data_dir)          # 再跑一次:走提前 return 分支
+        st2 = self._settings()
+        self.assertNotIn("meter", st2, "已迁移的安装没有归档 —— 提前 return 把归档跳过了")
+        self.assertNotIn("config", st2)
+        self.assertIn("meter", st2.get("_legacy_meter_config") or {})
+
     def test_not_archived_before_layout_ready(self) -> None:
         """布局没建起来时不能归档 —— 迁移的种子还得靠它们。"""
         self._set_legacy()

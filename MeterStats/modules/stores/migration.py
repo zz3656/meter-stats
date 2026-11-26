@@ -47,6 +47,16 @@ IMAGES_DIR_NAME = "images"
 TMP_SUFFIX = ".migrating"
 
 
+def _archive_legacy_quietly() -> None:
+    """跑一次「顶层 meter/config 归档」。异常只记日志。
+
+    它只是**清理误导**(让人别以为顶层那两项还在生效),不是功能路径 ——
+    失败绝不该挡住启动。
+    """
+    with contextlib.suppress(Exception):
+        archive_legacy_global_meter_settings()
+
+
 def migrate_to_stores(data_dir: Path) -> dict[str, Any]:
     """把顶层数据迁移到默认店目录。返回执行结果统计。
 
@@ -69,6 +79,10 @@ def migrate_to_stores(data_dir: Path) -> dict[str, Any]:
         stores = _ensure_registry(data_dir)
         result["stores"] = stores or 0
         result["ok"] = stores is not None
+        # ⚠️ 已迁移的安装走的就是这条提前 return —— 归档必须放在这里。
+        #    放在函数尾部只覆盖"首次迁移",而线上绝大多数是"早就迁完了"
+        #    (实施中真的漏了,靠 test_already_migrated_install_still_archives 抓到)。
+        _archive_legacy_quietly()
         return result
 
     # 0. 注册表先落盘 —— **必须在建 stores/ 目录之前**。
@@ -123,9 +137,7 @@ def migrate_to_stores(data_dir: Path) -> dict[str, Any]:
         result["created"] = True
 
     # 布局就绪 = 各店 store.json 里已有自己的表集合/电价,顶层遗留的那份可以归档了
-    # (幂等;失败不影响启动 —— 它只是"清理误导",不是功能路径)
-    with contextlib.suppress(Exception):
-        archive_legacy_global_meter_settings()
+    _archive_legacy_quietly()
 
     log(f"[MIGRATE] 多门店布局就绪: stores/{DEFAULT_STORE_ID}/ "
         f"(迁移={result['migrated']}, 新建={result['created']}, 门店数={result['stores']})")
