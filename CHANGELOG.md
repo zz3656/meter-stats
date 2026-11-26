@@ -2,6 +2,29 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.3] — 2026-11-27
+
+**「从 NAS 同步」在多门店布局下写进了没人读的位置 —— 界面报成功、数据没变化。**
+
+### 修复
+
+- **NAS 同步不再把数据写进孤儿路径**:本地已是 0.5.x 多门店布局时,应用读的是
+  `stores/<id>/`,而 NAS 上多半还跑着 0.4.x 单店布局(`/api/admin/data-files` 回的是
+  顶层文件名)。同步接口原来把顶层 `readings.json` 原样写进数据根目录 ——
+  文件确实写了,但**没有任何代码读它**,用户看到的是「同步成功,数据一点没变」。
+  (实测发生在 2026-11-27 凌晨:同步一次后顶层 readings.json 多了当天的抄表记录,
+  而 `stores/main/readings.json` 一个字节没动。)
+  现在同步的落盘**直接复用恢复路径**的 `_write_restore_files`:
+  顶层文件桥接到 `stores/<main>/`(顶层仍留一份可回滚副本)、`settings.json` 合并
+  (保留本机 NAS 凭据与备份目录)、响应里明确写出「已桥接到 stores/main/」
+- 缓存失效从「逐个文件」改为整盘 `_cache_clear()` —— 同步是直接写文件、绕过
+  `save_json` 的,漏掉一个路径就是读到旧内容;文件缓存命中率本来就不高,清干净最稳
+
+### 新增测试
+
+- `tests/test_nas_sync.py::TestSyncBridgesToStoreDir`(3 项):顶层载荷必须落进
+  `stores/main/`、顶层保留回滚副本、显式 `stores/<id>/` 载荷不重复桥接
+
 ## [0.5.2] — 2026-11-27
 
 **CI 首次在 GitHub Actions 上跑全量测试后立刻抓到的一个真 bug。**

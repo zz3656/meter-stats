@@ -678,53 +678,44 @@ def handle_post_sync_from_nas(handler):
     # 恢复前自动备份当前数据
     pre_backup = backup_data(target_dir, force=True)
 
-    restored = []
-    restored_paths = []
-    errors = []
-    for name, content in files.items():
-        if not isinstance(content, str):
-            errors.append(f"跳过 {name}: 不是字符串")
-            continue
-        # 目标路径一律由 _safe_rel_target 解析 ——
-        # 顶层数据文件 + stores/<id>/<name>.json,其余(含路径穿越)一律拒绝。
-        rel_target = _safe_rel_target(target_dir, name)
-        if rel_target is None:
-            errors.append(f"跳过 {name}: 不是允许的数据文件路径")
-            continue
-        try:
-            if name == "settings.json":
-                # ⚠️ settings.json 必须"合并"而不是"覆盖" —— 远端实例并不知道
-                # 本机的部署字段(nas_sync_user/nas_sync_pass/nas_sync_url/backup_dir)。
-                # 直接覆盖会导致:同步一次 → 本机 NAS 凭据被清空 → 下次同步直接失败。
-                # 与三条恢复路径保持一致,统一走 _merge_settings_after_restore。
-                import json as _json
-                try:
-                    src_settings = _json.loads(content)
-                except ValueError as e:
-                    errors.append(f"跳过 settings.json: 不是合法 JSON ({e})")
-                    continue
-                if not isinstance(src_settings, dict):
-                    errors.append("跳过 settings.json: 不是对象结构")
-                    continue
-                _merge_settings_after_restore(target_dir, src_settings)
-            else:
-                rel_target.parent.mkdir(parents=True, exist_ok=True)
-                rel_target.write_text(content, encoding="utf-8")
-            restored.append(name)
-            restored_paths.append(rel_target)
-            log(f"  同步写入 {name}")
-        except Exception as e:
-            errors.append(f"{name}: {e}")
+    restored: list[str] = []
+    errors: list[str] = []
+    notes: list[str] = []
 
-    # 同步进来的文件是直接 write_text 写的,绕过了 storage.save_json,
-    # 所以这里必须手动失效两层缓存:
+    # ⚠️ 落盘必须复用**恢复路径**的那套逻辑(_write_restore_files),不能在这里
+    #    自己 write_text 顶层文件。历史 bug(2026-11 实测):
+    #    多门店布局下应用读的是 stores/<id>/,而这里把远端(还是单店布局的
+    #    0.4.x NAS)拉来的顶层 readings.json 原样写到数据根目录 ——
+    #    文件确实写了,但**没人读**,UI 上"同步成功、数据一点没变"。
+    #    现在:顶层文件按恢复同一套规则桥接到 stores/<main>/,settings.json 合并。
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        staging = Path(tmp_dir)
+        for name, content in files.items():
+            if not isinstance(content, str):
+                errors.append(f"跳过 {name}: 不是字符串")
+                continue
+            if _safe_rel_target(target_dir, name) is None:
+                errors.append(f"跳过 {name}: 不是允许的数据文件路径")
+                continue
+            try:
+                dest = staging / name
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_text(content, encoding="utf-8")
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+
+        restored, notes = _write_restore_files(handler, target_dir, staging)
+        for name in restored:
+            log(f"  同步写入 {name}")
+
+    # 同步是直接写文件的,绕过了 storage.save_json,所以这里必须手动失效两层缓存:
     #   1) JSON 文件缓存(storage)—— 否则读到的是同步前的旧内容
     #   2) 月报缓存(report)  —— 否则最长 5 分钟内报表还是旧值,
     #      看起来像"同步没生效"(用户会以为同步失败又点一次)
+    # 用 _cache_clear 而不是逐个失效:命中率远低于正确性,整盘清掉最稳。
     try:
-        from storage import _cache_invalidate
-        for fp in restored_paths:
-            _cache_invalidate(str(fp.resolve()))
+        from storage import _cache_clear
+        _cache_clear()
     except Exception as e:
         log(f"[SYNC] 失效文件缓存失败: {e}")
     try:
@@ -739,7 +730,11 @@ def handle_post_sync_from_nas(handler):
         "restored": restored,
         "errors": errors if errors else None,
         "pre_backup": str(pre_backup) if pre_backup else "无",
-        "message": f"✅ 已同步 {len(restored)} 个文件" + (f", {len(errors)} 个失败" if errors else ""),
+        "message": (
+            f"✅ 已同步 {len(restored)} 个文件"
+            + (f";{'；'.join(notes)}" if notes else "")
+            + (f", {len(errors)} 个失败" if errors else "")
+        ),
     })
 
 

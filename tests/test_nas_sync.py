@@ -361,6 +361,73 @@ class TestPasswordNotInBackup(NasBase):
         self.assertNotIn("s3cret", json.dumps(filtered, ensure_ascii=False))
 
 
+class TestSyncBridgesToStoreDir(NasBase):
+    """多门店布局下,远端(单店布局)拉来的顶层文件必须桥接进 stores/<main>/。
+
+    实测 bug(2026-11):本地已经是 0.5.x 多门店布局(应用读 stores/main/),
+    而 NAS 上跑的是 0.4.x 单店布局(/api/admin/data-files 回的是顶层文件名)。
+    同步接口把顶层 readings.json 原样写进数据根目录 —— 文件写了,但**没人读**,
+    界面上「同步成功、数据一点没变」。恢复路径早有桥接,同步这条漏了。
+    """
+
+    def _make_multi_store(self) -> Path:
+        """把数据目录切成多门店布局:top-level(总店历史)+ stores/main/。"""
+        from storage import DATA_FILES
+
+        main = self.data_dir / "stores" / "main"
+        main.mkdir(parents=True, exist_ok=True)
+        for fname in DATA_FILES.values():
+            (main / fname).write_text("[]", encoding="utf-8")
+        (main / ".migrated").write_text("2026-11-27T00:00:00", encoding="utf-8")
+        (main / "readings.json").write_text(
+            json.dumps([{"date": "2026-11-01", "hall": 1.0}]), encoding="utf-8")
+        (self.data_dir / "settings.json").write_text(json.dumps({
+            "users": [], "stores": [
+                {"id": "main", "name": "总店", "active": True},
+            ],
+        }, ensure_ascii=False), encoding="utf-8")
+        return main
+
+    def test_top_level_files_land_in_store_dir(self) -> None:
+        main = self._make_multi_store()
+        payload = json.dumps([
+            {"date": "2026-11-20", "hall": 10.0},
+            {"date": "2026-11-25", "hall": 20.0},
+        ], ensure_ascii=False)
+
+        h = self.call("POST", "/api/admin/sync-from-nas", {
+            "files": {"readings.json": payload},
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+
+        got = json.loads((main / "readings.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(got), 2, "顶层文件没有桥接进 stores/main/,应用读不到")
+        self.assertEqual(got[-1]["date"], "2026-11-25")
+        # 桥接要在响应里看得见(和恢复路径同一个约定)
+        self.assertIn("stores/main/readings.json", h.parsed["restored"])
+        self.assertIn("stores/main/", h.parsed.get("message") or "")
+
+    def test_bridge_keeps_top_level_copy_as_rollback(self) -> None:
+        """顶层仍要留一份 —— 那是"退回单店布局"的回滚副本。"""
+        self._make_multi_store()
+        self.call("POST", "/api/admin/sync-from-nas", {
+            "files": {"readings.json": json.dumps([{"date": "2026-11-25", "hall": 20.0}])},
+        })
+        top = json.loads((self.data_dir / "readings.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(top), 1)
+
+    def test_store_path_payload_still_writes_in_place(self) -> None:
+        """载荷里显式带了 stores/<id>/ 前缀时,按原路径写(不要重复桥接)。"""
+        main = self._make_multi_store()
+        h = self.call("POST", "/api/admin/sync-from-nas", {
+            "files": {"stores/main/readings.json": json.dumps([{"date": "2026-11-26", "hall": 30.0}])},
+        })
+        self.assertTrue(h.parsed["ok"], h.parsed)
+        got = json.loads((main / "readings.json").read_text(encoding="utf-8"))
+        self.assertEqual(got[-1]["date"], "2026-11-26")
+        self.assertEqual(len(got), 1)
+
+
 class TestSyncKeepsLocalCredentials(NasBase):
     """同步回来的 settings.json 不能把本机凭据冲掉。
 
