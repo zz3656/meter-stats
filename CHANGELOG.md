@@ -99,6 +99,30 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
   现在列校验与 CSV 模板都跟着门店走,未知列**整份拒收**并列出是哪几列
 
 
+### P3 总部总表(0.5.0 内补齐)
+
+总部账号在一个页面上看清所有门店当月的用电与费用,并能横向对比。
+
+- **新接口 `GET /api/stores/overview?month=YYYY-MM`**:遍历调用方有权限的门店,
+  逐店用**它自己的**表集合与电价跑一遍月报后横向合并;返回每店的
+  `total_kwh` / `total_cost` / `reading_days` / `by_meter` / 水电用量,外加合计
+- **侧栏新增「门店总览」页**:表格 + 合计行 + 柱状图。入口只对
+  「总部账号或可见门店 ≥ 2」显示 —— 单店用户看只有一行的总览没有信息量
+- **权限按调用方门店范围**:员工看到自己那家,总部账号看到全部。不额外加主管闸 ——
+  这些数据本来就在各自的可见范围内
+
+#### 实现要点(两条都是「不报错但数字错」那类坑)
+
+- **逐店算月报必须切换门店上下文**:`report._report_cache_key()` 用的是**当前门店**,
+  不切上下文时两家「表集合相同」的店会命中同一份缓存 → 总览上数字一模一样。
+  新增 `modules/stores/context.py::store_scope()`,保存/恢复**原始** thread-local 值
+  (含「从未设置」),并在 `finally` 里恢复 —— 否则任何一家店抛异常,
+  本请求后续的读会全部落到那家店上
+- **总览表不按表出列**:各店表 key 不通用(`m1`/`m2` vs `hall`/`fire`…),
+  横向比的是「总用电 / 电费 / 抄表天数 / 总表用电 / 用水」这类跨店同构指标。
+  要看某家店的分表明细,去「用电报表」页切到那家店
+- 单店失败不影响整体:那一行带 `error`,其余照常,接口仍 200
+
 ### 已知问题
 
 - **值班照片仍然没有自动备份**。改造前照片就没进过备份包(既存缺口,不是分店引入的)。这次刻意**不只做一半**:若把照片收进备份,恢复侧必须同步扩展,否则会变成「包里有照片、恢复时静默丢弃」这种更糟的状态。**照片需要另外手工备份**
@@ -110,7 +134,7 @@ CHANGELOG 0.5.0 的「已知问题」原本把这两条列为 P1,本轮已修复
 ### 文档
 
 - 新增 `tests/test_stores.py`、`test_store_gate.py`、`test_store_api.py`、`test_user_stores.py`、`test_store_backup.py`、`test_store_backup_scope.py`、`test_registry_hardening.py`、`test_stores_frontend.py`、`test_store_switch_frontend.py`、`test_store_switcher_ui.py`、`test_storage_cache.py`
-- P2 新增 `tests/test_meter_tables.py`、`test_meter_config_api.py`、`test_meter_config_frontend.py`、`test_dynamic_forms.py`、`test_dynamic_render.py`、`test_meter_settings_ui.py`、`test_graceful_shutdown.py`、`test_import_store_meters.py`,全量 **650 项**(存量 349 + 分店 301)
+- P2 新增 `tests/test_meter_tables.py`、`test_meter_config_api.py`、`test_meter_config_frontend.py`、`test_dynamic_forms.py`、`test_dynamic_render.py`、`test_meter_settings_ui.py`、`test_graceful_shutdown.py`、`test_import_store_meters.py`,`test_store_overview.py`、`test_overview_frontend.py`,全量 **672 项**(存量 349 + 分店 323)
 
 ## [0.4.3] — 2026-11-12
 
