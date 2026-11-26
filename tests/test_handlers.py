@@ -426,6 +426,46 @@ class TestBackupApi(TestApiBase):
         zips = sorted(backup_dir.glob("meter-backup-*.zip"))
         self.assertEqual(len(zips), 10)  # 只保留最新 10 个
 
+    def test_manual_backup_same_millisecond_does_not_overwrite(self):
+        """同一毫秒内的两次手动备份不许互相覆盖。
+
+        CI 上真实复现过:连做 12 次手动备份只留下 9 个包 —— 因为文件名只到毫秒,
+        同毫秒撞名时 `shutil.move` 会静默覆盖(rename 不报错)。
+        修法是撞名就递增毫秒位;这里把时钟冻在同一位,验证两条都留下。
+        """
+        import datetime as _dt
+        import types as _types
+        from unittest import mock
+
+        from modules.backup import handler as backup_handler
+
+        class _FrozenDateTime(_dt.datetime):
+            @classmethod
+            def now(cls, tz=None):  # noqa: D102 - 固定在同一毫秒
+                return cls(2026, 11, 27, 3, 4, 5, 678000)
+
+        # 进程级的「已发出名字」集合要清空,否则别的用例用真实时钟发过的名字会让本用例分到不同的毫秒位
+        saved_stamps = set(backup_handler._ISSUED_STAMPS)
+        backup_handler._ISSUED_STAMPS.clear()
+        self.addCleanup(lambda: (backup_handler._ISSUED_STAMPS.clear(),
+                                 backup_handler._ISSUED_STAMPS.update(saved_stamps)))
+
+        self.call("POST", "/api/readings", {"date": "2026-08-18", "hall": 100.0})
+        first = self.call("POST", "/api/backup")
+        backup_dir = Path(first.parsed["zip_path"]).parent
+
+        with mock.patch.object(backup_handler, "datetime",
+                               _types.SimpleNamespace(datetime=_FrozenDateTime)):
+            zips = []
+            for _ in range(3):
+                h = self.call("POST", "/api/backup")
+                self.assertTrue(h.parsed["ok"], h.parsed)
+                zips.append(Path(h.parsed["zip_path"]).name)
+
+        self.assertEqual(len(set(zips)), 3, f"同一毫秒的备份撞名被覆盖了: {zips}")
+        for name in zips:
+            self.assertTrue((backup_dir / name).is_file(), f"{name} 不存在")
+
     # ---------- /api/upload (JSON body 路径) ----------
 
     def _build_valid_backup_zip(self) -> bytes:

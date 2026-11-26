@@ -1,6 +1,7 @@
 """备份相关 API handler。"""
 from __future__ import annotations
 
+import datetime
 import json
 import os
 import re
@@ -382,6 +383,32 @@ def _get_backup_retention_count():
     return 5
 
 
+# 本次进程已经发出去的手动备份名。
+# 为什么光看「文件是否存在」不够:清理逻辑会删掉最旧的包,于是那个名字又"空出来"了,
+# 下一次备份会**复用同一个名字**(老包已删,不会丢数据,但同一秒内的两次备份会共名,
+# 排查时极难分辨)。这个集合保证进程内发出去的名字永不重复。
+_ISSUED_STAMPS: "set[str]" = set()
+
+
+def _fresh_stamp(backup_parent: Path, stamp_base: str) -> str:
+    """拿到一个本次进程没用过、盘上也不存在的备份名(同一毫秒内连备也不会撞)。"""
+    stamp = stamp_base
+    bump = 0
+    while (stamp in _ISSUED_STAMPS
+           or (backup_parent / f"meter-backup-{stamp}.zip").exists()
+           or (backup_parent / stamp).exists()):
+        bump += 1
+        prefix, ms = stamp_base.rsplit("_", 1)
+        stamp = f"{prefix}_{(int(ms) + bump) % 1000:03d}"
+        if bump > 999:  # 兜底:同一秒内 1000 次备份才会走到
+            stamp = f"{stamp_base}_{bump}"
+            break
+    if len(_ISSUED_STAMPS) > 5000:   # 长期运行的实例别无限增长
+        _ISSUED_STAMPS.clear()
+    _ISSUED_STAMPS.add(stamp)
+    return stamp
+
+
 def _cleanup_manual_backups(backup_parent):
     """手动备份只保留最新的 10 个,超过则删除最旧的(meter-backup- 前缀)。
 
@@ -434,8 +461,6 @@ def handle_post_backup(handler):
 
     返回 { ok: true, zip_path: "/data/backup/20250101_120000/meter-backup-20250101_120000.zip", backup_name: "20250101_120000" }
     """
-    import datetime
-
     from modules.stores.context import base_data_dir
     from modules.stores.handler import backup_rel_store_id, caller_store_scope
     try:
@@ -456,9 +481,16 @@ def handle_post_backup(handler):
 
     backup_parent.mkdir(parents=True, exist_ok=True)
 
-    # 生成带时间戳的备份目录名和文件名(含毫秒,同秒多次点击也不会重名覆盖)
+    # 生成带时间戳的备份目录名和文件名(含毫秒)。
+    #
+    # ⚠️ 只靠毫秒**不够**:同一毫秒内连点两次(或脚本连跑、CI 上飞快地循环)会撞名,
+    #    而下面收尾用的是 `shutil.move` —— POSIX 上 rename 会**静默覆盖**同名文件,
+    #    等于上一次备份凭空消失。CI 首次跑测试就真实复现了:连做 12 次手动备份,
+    #    只留下 9 个包(注释里"同秒多次点击也不会重名覆盖"是错的)。
+    #    现在撞名就递增毫秒位,直到拿到一个没人用的名字。
     now = datetime.datetime.now()
-    stamp = now.strftime("%Y%m%d_%H%M%S") + f"_{now.microsecond // 1000:03d}"
+    stamp = _fresh_stamp(backup_parent,
+                         now.strftime("%Y%m%d_%H%M%S") + f"_{now.microsecond // 1000:03d}")
     backup_dir = backup_parent / stamp
     zip_filename = f"meter-backup-{stamp}.zip"
 
