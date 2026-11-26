@@ -133,9 +133,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.6
+## 📦 工程部管理系统 v0.5.7
 
-提交 `66a4530`
+提交 `dc07713`
 
 **升级 Docker 容器**:
 ```bash
@@ -144,17 +144,25 @@ docker compose up -d
 ```
 
 
-### 改进
+### 新增
 
-- **键盘焦点可见性**:按钮 / 链接 / 可聚焦容器补 `:focus-visible` —— 主题色 2px 描边
-  (`outline-offset: 2px`)。此前这些元素完全依赖浏览器默认焦点环,浅色主题下是几乎看不见的
-  浅色光晕(截图对比:差异 1082 像素,全部落在按钮的焦点环上)
-  - **刻意不含表单控件**(input / select / textarea):规范里文本控件即便鼠标点击也命中
-    `:focus-visible`,加上描边会变成「每点一次输入框就多一圈环」;而它们本来就有
-    「边框变主色 + 3px 柔光环 + 背景提亮」,深浅两套主题都配好了
-  - 只在支持 `:focus-visible` 的浏览器生效(macOS 12+ / Safari 15.4+),老浏览器行为不变
-- 验证手法:临时写了一个「焦点探针」页(autofocus 按钮)+ headless 截图对比,确认
-  ① 焦点环确实变清晰 ② 输入框区域零变化 ③ 其它像素零变化,然后才提交(探针页已删)
+- **文档一致性护栏 `tests/test_docs_consistency.py`(9 项)**:把「文档必须与现实相符」变成断言,
+  不再靠人记得。守七件事:
+  - 每个 `modules/*/` 目录、每个顶层 `*.py` 都必须出现在 `AGENTS.md` / `README.md` 的结构树里
+  - 文档里写的用例数 / 测试文件数必须等于实际值(本次就靠它把 792→801、43→44 同步过来)
+  - `VERSION` 必须等于 CHANGELOG 顶部章节号
+  - **已发布能力必须在 README 功能表里有入口**(多门店/抄表/充值/报表/备份)
+  - 升级说明必须写清「自动迁移 / 新数据目录 / 回滚」
+  - `ServerManager.swift` 必须枚举 `*.py`,不许退回硬编码清单(否则新增模块漏包 → 启动即崩)
+  - 单个文档不超过 2000 行(曾经 4 份实施计划占全部文档 70%)
+- **`CONTRIBUTING.md` 新增「发布清单」(12 项)**:每一项都注明**用什么验证**——能写成断言的
+  都指向具体测试,剩下三条需要人看(口径/权限变更要在 CHANGELOG 写清根因、本地构建启动一次、推送后抽查产物)
+
+### 背景
+
+用户反馈「项目介绍和更新日志里看不到分店功能」。核实结果:CHANGELOG 0.5.0 写得很全,
+但**README 一个字都没提**,结构树还缺 `modules/stores/`。功能做完了、门面没跟上,
+而且没有任何机制会发现 —— 这版就是补上这个机制。
 
 ### ⬆️ 升级
 
@@ -164,5 +172,5 @@ docker compose up -d
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.5...v0.5.6
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.6...v0.5.7
 
