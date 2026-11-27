@@ -133,9 +133,9 @@ bash scripts/docker-update.sh docker/docker-compose.yml   # 指定 compose 文�
 
 ## 更新历史
 
-## 📦 工程部管理系统 v0.5.13
+## 📦 工程部管理系统 v0.5.14
 
-提交 `64f9665`
+提交 `9a6e1d2`
 
 **升级 Docker 容器**:
 ```bash
@@ -144,37 +144,37 @@ docker compose up -d
 ```
 
 
-### 改进(UI:表计图标改为从图标库选择)
+### 改进(UI:空态与加载态)
 
-这是界面上**最后一个 emoji 来源**。表计图标原来是一个自由文本输入框,用户在里面敲
-emoji(🎤🧯🛋️❄️)。四个问题:①emoji 跨系统渲染不一致;②自带颜色、不受主题控制;
-③手输容易输错或输成空格;④**canvas 图表图例里只能当文字**,和 DOM 里的图标完全不是一回事。
+此前**空态就是一行灰字**("还没有物品"/"暂无抄表记录"),**加载时什么提示都没有**:
+用户盯着空白表格,既分不清"是空的"还是"没加载出来",也不知道下一步该做什么。
+这是体验短板里最明显的一块。
 
-- sprite 新增 **14 个表计图标**(话筒/灭火器/沙发/制冷/风扇/温度/照明/电源/音响/屏幕/
-  冰柜/热水/厨房/网络/门禁/用水/总电/计量),共 57 个
-- 设置页的「图标」文本框换成 **18 格图标选择器**(点选高亮,触屏 44px)
-- **不做数据迁移**:`store.json` 里旧的 emoji 通过 `LEGACY_EMOJI_ICON` 映射照旧渲染,
-  用户下次进设置页选一次就换成图标名。仓库里 4 块表的出厂默认值已改为图标名
-- 渲染统一走 `meterIconHtml(value)`:**解析不出图标名时退回"转义后的原文"**,
-  所以用户手敲的任意字符不会被吞掉,也不会被当成标签
-- **canvas 图例去掉图标**:`render_charts.js` 与复制到剪贴板的纯文本行不再拼图标
-  (canvas 画不了 SVG,硬拼只会显示成"mic"这样的字面量)—— 图例改用标签 + 颜色区分
-- 设置页每个表计卡片的标题前缀也换成 SVG 图标,和余量预警卡片一致
+- 新增 `js/shared/states.js`:
+  - `emptyStateHtml({icon,title,hint,action})` —— 图标 + 说明 + **下一步做什么**
+  - `emptyRowHtml(colspan, …)` —— 表格内空态,自动包 `<tr><td colspan>`
+  - `skeletonRowsHtml(rows, cols)` —— 骨架行占位(不是居中转圈),列宽按首列窄/数值列宽
+  - `showBootSkeletons()` / `clearSkeletons()` —— 首屏铺骨架 + 渲染后兜底清理
+- 首屏:7 张主表(抄表/充值/水电/物品/借还/申购/值班)在**发起请求前**铺骨架,
+  数据到达原地替换 → 布局不跳动
+- 空态组件化 10 处:抄表 / 充值 / 水电 / 物品 / 申购 / 余量预警 / 月报 / 每日趋势 /
+  门店列表 / 借还记录;文案一律带上"下一步"指引
+- 骨架呼吸动画在 `prefers-reduced-motion: reduce` 下关闭(只留静态灰条)
 
 ### 新增测试
 
-`tests/test_meter_icons.py`(**11 项**):
-- 图标库/兼容映射里每个名字都能在 sprite 里找到;旧 emoji 映射必须覆盖 4 个出厂默认值
-- 设置页**不许**再出现 `data-field="icon"` 的文本输入框;读回必须来自 `.active` 选项
-- canvas 图例与纯文本行不许再拼图标
-- **直接跑真实的 `icons.js`**(node 沙箱)验证三档契约:图标名 / 旧 emoji / 恶意串
-  (`<img onerror>` 必须被转义成纯文本)、空值渲染空串、选择器至少 12 个图标
-- 后端 `normalize_tables()` 对 icon:图标名透传、旧 emoji 透传、非字符串归一成空串
+`tests/test_states.py`(**10 项**):
+- 三档助手契约:空态结构(图标/标题/提示/可选按钮)、**自由文本必须转义**、
+  `emptyRowHtml` 的 colspan、骨架行列数(传 0 也要给出可用最小骨架)
+- 渲染函数里**不许再出现裸的空态句子**(`textContent = '还没有…'` 直接红)
+- 骨架必须铺在**第一次 await 之前**,且必须有 `clearSkeletons()` 兜底
+- `states.js` 必须在消费者之前加载;CSS 里空态/骨架样式齐全,
+  且骨架动画在 reduced-motion 下关闭
 
 ### 工程
 
-- `test_meter_settings_ui.py` / `test_alert_refresh.py` 的 node 沙箱补图标桩,且桩**复刻了
-  真实实现"未知值转义"的契约**(否则那条 XSS 断言测的是桩而不是真代码)
+`test_report_store_switch.py` / `test_frontend_refresh.py` 的 node 沙箱补了空态/骨架桩
+(它们加载 readings.js,而 readings.js 现在会调这些助手)
 
 ### ⬆️ 升级
 
@@ -184,5 +184,5 @@ emoji(🎤🧯🛋️❄️)。四个问题:①emoji 跨系统渲染不一致;�
 
 ---
 
-**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.12...v0.5.13
+**Full Changelog**: https://github.com/zz3656/meter-stats/compare/v0.5.13...v0.5.14
 
