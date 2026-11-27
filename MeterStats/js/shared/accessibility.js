@@ -9,7 +9,8 @@ function applyAccessibility() {
   const btn = document.getElementById('accessibility-btn');
   if (btn) {
     btn.classList.toggle('active', on);
-    btn.textContent = on ? '✅ 大字' : '🔤 大字';
+    // 状态由 .active 类表达,图标始终用「文字」图标 —— 不再用 emoji 变脸
+    btn.innerHTML = icon('text') + ' 大字';
   }
 }
 // 立即执行，确保登录页可见时 data-accessibility 属性已经设置

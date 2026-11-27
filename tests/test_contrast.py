@@ -43,7 +43,7 @@ def _declared(css: str, selector: str) -> Dict[str, str]:
     """某个选择器块里声明的全部 token(原样值)。"""
     m = re.search(re.escape(selector) + r"\s*\{(.*?)\n\s*\}", css, re.S)
     assert m, f"CSS 里找不到 {selector} 块"
-    return {n: v.strip() for n, v in re.findall(r"(--[a-z-]+):\s*([^;]+);", m.group(1))}
+    return {n: v.strip() for n, v in re.findall(r"(--[a-z0-9-]+):\s*([^;]+);", m.group(1))}
 
 
 def _block(css: str, selector: str) -> Dict[str, str]:
@@ -106,6 +106,64 @@ class TestReducedMotion(unittest.TestCase):
         css = CSS.read_text(encoding="utf-8")
         self.assertIn("prefers-reduced-motion", css,
                       "style.css 有 transition/animation,但没有 prefers-reduced-motion 兜底")
+
+
+class TestNoRawBrandColors(unittest.TestCase):
+    """组件规则里不许再出现品牌色的裸值 —— 必须走 token。
+
+    **背景**:2026-11-27 清出过"第三套紫" —— 12 处 `rgba(113,112,255,α)`(#7170ff),
+    既不是 --primary(#6366f1 / #8b93f3)也不是 --primary-bg —— 这正是"颜色太杂"的实物证据。
+    裸值还有两个问题:①暗色主题下不会跟着变(它写死了亮色紫);
+    ②改主色时漏改,同一个界面出现三种紫。
+    """
+
+    # 品牌色的裸值形态(hex 与旧 rgba 写法)
+    BANNED = [
+        r"#6366f1\b", r"#818cf8\b", r"#7170ff\b", r"#5b5fd6\b",
+        r"rgba\(\s*113\s*,\s*112\s*,\s*255",   # 已废弃的第三套紫
+    ]
+
+    def _component_css(self) -> str:
+        """去掉两处 token 定义块后的 CSS(那里允许出现裸值)。"""
+        css = CSS.read_text(encoding="utf-8")
+        out, i = [], 0
+        for selector in (":root", '[data-theme="dark"]'):
+            m = re.search(re.escape(selector) + r"\s*\{", css[i:])
+            if not m:
+                continue
+            start = i + m.start()
+            depth, j = 0, i + m.end() - 1
+            while j < len(css):
+                if css[j] == "{":
+                    depth += 1
+                elif css[j] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            out.append(css[i:start])
+            i = j + 1
+        out.append(css[i:])
+        return "".join(out)
+
+    def test_no_raw_brand_colors(self) -> None:
+        body = self._component_css()
+        offenders = []
+        for pattern in self.BANNED:
+            for m in re.finditer(pattern, body):
+                line = body[:m.start()].count("\n") + 1
+                offenders.append(f"第 {line} 行附近: {m.group(0)}")
+        self.assertEqual(offenders, [],
+                         "组件规则里还有品牌色裸值,请改用 var(--primary)/var(--tint-*):\n"
+                         + "\n".join(offenders[:10]))
+
+    def test_brand_colors_are_tokenized_in_both_themes(self) -> None:
+        """两个主题都必须定义 --primary / --primary-bg / --tint-* ,组件才能安全引用。"""
+        css = CSS.read_text(encoding="utf-8")
+        for selector in (":root", '[data-theme="dark"]'):
+            declared = _declared(css, selector)
+            for token in ("--primary", "--primary-bg", "--tint-3", "--tint-border", "--info", "--info-soft"):
+                self.assertIn(token, declared, f"{selector} 缺少 {token}")
 
 
 if __name__ == "__main__":

@@ -326,11 +326,11 @@ function renderYearlyResult(yearData) {
     html += '</div>';
 
     // ---- 各月用电趋势图 ----
-    html += '<h3 class="yearly-section-title">📈 各月用电趋势</h3>';
+    html += '<h3 class="yearly-section-title">' + icon('trend-up') + ' 各月用电趋势</h3>';
     html += '<div class="chart-wrap"><canvas id="chart-yearly-bar"></canvas></div>';
 
     // ---- 用电明细表 ----
-    html += '<h3 class="yearly-section-title">⚡ 各月用电</h3>';
+    html += '<h3 class="yearly-section-title">' + icon('zap') + ' 各月用电</h3>';
     html += '<div class="table-container"><table class="history-table yearly-table"><thead><tr>' +
             '<th>月份</th>' +
             _reportMeterKeys().map(function(k, i) {
@@ -355,7 +355,7 @@ function renderYearlyResult(yearData) {
         return m.utilities && m.utilities.has_data;
     });
     if (hasUtil) {
-        html += '<h3 class="yearly-section-title">💧 各月水电</h3>';
+        html += '<h3 class="yearly-section-title">' + icon('droplet') + ' 各月水电</h3>';
         html += '<div class="table-container"><table class="history-table yearly-table"><thead><tr>' +
                 '<th>月份</th><th>总表(度)</th><th>分表(度)</th><th>厨房(度)</th>' +
                 '<th>厨房电费</th><th>用水(吨)</th><th>水费</th></tr></thead><tbody>';

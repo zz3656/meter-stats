@@ -27,6 +27,62 @@
 </head>
 <body>
 
+<!-- ── 图标 sprite(内联,零网络请求)────────────────────────────────────────
+     统一 24×24 / stroke 1.6 / currentColor 的线性图标,替换此前的 emoji:
+     emoji 在不同系统、不同字号下渲染差异大,颜色也不受主题控制 —— 是"颜色太杂"
+     的主要来源之一。用 <svg class="icon"><use href="#i-NAME"/></svg> 或
+     JS 里的 icon('NAME') 引用。新增图标必须加进这个 sprite 并过
+     tests/test_icon_system.py。────────────────────────────────────────── -->
+<svg id="icon-sprite" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+<defs>
+  <g id="s" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"></g>
+</defs>
+<symbol id="i-clipboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="4" width="8" height="4" rx="1"/><path d="M9 4H7a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-2"/><path d="M8.5 11h7M8.5 15h4.5"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.7l1.2-2h5.2l1.2 2h1.7A2.5 2.5 0 0 1 19 8.5v8A2.5 2.5 0 0 1 16.5 19h-9A2.5 2.5 0 0 1 5 16.5Z"/><circle cx="12" cy="12.5" r="3.2"/></symbol>
+<symbol id="i-notebook" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h11a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M4 8h3M4 12h3M4 16h3"/><path d="M9.5 8.5h6M9.5 12h6M9.5 15.5h3.5"/></symbol>
+<symbol id="i-coins" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="7" rx="6.4" ry="3"/><path d="M5.6 7v5c0 1.7 2.9 3 6.4 3s6.4-1.3 6.4-3V7"/><path d="M5.6 12v5c0 1.7 2.9 3 6.4 3s6.4-1.3 6.4-3v-5"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8"/><path d="M12 3.6c2.4 2.3 3.7 5.3 3.7 8.4s-1.3 6.1-3.7 8.4c-2.4-2.3-3.7-5.3-3.7-8.4S9.6 5.9 12 3.6Z"/></symbol>
+<symbol id="i-store" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5V19a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9.5"/><path d="M3.2 9.5 5 4.6A1.4 1.4 0 0 1 6.3 4h11.4a1.4 1.4 0 0 1 1.3.6l1.8 4.9"/><path d="M8.2 9.5V19M15.8 9.5V19M3.2 9.5h17.6"/></symbol>
+<symbol id="i-chart-bar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V5M16 20v-7M22 20H2"/></symbol>
+<symbol id="i-folder-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8V6.5A1.5 1.5 0 0 1 4.5 5h4.2l1.8 2.2H19a1.5 1.5 0 0 1 1.5 1.5V10"/><path d="M3 10h18l-2 8.2A1.5 1.5 0 0 1 17.6 19H4.5A1.5 1.5 0 0 1 3 17.5Z"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l1.8 2.2H19a1.5 1.5 0 0 1 1.5 1.5v8.8A1.5 1.5 0 0 1 19 20H4.5A1.5 1.5 0 0 1 3 18.5Z"/></symbol>
+<symbol id="i-droplet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2c3.4 4.2 5.4 6.9 5.4 9.6a5.4 5.4 0 0 1-10.8 0c0-2.7 2-5.4 5.4-9.6Z"/><path d="M9.6 13.4a2.6 2.6 0 0 0 2.2 2.6"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h11l3 3v13H5Z"/><path d="M8 4v5h7V4"/><rect x="8" y="13" width="8" height="7"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3 5.5 13.5H11l-.5 7.5 8-10.5H13Z"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="15" rx="2"/><path d="M8 3.5v4M16 3.5v4M3.5 10.5h17"/></symbol>
+<symbol id="i-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V10h-5.3"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.2 8.2 0 0 1 9.5 4a8.4 8.4 0 1 0 10.5 10.5Z"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M18.4 5.6l-1.6 1.6M7.2 16.8l-1.6 1.6"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="12" rx="1.8"/><path d="M9 20h6M12 16.5V20"/></symbol>
+<symbol id="i-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7.5V5h16v2.5"/><path d="M12 5v14M8.5 19h7"/></symbol>
+<symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+<symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.2 20 7v10L12 20.8 4 17V7Z"/><path d="M4 7l8 3.8L20 7M12 10.8V20.8"/></symbol>
+<symbol id="i-trend-up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17.5 9.5 11l4 3.5L21 7"/><path d="M15.5 7H21v5.5"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-2.9 1.2 2 2 0 1 1-4 0 1.7 1.7 0 0 0-2.9-1.2l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.7 1.7 0 0 0 2.1 15a2 2 0 1 1 0-4 1.7 1.7 0 0 0 1.2-2.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.7 1.7 0 0 0 9 4.1a2 2 0 1 1 4 0 1.7 1.7 0 0 0 2.9 1.2l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.7 1.7 0 0 0 19.9 11a2 2 0 1 1 0 4Z"/></symbol>
+<symbol id="i-building" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="1.6"/><path d="M9 7.5h2M13 7.5h2M9 11h2M13 11h2M9 14.5h2M13 14.5h2M10.5 20.5v-3h3v3"/></symbol>
+<symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5a5.5 5.5 0 0 1 11 0"/><path d="M16 5.6a3.2 3.2 0 0 1 0 5.8M17.5 14.4a5.5 5.5 0 0 1 3 5.1"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10" width="15" height="10.5" rx="2"/><path d="M8 10V7.5a4 4 0 0 1 8 0V10"/><path d="M12 14v2.5"/></symbol>
+<symbol id="i-flame" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s4.5 4.2 4.5 8.2a4.5 4.5 0 0 1-9 0C7.5 9.3 9 7.8 9 7.8s.4 2 1.5 2.6C11 9 12 6.2 12 3Z"/><path d="M9.8 18.5h4.4"/></symbol>
+<symbol id="i-calculator" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M8 7.5h8"/><path d="M8.5 11.5h.01M12 11.5h.01M15.5 11.5h.01M8.5 15h.01M12 15h.01M15.5 15h.01M8.5 18.2h.01M12 18.2h.01M15.5 18.2h.01"/></symbol>
+<symbol id="i-scroll" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="3.5" width="15" height="17" rx="2"/><path d="M8.2 8.5h7.6M8.2 12h7.6M8.2 15.5h4.6"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 6.2a4 4 0 1 0 3.3 3.3l3.2 3.2-2.5 2.5-3.2-3.2a4 4 0 0 1-3.3-3.3"/></symbol>
+<symbol id="i-hammer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 4.5 9 9l2 2 4.5-4.5Z"/><path d="M11 11 4.5 17.5a2 2 0 0 0 2.8 2.8L14 13.8"/><path d="M14.5 3 21 9.5"/></symbol>
+<symbol id="i-cart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9.5" cy="19" r="1.4"/><circle cx="17" cy="19" r="1.4"/><path d="M3 4h2.2l2.3 9.6h10.8L20 7.5H6"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<symbol id="i-log-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 20H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h3"/><path d="M15.5 8 20 12l-4.5 4M20 12H9.5"/></symbol>
+<symbol id="i-plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3.5v4M15 3.5v4"/><path d="M6 7.5h12v3a6 6 0 0 1-6 6 6 6 0 0 1-6-6Z"/><path d="M12 16.5v4"/></symbol>
+<symbol id="i-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5 21 19.5H3Z"/><path d="M12 10v4.2M12 17h.01"/></symbol>
+<symbol id="i-credit-card" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 10.5h18"/><path d="M7 14.5h3"/></symbol>
+<symbol id="i-pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5a8.5 8.5 0 1 0 8.5 8.5H12Z"/><path d="M14.5 3.9A8.5 8.5 0 0 1 20.1 9.5H14.5Z"/></symbol>
+<symbol id="i-hash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 3.5 7.5 20.5M16.5 3.5 14.5 20.5M3.5 9h17M3 15h17"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16.5V4.5"/><path d="M7.5 9 12 4.5 16.5 9"/><path d="M4 15.5v3a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5v-3"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4.5V16.5"/><path d="M16.5 12 12 16.5 7.5 12"/><path d="M4 15.5v3A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-3"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5 9.5 17.5 19.5 6.5"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15"/><path d="M9 7V5.2A1.2 1.2 0 0 1 10.2 4h3.6A1.2 1.2 0 0 1 15 5.2V7"/><path d="M6.5 7l.9 12a1.5 1.5 0 0 0 1.5 1.4h6.2a1.5 1.5 0 0 0 1.5-1.4L17.5 7"/><path d="M10.5 11v6M13.5 11v6"/></symbol>
+</svg>
+
+
 <!-- ===== 登录页面 ===== -->
 <div id="login-page" style="position:fixed;inset:0;z-index:9999;background:var(--bg);display:none;align-items:center;justify-content:center;">
   <div style="width:360px;padding:32px;background:var(--bg-elevated);border-radius:16px;border:1px solid var(--border);box-shadow:var(--shadow);">
@@ -36,8 +92,8 @@
       <p style="margin:4px 0 0;font-size:13px;color:var(--text-muted);">登录后管理数据与权限</p>
       <!-- 登录页全局控制按钮 -->
       <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
-        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题" aria-label="切换主题" style="padding:7px 10px;">🌙</button>
-        <button type="button" class="header-backup-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式">🔤 大字</button>
+        <button type="button" class="header-backup-btn" id="login-theme-btn" onclick="cycleTheme()" title="切换主题" aria-label="切换主题" style="padding:7px 10px;"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+        <button type="button" class="header-backup-btn accessibility-btn" id="login-accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式"><svg class="icon" aria-hidden="true"><use href="#i-text"></use></svg> 大字</button>
       </div>
     </div>
       <div id="login-error" style="display:none;padding:8px 12px;border-radius:8px;font-size:13px;margin-bottom:16px;background:var(--bg-surface);color:var(--danger);border:1px solid var(--danger-soft);"></div>
@@ -58,14 +114,14 @@
 <!-- ===== 顶部栏 ===== -->
 <header>
   <div class="header-left">
-    <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="切换侧栏" aria-label="切换侧栏">☰</button>
-    <h1>⚡ 工程部管理系统</h1>
+    <button type="button" class="sidebar-toggle-btn" id="sidebar-toggle" onclick="toggleSidebar()" title="切换侧栏" aria-label="切换侧栏"><svg class="icon" aria-hidden="true"><use href="#i-menu"></use></svg></button>
+    <h1><svg class="icon" aria-hidden="true"><use href="#i-zap"></use></svg> 工程部管理系统</h1>
     <p>录入抄表读数 · 实时统计 · 历史趋势</p>
   </div>
   <div class="header-right" style="display:flex;align-items:center;gap:8px;">
-    <button type="button" class="header-backup-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题" aria-label="切换主题" style="padding:7px 10px;">🌙</button>
-    <button type="button" class="header-backup-btn accessibility-btn" id="accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式" style="padding:7px 10px;">🔤 大字</button>
-    <button type="button" class="header-backup-btn" id="logout-btn" onclick="doLogout()" style="display:none;" title="退出登录">🚪 退出</button>
+    <button type="button" class="header-backup-btn" id="theme-btn" onclick="cycleTheme()" title="切换主题" aria-label="切换主题" style="padding:7px 10px;"><svg class="icon" aria-hidden="true"><use href="#i-moon"></use></svg></button>
+    <button type="button" class="header-backup-btn accessibility-btn" id="accessibility-btn" onclick="toggleAccessibility()" title="大字醒目模式" style="padding:7px 10px;"><svg class="icon" aria-hidden="true"><use href="#i-text"></use></svg> 大字</button>
+    <button type="button" class="header-backup-btn" id="logout-btn" onclick="doLogout()" style="display:none;" title="退出登录"><svg class="icon" aria-hidden="true"><use href="#i-log-out"></use></svg> 退出</button>
   </div>
 </header>
 
@@ -77,7 +133,7 @@
 <!-- 抄表提醒横幅(距上次抄表 ≥3 天时显示) -->
 <div id="meter-reminder" class="meter-reminder" style="display:none;">
   <span id="meter-reminder-text">📅 抄表提醒</span>
-  <button type="button" class="meter-reminder-close" aria-label="关闭提示" onclick="document.getElementById('meter-reminder').style.display='none'">✕</button>
+  <button type="button" class="meter-reminder-close" aria-label="关闭提示" onclick="document.getElementById('meter-reminder').style.display='none'"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
 </div>
 
 <!-- ===== 整体布局 ===== -->
@@ -88,7 +144,7 @@
   <aside id="sidebar" class="sidebar">
     <!-- 门店切换器(P1):仅总部/多店用户可见,由 js/modules/storeSwitcher.js 渲染 -->
     <div class="store-switcher" id="store-switcher" style="display:none;">
-      <label class="store-switcher-label" for="store-select">🏪 当前门店</label>
+      <label class="store-switcher-label" for="store-select"><svg class="icon" aria-hidden="true"><use href="#i-store"></use></svg> 当前门店</label>
       <select id="store-select" class="store-select" title="切换门店"></select>
     </div>
 
@@ -97,36 +153,36 @@
       <!-- 数据记录(默认展开) -->
       <div class="sidebar-group">
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
-          <span class="group-icon">📋</span><span class="group-label">数据记录</span><span class="group-arrow">▾</span>
+          <span class="group-icon"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg></span><span class="group-label">数据记录</span><span class="group-arrow">▾</span>
         </div>
-        <button class="sidebar-item active" data-section="reading-record" onclick="switchSection('reading-record')"><span class="item-icon">📋</span><span class="item-label">用电记录</span></button>
-        <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')"><span class="item-icon">📦</span><span class="item-label">物品记录</span></button>
-        <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')"><span class="item-icon">📋</span><span class="item-label">申购记录</span></button>
-        <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')"><span class="item-icon">📝</span><span class="item-label">工作记录</span></button>
+        <button class="sidebar-item active" data-section="reading-record" onclick="switchSection('reading-record')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg></span><span class="item-label">用电记录</span></button>
+        <button class="sidebar-item" data-section="item-record" onclick="switchSection('item-record')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-package"></use></svg></span><span class="item-label">物品记录</span></button>
+        <button class="sidebar-item" data-section="purchase-record" onclick="switchSection('purchase-record')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg></span><span class="item-label">申购记录</span></button>
+        <button class="sidebar-item" data-section="duty-record" onclick="switchSection('duty-record')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg></span><span class="item-label">工作记录</span></button>
       </div>
 
       <!-- 报表分析 -->
       <div class="sidebar-group collapsed">
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
-          <span class="group-icon">📊</span><span class="group-label">报表分析</span><span class="group-arrow">▾</span>
+          <span class="group-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart-bar"></use></svg></span><span class="group-label">报表分析</span><span class="group-arrow">▾</span>
         </div>
-        <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')"><span class="item-icon">📈</span><span class="item-label">每日趋势</span></button>
-        <button class="sidebar-item" data-section="report-weekly" onclick="switchSection('report-weekly')"><span class="item-icon">📋</span><span class="item-label">每周汇报</span></button>
-        <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')"><span class="item-icon">📊</span><span class="item-label">月度报告</span></button>
-        <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')"><span class="item-icon">📅</span><span class="item-label">年度汇总</span></button>
+        <button class="sidebar-item" data-section="report-trend" onclick="switchSection('report-trend')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-trend-up"></use></svg></span><span class="item-label">每日趋势</span></button>
+        <button class="sidebar-item" data-section="report-weekly" onclick="switchSection('report-weekly')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg></span><span class="item-label">每周汇报</span></button>
+        <button class="sidebar-item" data-section="report-monthly" onclick="switchSection('report-monthly')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-chart-bar"></use></svg></span><span class="item-label">月度报告</span></button>
+        <button class="sidebar-item" data-section="report-yearly" onclick="switchSection('report-yearly')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg></span><span class="item-label">年度汇总</span></button>
       </div>
 
       <!-- 系统设置 -->
       <div class="sidebar-group collapsed">
         <div class="sidebar-group-title" onclick="toggleGroup(this)">
-          <span class="group-icon">⚙️</span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
+          <span class="group-icon"><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg></span><span class="group-label">系统设置</span><span class="group-arrow">▾</span>
         </div>
-        <button class="sidebar-item" data-section="settings-overview" id="nav-overview" style="display:none;" onclick="switchSettingsPage('overview')"><span class="item-icon">🏬</span><span class="item-label">门店总览</span></button>
-        <button class="sidebar-item" data-section="settings-stores" onclick="switchSettingsPage('stores')"><span class="item-icon">🏪</span><span class="item-label">门店管理</span></button>
-        <button class="sidebar-item" data-section="settings-users" data-roles="admin" onclick="switchSettingsPage('users')"><span class="item-icon">👥</span><span class="item-label">用户管理</span></button>
-        <button class="sidebar-item" data-section="settings-meter" data-roles="manager" onclick="switchSettingsPage('meter')"><span class="item-icon">🔌</span><span class="item-label">电表设置</span></button>
-        <button class="sidebar-item" data-section="settings-data" data-roles="manager" onclick="switchSettingsPage('data')"><span class="item-icon">📂</span><span class="item-label">数据管理</span></button>
-        <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')"><span class="item-icon">🔐</span><span class="item-label">权限管理</span></button>
+        <button class="sidebar-item" data-section="settings-overview" id="nav-overview" style="display:none;" onclick="switchSettingsPage('overview')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-building"></use></svg></span><span class="item-label">门店总览</span></button>
+        <button class="sidebar-item" data-section="settings-stores" onclick="switchSettingsPage('stores')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-store"></use></svg></span><span class="item-label">门店管理</span></button>
+        <button class="sidebar-item" data-section="settings-users" data-roles="admin" onclick="switchSettingsPage('users')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg></span><span class="item-label">用户管理</span></button>
+        <button class="sidebar-item" data-section="settings-meter" data-roles="manager" onclick="switchSettingsPage('meter')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-plug"></use></svg></span><span class="item-label">电表设置</span></button>
+        <button class="sidebar-item" data-section="settings-data" data-roles="manager" onclick="switchSettingsPage('data')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-folder-open"></use></svg></span><span class="item-label">数据管理</span></button>
+        <button class="sidebar-item" data-section="settings-roles" onclick="switchSettingsPage('roles')"><span class="item-icon"><svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg></span><span class="item-label">权限管理</span></button>
       </div>
 
     </nav>
@@ -138,22 +194,22 @@
 
     <!-- 顶部状态条: 电表相关 section 打开即见全局 -->
     <div class="status-bar" id="status-bar" style="display:none;">
-      <div class="status-item">📅 <span id="st-last-reading">—</span></div>
-      <div class="status-item">⚡ <span id="st-month-kwh">—</span></div>
-      <div class="status-item">💰 <span id="st-month-cost">—</span></div>
-      <div class="status-item">🚨 <span id="st-alerts">—</span></div>
+      <div class="status-item"><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> <span id="st-last-reading">—</span></div>
+      <div class="status-item"><svg class="icon" aria-hidden="true"><use href="#i-zap"></use></svg> <span id="st-month-kwh">—</span></div>
+      <div class="status-item"><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> <span id="st-month-cost">—</span></div>
+      <div class="status-item"><svg class="icon" aria-hidden="true"><use href="#i-alert"></use></svg> <span id="st-alerts">—</span></div>
     </div>
 
     <!-- ===== 抄表录入 ===== -->
     <section id="section-reading" class="content-section">
       <div class="card">
         <div class="card-header">
-          <h2>📝 抄表录入</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg> 抄表录入</h2>
         </div>
         <!-- 余量预警卡片(抄表录入页内联显示,始终可见) -->
         <div class="card" id="reading-alerts-card" style="display:none;margin-bottom:16px;">
           <div class="card-header">
-            <h2>🔥 余量预警</h2>
+            <h2><svg class="icon" aria-hidden="true"><use href="#i-flame"></use></svg> 余量预警</h2>
           </div>
           <div id="reading-alerts-container"></div>
         </div>
@@ -192,8 +248,8 @@
     <section id="section-charge" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>💰 充值录入</h2>
-          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()">🧮 计算</button>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> 充值录入</h2>
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-topup-calc" onclick="openTopupModal()"><svg class="icon" aria-hidden="true"><use href="#i-calculator"></use></svg> 计算</button>
         </div>
         <form id="charge-form">
           <div class="form-row">
@@ -216,7 +272,7 @@
     <section id="section-utility" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>💧 水电录入</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-droplet"></use></svg> 水电录入</h2>
         </div>
         <form id="utility-form">
           <div class="form-row">
@@ -251,8 +307,8 @@
       <!-- 余量预警 -->
       <div class="card" id="reading-record-alerts-card" style="margin-bottom:16px;">
         <div class="card-header">
-          <h2>🔥 余量预警</h2>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算">🧮 计算</button>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-flame"></use></svg> 余量预警</h2>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="openTopupModal()" title="充值计算"><svg class="icon" aria-hidden="true"><use href="#i-calculator"></use></svg> 计算</button>
         </div>
         <div id="reading-record-alerts-container"></div>
       </div>
@@ -260,19 +316,19 @@
       <!-- 用电记录：抄表 / 充值 / 水电 三合一 -->
       <div class="card">
         <div class="card-header">
-          <h2>📋 用电记录</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 用电记录</h2>
           <div style="display:flex;gap:6px;align-items:center;">
             <select id="record-month" class="field-control"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-add-reading">➕ 抄表</button>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-add-charge" style="display:none;">➕ 充值</button>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-add-water" style="display:none;">➕ 水电</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-reading"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 抄表</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-charge" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 充值</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-add-water" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 水电</button>
           </div>
         </div>
 
         <div class="record-tabs">
-          <button type="button" class="record-tab active" data-tab="reading">📜 抄表</button>
-          <button type="button" class="record-tab" data-tab="charge">💳 充值</button>
-          <button type="button" class="record-tab" data-tab="water">💧 水电</button>
+          <button type="button" class="record-tab active" data-tab="reading"><svg class="icon" aria-hidden="true"><use href="#i-scroll"></use></svg> 抄表</button>
+          <button type="button" class="record-tab" data-tab="charge"><svg class="icon" aria-hidden="true"><use href="#i-credit-card"></use></svg> 充值</button>
+          <button type="button" class="record-tab" data-tab="water"><svg class="icon" aria-hidden="true"><use href="#i-droplet"></use></svg> 水电</button>
         </div>
 
         <!-- 抄表 -->
@@ -342,7 +398,7 @@
     <section id="section-item-add" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>🛠 物品录入</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-hammer"></use></svg> 物品录入</h2>
         </div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px 0;">
           录入工程部现有的维修工具、耗材等。
@@ -373,7 +429,7 @@
     <section id="section-purchase-add" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>🛒 申购录入</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-cart"></use></svg> 申购录入</h2>
         </div>
         <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px 0;">
           录入需要采购的物品。提交后到「申购记录」购买 → 自动加入物品记录。
@@ -416,9 +472,9 @@
     <section id="section-item-record" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📦 物品记录</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-package"></use></svg> 物品记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-item-add" title="新增物品">➕ 物品</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-item-add" title="新增物品"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 物品</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -442,7 +498,7 @@
       <!-- 借出 / 归还 流水记录 -->
       <div class="card">
         <div class="card-header">
-          <h2>📜 借出 / 归还 记录</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-scroll"></use></svg> 借出 / 归还 记录</h2>
         </div>
         <div style="overflow-x:auto;">
           <table class="history-table" id="lend-history-table">
@@ -472,9 +528,9 @@
     <section id="section-purchase-record" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📋 申购记录</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 申购记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-add" title="新增申购">➕ 申购</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-purchase-add" title="新增申购"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 申购</button>
           </div>
         </div>
         <div style="overflow-x:auto;">
@@ -501,7 +557,7 @@
     <section id="section-duty" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>🔧 值班录入</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg> 值班录入</h2>
         </div>
         <form id="duty-form">
           <div class="form-row">
@@ -548,7 +604,7 @@
           <div class="form-row">
             <label>图片 <span class="hint">选填，最多3张</span></label>
             <div id="duty-image-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-duty-image" onclick="addDutyImage('sidebar')">📷 图片</button>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-add-duty-image" onclick="addDutyImage('sidebar')"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg> 图片</button>
             <input type="file" id="duty-image-input" accept="image/*" multiple style="display:none;" onchange="handleDutyImageSelect(this, 'sidebar')" />
           </div>
           <div class="button-row">
@@ -562,18 +618,18 @@
     <section id="section-duty-record" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📋 工作记录</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 工作记录</h2>
           <div style="display:flex;gap:8px;align-items:center;">
             <select id="duty-record-month" class="field-control">
               <option value="">全部</option>
             </select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录">➕ 记录</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-open-duty-add" title="新增记录"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 记录</button>
           </div>
         </div>
         <!-- 班次遗留未处理记录横幅 -->
         <div id="duty-reminder" class="meter-reminder" style="display:none;">
           <span id="duty-reminder-text">⚠️ 有待处理工作记录</span>
-          <button type="button" class="meter-reminder-close" onclick="document.getElementById('duty-reminder').style.display='none'">✕</button>
+          <button type="button" class="meter-reminder-close" onclick="document.getElementById('duty-reminder').style.display='none'"><svg class="icon" aria-hidden="true"><use href="#i-x"></use></svg></button>
         </div>
         <div style="overflow-x:auto;">
           <table class="history-table" id="duty-table">
@@ -600,10 +656,10 @@
     <section id="section-report-monthly" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📊 月度报告</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-chart-bar"></use></svg> 月度报告</h2>
           <div style="display:flex;gap:6px;align-items:center;">
             <select id="report-month" class="field-control report-month-select"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-report" style="display:none;">📋 复制</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-report" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
         </div>
 
@@ -624,7 +680,7 @@
 
         <!-- 当月占比：左文字右饼图 -->
         <div id="monthly-pie-wrap" style="margin-top:22px;display:none;">
-          <h3 class="block-title">🥧 当月用电占比</h3>
+          <h3 class="block-title"><svg class="icon" aria-hidden="true"><use href="#i-pie"></use></svg> 当月用电占比</h3>
           <div class="day-detail-grid">
             <div class="day-detail-list" id="monthly-pie-summary"></div>
             <div class="chart-wrap short"><canvas id="chart-monthly-pie"></canvas></div>
@@ -634,8 +690,8 @@
         <!-- 月度水电 -->
         <div id="monthly-utilities-block" style="margin-top:24px;">
           <div class="util-header">
-            <h3 class="util-title">💧 水电用量</h3>
-            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-utilities" style="display:none;">📋 复制</button>
+            <h3 class="util-title"><svg class="icon" aria-hidden="true"><use href="#i-droplet"></use></svg> 水电用量</h3>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-copy-utilities" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
           <div id="utilities-result"></div>
         </div>
@@ -646,11 +702,11 @@
     <section id="section-report-trend" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📈 每日用电</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-trend-up"></use></svg> 每日用电</h2>
           <div class="form-row" style="flex-direction:row;align-items:center;gap:6px;margin:0;">
             <label style="font-size:12px;color:var(--text-muted);margin:0;white-space:nowrap;">单天</label>
             <select id="day-copy-date" class="field-control" style="width:auto;padding:5px 10px;"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-day">📋 复制</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-day"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
         </div>
 
@@ -667,7 +723,7 @@
 
         <!-- 当日明细：左文字右饼图 -->
         <div id="daily-pie-wrap" style="margin-top:20px;display:none;">
-          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 12px 0;">📊 当日明细</h3>
+          <h3 style="font-size:13px;color:var(--text-muted);margin:0 0 12px 0;"><svg class="icon" aria-hidden="true"><use href="#i-chart-bar"></use></svg> 当日明细</h3>
           <div class="day-detail-grid">
             <div class="day-detail-list" id="daily-pie-summary"></div>
             <div class="chart-wrap short"><canvas id="chart-daily-pie"></canvas></div>
@@ -680,10 +736,10 @@
     <section id="section-report-weekly" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📋 每周汇报</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 每周汇报</h2>
           <div style="display:flex;gap:6px;align-items:center;">
             <select id="weekly-target-week" class="field-control" style="width:auto;padding:5px 10px;"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-weekly" style="display:none;">📋 复制</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-weekly" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
         </div>
 
@@ -722,11 +778,11 @@
     <section id="section-report-yearly" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📅 年度汇总</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-calendar"></use></svg> 年度汇总</h2>
           <div class="report-toolbar">
             <select id="yearly-year" class="field-control yearly-year-select"></select>
             <button type="button" class="btn btn-secondary btn-sm" id="yearly-apply">查询</button>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-yearly" style="display:none;">📋 复制</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-yearly" style="display:none;"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
         </div>
         <div id="yearly-result" style="margin-top:8px;"></div>
@@ -737,11 +793,11 @@
     <section id="section-overview" class="content-section" style="display:none;">
       <div class="card">
         <div class="card-header">
-          <h2>📊 每月用电</h2>
+          <h2><svg class="icon" aria-hidden="true"><use href="#i-chart-bar"></use></svg> 每月用电</h2>
           <div style="display:flex;gap:6px;align-items:center;">
             <label style="font-size:12px;color:var(--text-muted);">月份</label>
             <select id="stats-month" class="field-control" style="width:auto;padding:5px 10px;"></select>
-            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-month">📋 复制</button>
+            <button type="button" class="btn btn-primary btn-sm" id="btn-copy-month"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 复制</button>
           </div>
         </div>
         <div class="stat-grid" id="stat-grid"></div>
@@ -752,7 +808,7 @@
   <section id="section-settings-overview" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>🏬 门店总览</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-building"></use></svg> 门店总览</h2>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="month" id="overview-month" class="field-control" style="width:auto;" />
           <button class="btn btn-secondary btn-sm" onclick="loadStoresOverview()">刷新</button>
@@ -788,7 +844,7 @@
   <section id="section-settings-users" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>👥 用户管理 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-users"></use></svg> 用户管理 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></h2>
       </div>
       <div id="users-stat-grid" class="trend-stat-grid"></div>
       <div class="settings-toolbar">
@@ -804,7 +860,7 @@
           <input type="checkbox" id="new-all-stores"> 全部门店
         </label>
         <span id="new-store-ids-box" style="display:inline-flex;align-items:center;gap:8px;flex-wrap:wrap;"></span>
-        <button class="btn btn-primary btn-sm" onclick="addAdminUser()">➕ 添加</button>
+        <button class="btn btn-primary btn-sm" onclick="addAdminUser()"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 添加</button>
       </div>
       <div style="overflow-x:auto;">
         <table class="settings-table">
@@ -828,24 +884,24 @@
   <section id="section-settings-meter" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>⚙️ 电表设置</h2>
-        <button class="btn btn-primary btn-sm" onclick="saveMeterSettings()">💾 保存</button>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-settings"></use></svg> 电表设置</h2>
+        <button class="btn btn-primary btn-sm" onclick="saveMeterSettings()"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> 保存</button>
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">📝 电表设置 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span>
+        <div class="settings-block-title"><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg> 电表设置 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置"><svg class="icon" aria-hidden="true"><use href="#i-store"></use></svg> 本店</span>
           <span id="meter-settings-store" class="settings-unit" style="font-weight:400;margin-left:8px;"></span>
         </div>
         <div class="settings-block-desc">本店有几块电表、各自的名称 / 倍率 / 图标。改动会同步到所有报表、图例、抄表与充值表单</div>
         <div id="meter-settings-form" class="meter-grid"></div>
         <div style="margin-top:10px;">
-          <button type="button" class="btn btn-secondary btn-sm" onclick="addMeterRow()">➕ 新增一块表</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="addMeterRow()"><svg class="icon" aria-hidden="true"><use href="#i-plus"></use></svg> 新增一块表</button>
           <span class="settings-unit" style="margin-left:8px;">至少保留 1 块表</span>
         </div>
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">💰 计费单价 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span></div>
+        <div class="settings-block-title"><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> 计费单价 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置"><svg class="icon" aria-hidden="true"><use href="#i-store"></use></svg> 本店</span></div>
         <div class="settings-block-desc">用于把用电量、用水量换算成金额</div>
         <div class="settings-inline">
           <label class="settings-field">电价
@@ -860,7 +916,7 @@
       </div>
 
       <div class="settings-block">
-        <div class="settings-block-title">🔢 水电表倍率 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置">🏪 本店</span></div>
+        <div class="settings-block-title"><svg class="icon" aria-hidden="true"><use href="#i-hash"></use></svg> 水电表倍率 <span class="badge-status success scope-badge" title="只对当前门店生效:切到别的门店是另一份配置"><svg class="icon" aria-hidden="true"><use href="#i-store"></use></svg> 本店</span></div>
         <div class="settings-block-desc">抄见差 × 倍率 = 实际用量；厨房恒为「总表 − 分表」，无需设置</div>
         <div class="settings-inline">
           <label class="settings-field">总表倍率
@@ -896,28 +952,28 @@
   <section id="section-settings-data" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>📂 数据管理</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-folder-open"></use></svg> 数据管理</h2>
       </div>
 
       <div class="settings-grid-2">
       <!-- 1) 备份与恢复 -->
       <div class="settings-panel">
-        <div class="panel-title"><span>💾 备份与恢复 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
+        <div class="panel-title"><span><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> 备份与恢复 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></span></div>
         <div id="backup-dir-display" class="panel-desc data-line">加载中...</div>
         <div id="backup-dir-input-wrap" class="data-input-wrap" data-admin-only="1">
           <input type="text" id="backup-dir-input" placeholder="完整路径；留空 = 数据目录下的 backup/" class="field-control">
         </div>
         <div class="data-actions">
-          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn" data-admin-only="1">📂 选择目录</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickBackupDirInput()" id="pick-backup-dir-btn" data-admin-only="1"><svg class="icon" aria-hidden="true"><use href="#i-folder-open"></use></svg> 选择目录</button>
           <button class="btn btn-primary btn-xs" onclick="saveBackupSettings()" id="save-backup-btn" data-admin-only="1">保存</button>
           <span class="data-actions-sep"></span>
-          <button class="btn btn-primary btn-xs" onclick="adminBackup()" id="admin-backup-btn">💾 备份</button>
+          <button class="btn btn-primary btn-xs" onclick="adminBackup()" id="admin-backup-btn"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> 备份</button>
           <button class="btn btn-secondary btn-xs" onclick="adminRestore()">↩️ 恢复</button>
         </div>
         <div class="auto-backup-row" data-admin-only="1">
           <input type="checkbox" id="admin-auto-backup-toggle" checked>
           <div class="auto-backup-label">
-            <div class="panel-title">自动备份 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></div>
+            <div class="panel-title">自动备份 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></div>
             <div class="panel-desc">每次启动时自动备份一次（当天只备份一次），超出保留个数自动清理旧的</div>
           </div>
           <div class="auto-backup-retention">
@@ -930,7 +986,7 @@
 
       <!-- 2) 图片目录(管理员专属:全局覆盖项) -->
       <div class="settings-panel" data-admin-only="1">
-        <div class="panel-title"><span>📷 图片目录 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
+        <div class="panel-title"><span><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg> 图片目录 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></span></div>
         <div id="image-dir-display" class="panel-desc data-line">加载中...</div>
         <div id="image-dir-stats" class="panel-desc data-line data-muted"></div>
         <div id="image-dir-input-wrap" class="data-input-wrap">
@@ -941,22 +997,22 @@
           与「照片按店隔离」正好相反。留空(推荐)= 每店各自的 stores/&lt;店&gt;/images/。
         </div>
         <div class="data-actions">
-          <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()" id="pick-image-dir-btn">📂 选择目录</button>
+          <button class="btn btn-secondary btn-xs" onclick="pickImageDirInput()" id="pick-image-dir-btn"><svg class="icon" aria-hidden="true"><use href="#i-folder-open"></use></svg> 选择目录</button>
           <button class="btn btn-primary btn-xs" onclick="saveImageDirInput()" id="save-image-dir-btn">保存</button>
         </div>
       </div>
 
       <!-- 3) 从 NAS 同步(管理员专属:凭据是全站的) -->
       <div class="settings-panel" data-admin-only="1">
-        <div class="panel-title"><span>🔄 从 NAS 同步 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span></div>
+        <div class="panel-title"><span><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg> 从 NAS 同步 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></span></div>
         <div class="data-actions">
           <input type="text" id="nas-sync-url-input" placeholder="外网 lin.icafe.top　内网 172.16.254.250:8765" class="field-control data-grow">
-          <button class="btn btn-primary btn-xs" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn">🔄 同步</button>
+          <button class="btn btn-primary btn-xs" onclick="adminSyncFromNAS()" id="admin-sync-nas-btn"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg> 同步</button>
         </div>
         <div class="data-actions" style="margin-top:8px;">
           <input type="text" id="nas-sync-user-input" placeholder="远端账号（如 admin）" class="field-control" autocomplete="off">
           <input type="password" id="nas-sync-pass-input" placeholder="远端密码" class="field-control" autocomplete="new-password">
-          <button class="btn btn-secondary btn-xs" onclick="saveNasConfig()" id="save-nas-config-btn">💾 保存凭据</button>
+          <button class="btn btn-secondary btn-xs" onclick="saveNasConfig()" id="save-nas-config-btn"><svg class="icon" aria-hidden="true"><use href="#i-save"></use></svg> 保存凭据</button>
         </div>
         <div class="panel-desc data-hint" id="nas-config-hint">加载中...</div>
         <div class="panel-desc data-hint">
@@ -969,8 +1025,8 @@
       <!-- 4) 备份列表 -->
       <div class="settings-panel" style="margin-bottom:0;">
         <div class="panel-title">
-          <span>📁 备份列表 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></span>
-          <button class="btn btn-secondary btn-xs" onclick="loadBackupList()">🔄 刷新</button>
+          <span><svg class="icon" aria-hidden="true"><use href="#i-folder"></use></svg> 备份列表 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置"><svg class="icon" aria-hidden="true"><use href="#i-globe"></use></svg> 全局</span></span>
+          <button class="btn btn-secondary btn-xs" onclick="loadBackupList()"><svg class="icon" aria-hidden="true"><use href="#i-refresh"></use></svg> 刷新</button>
         </div>
         <div id="backup-list" class="panel-desc data-hint">加载中...</div>
       </div>
@@ -981,7 +1037,7 @@
   <section id="section-settings-roles" class="content-section" style="display:none;">
     <div class="card">
       <div class="card-header">
-        <h2>🔐 权限管理</h2>
+        <h2><svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg> 权限管理</h2>
       </div>
       <div class="settings-block-desc" style="margin-bottom:14px;">
         三级权限固定配置，不可自定义。员工只能录入，主管可编辑，管理员拥有全部权限（含用户与系统设置）。
@@ -1017,7 +1073,7 @@
 <!-- 充值计算弹窗 -->
 <div id="topup-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:460px;">
-    <h3 class="modal-title">⚡ 充值计算</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-zap"></use></svg> 充值计算</h3>
     <div class="modal-body">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
         <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">预充天数</label>
@@ -1028,7 +1084,7 @@
       </div>
       <div id="topup-result-modal" style="display:flex;flex-direction:column;gap:8px;"></div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--border);">
-        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;">💰 合计充值</label>
+        <label style="font-size:13px;color:var(--text-muted);white-space:nowrap;"><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> 合计充值</label>
         <input type="text" id="topup-total-modal" class="field-control" readonly style="flex:1;background:var(--bg-subtle);">
       </div>
       <div style="font-size:11px;color:var(--text-muted);margin-top:10px;line-height:1.6;">
@@ -1038,7 +1094,7 @@
     </div>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" id="topup-close">关闭</button>
-      <button type="button" class="btn" id="topup-submit" onclick="submitTopupApplication()">📋 提交充值申请</button>
+      <button type="button" class="btn" id="topup-submit" onclick="submitTopupApplication()"><svg class="icon" aria-hidden="true"><use href="#i-clipboard"></use></svg> 提交充值申请</button>
     </div>
   </div>
 </div>
@@ -1046,7 +1102,7 @@
 <!-- 借出弹窗 -->
 <div id="lend-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:400px;">
-    <h3 class="modal-title" id="lend-modal-title">📤 借出物品</h3>
+    <h3 class="modal-title" id="lend-modal-title"><svg class="icon" aria-hidden="true"><use href="#i-upload"></use></svg> 借出物品</h3>
     <div class="modal-body">
       <input type="hidden" id="lend-item-id" />
       <div style="margin-bottom:12px;">
@@ -1065,7 +1121,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">借出人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" id="lend-borrower" class="field-control" placeholder="姓名 或 传图" style="flex:1;min-width:0;" />
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('lend-borrower')" title="传图片代替文字">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('lend-borrower')" title="传图片代替文字"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="lend-borrower-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
         <input type="file" id="lend-borrower-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'lend-borrower')" />
@@ -1085,7 +1141,7 @@
 <!-- 归还弹窗 -->
 <div id="return-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:400px;">
-    <h3 class="modal-title">📥 归还物品</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-download"></use></svg> 归还物品</h3>
     <div class="modal-body">
       <input type="hidden" id="return-item-id" />
       <div style="margin-bottom:12px;">
@@ -1104,7 +1160,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">归还人 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" id="return-by" class="field-control" placeholder="姓名 或 传图" style="flex:1;min-width:0;" />
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('return-by')" title="传图片代替文字">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('return-by')" title="传图片代替文字"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="return-by-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
         <input type="file" id="return-by-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'return-by')" />
@@ -1124,7 +1180,7 @@
 <!-- 物品录入弹窗（在物品记录页面点 ➕ 触发） -->
 <div id="item-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:440px;">
-    <h3 class="modal-title">🛠 新增物品</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-hammer"></use></svg> 新增物品</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span></label>
@@ -1142,7 +1198,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">备注 <span class="hint">选填，可传图片</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" id="item-add-note" placeholder="例如:十字 6mm" maxlength="100" style="flex:1;min-width:0;" />
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('item-add-note')" title="上传图片">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('item-add-note')" title="上传图片"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="item-add-note-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
         <input type="file" id="item-add-note-file" accept="image/*" multiple style="display:none;" onchange="onFieldImagePicked(this, 'item-add-note')" />
@@ -1161,7 +1217,7 @@
 <!-- 申购录入弹窗（在申购记录页面点 ➕ 触发） -->
 <div id="purchase-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title">🛒 新增申购</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-cart"></use></svg> 新增申购</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">申购日期</label>
@@ -1171,7 +1227,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">物品名称 <span style="color:var(--danger);">*</span> <span class="hint">写名字，或直接拍张照片</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" id="purchase-add-name" placeholder="例如:电线 2.5mm²" style="flex:1;min-width:0;" />
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('purchase-add-name')" title="拍一张照片代替名称">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('purchase-add-name')" title="拍一张照片代替名称"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="purchase-add-name-preview" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;"></div>
         <input type="file" id="purchase-add-name-file" accept="image/*" multiple style="display:none;" onchange="onFieldImagePicked(this, 'purchase-add-name')" />
@@ -1208,7 +1264,7 @@
 <!-- 值班录入弹窗（在工作记录页面点 ➕ 触发） -->
 <div id="duty-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:440px;">
-    <h3 class="modal-title">📝 新增记录</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg> 新增记录</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">故障区域 <span class="hint">选填</span></label>
@@ -1240,7 +1296,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">故障信息 <span style="color:var(--danger);">*</span> <span class="hint">描述故障，可附照片；文字和图片可以同时填</span></label>
         <div style="display:flex;gap:8px;align-items:flex-start;">
           <textarea id="duty-add-note" class="field-control" rows="2" placeholder="例如：包厢空调不出风，压缩机有异响" style="flex:1;min-width:0;resize:vertical;"></textarea>
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-add-note')" title="上传故障照片">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-add-note')" title="上传故障照片"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="duty-add-note-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
         <input type="file" id="duty-add-note-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'duty-add-note')" />
@@ -1256,7 +1312,7 @@
 <!-- 工作记录处理弹窗（点击"处理"按钮触发） -->
 <div id="duty-handle-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title">🔧 处理工作记录</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-wrench"></use></svg> 处理工作记录</h3>
     <div class="modal-body">
       <input type="hidden" id="duty-handle-id" />
       <div style="margin-bottom:12px;">
@@ -1284,7 +1340,7 @@
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">处理方案 <span style="color:var(--danger);">*</span> <span class="hint">填名字 或 传图</span></label>
         <div style="display:flex;gap:8px;align-items:center;">
           <input type="text" id="duty-handle-method" class="" placeholder="例如:更换灯泡 或 传图" style="flex:1;min-width:0;" />
-          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-handle-method')" title="传图片代替文字">📷</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="pickFieldImage('duty-handle-method')" title="传图片代替文字"><svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg></button>
         </div>
         <div id="duty-handle-method-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px;"></div>
         <input type="file" id="duty-handle-method-file" accept="image/*" style="display:none;" onchange="onFieldImagePicked(this,'duty-handle-method')" />
@@ -1304,7 +1360,7 @@
 <!-- 抄表/水电录入弹窗：面板由入口决定（记录页 Tab 已分开，弹窗内不再做二选一） -->
 <div id="reading-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title" id="reading-add-title">📝 新增抄表</h3>
+    <h3 class="modal-title" id="reading-add-title"><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg> 新增抄表</h3>
     <div class="modal-body">
       <!-- 抄表录入面板 -->
       <div class="tab-panel" data-panel="reading">
@@ -1363,7 +1419,7 @@
 <!-- 充值录入弹窗（在充值记录页面点 ➕ 充值 触发） -->
 <div id="charge-add-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:460px;">
-    <h3 class="modal-title">💰 充值录入</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> 充值录入</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
@@ -1398,7 +1454,7 @@
 <!-- 抄表编辑弹窗(样式同新增弹窗,移动端友好) -->
 <div id="reading-edit-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title">📝 编辑抄表记录</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-notebook"></use></svg> 编辑抄表记录</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
@@ -1431,7 +1487,7 @@
 <!-- 水电表底编辑弹窗(样式同新增弹窗,移动端友好) -->
 <div id="water-edit-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:480px;">
-    <h3 class="modal-title">💧 编辑水电表底</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-droplet"></use></svg> 编辑水电表底</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">抄表日期 <span style="color:var(--danger);">*</span></label>
@@ -1464,7 +1520,7 @@
 <!-- 充值记录编辑弹窗(样式同新增弹窗,移动端友好) -->
 <div id="charge-edit-modal-backdrop" class="modal-backdrop">
   <div class="modal" style="max-width:460px;">
-    <h3 class="modal-title">💰 编辑充值记录</h3>
+    <h3 class="modal-title"><svg class="icon" aria-hidden="true"><use href="#i-coins"></use></svg> 编辑充值记录</h3>
     <div class="modal-body">
       <div style="margin-bottom:12px;">
         <label style="display:block;font-size:13px;font-weight:510;margin-bottom:6px;color:var(--text);">充值日期 <span style="color:var(--danger);">*</span></label>
@@ -1488,6 +1544,7 @@
   <script src="js/core/meterConfig.js"></script>
   <script src="js/core/meterForm.js"></script>
   <script src="js/core/storeContext.js"></script>
+  <script src="js/shared/icons.js"></script>
   <script src="js/core/api.js"></script>
   <script src="js/core/state.js"></script>
   <script src="js/core/navigation.js"></script>

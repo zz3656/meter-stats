@@ -640,6 +640,9 @@ const sandbox = {
     querySelector: () => null, querySelectorAll: () => [],
     createElement: () => textDiv(),
   },
+  // stores.js 现在用 icon() 渲染线性图标(index.html 的 sprite);沙箱只加载这一个文件,
+  // 所以给个桩:返回带名字的占位标记,断言里照样能看出"这里本该有个图标"。
+  icon: (name) => '<svg class="icon" data-icon="' + name + '"></svg>',
   console, setTimeout, clearTimeout, Math, JSON, Date, Number, String, Array, Object, Map, Set,
   showAlert: () => {},
   confirm: (msg) => { sandbox.__confirmMsg = String(msg); return true; },

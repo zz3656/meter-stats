@@ -55,6 +55,27 @@
 | 空态 | 必须给"下一步做什么",不能只写"暂无数据" |
 | 焦点 | 全站 `:focus-visible` 主题色 2px 描边(表单控件靠自身边框+柔光环,避免每次点击都出环) |
 
+
+## Icons
+
+**统一线性图标,不用 emoji。** 2026-11-27 起常驻界面(侧栏/标题/按钮/状态栏/徽标)的 emoji 全部换成
+内联 SVG sprite:
+
+- sprite 定义在 `index.html` 的 `<svg id="icon-sprite">`,43 个 `<symbol id="i-NAME">`
+- 静态 HTML:`<svg class="icon"><use href="#i-clipboard"></use></svg>`
+- JS 拼字符串:`icon('clipboard')`(`js/shared/icons.js` 提供;未知名字返回空串并 warn,不抛错)
+- 规格统一:**24×24 viewBox、stroke 1.6、`currentColor`、圆头圆角** —— 颜色自动跟随主题与状态
+- 尺寸:行内 `1.05em`;标签/按钮 `1.15em`;`h1/h2` 内 `1em`
+
+**为什么不用 emoji**:①同一条侧栏在 Win/mac/Android 渲染差异很大;②emoji 自带颜色,
+不受 `currentColor` 与主题控制 —— 这是"颜色太杂"的主要来源;③emoji 无法跟随 hover/active 变色。
+
+**例外(有意保留 emoji)**:表计图标(🎤🧯🛋️❄️)是 `store.json` 里的**数据**、用户可改,
+且会出现在 **canvas 图表图例**里(canvas 画不了 SVG)。数据里的 emoji 保持不变。
+
+护栏:`tests/test_icon_system.py` 校验「引用的名字都存在 / 没有定义了没人用的图标 /
+icons.js 在消费者之前加载 / 常驻界面与 JS 标题里没有 emoji」。
+
 ## Motion
 
 - 150–180ms,`ease-out`;**只用于状态反馈**(hover / 展开 / 载入),不做入场编排。

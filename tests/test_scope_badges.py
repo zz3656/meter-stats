@@ -8,7 +8,9 @@
 界面上不标出来,用户改错地方也看不出来 —— 最典型的是总部账号在 A 店改完电价,
 以为"全局改了",切到 B 店发现还是旧值,报表金额就这么一直错着。
 
-所以每个设置块标题旁必须有一个范围徽标:`🌐 全局` / `🏪 本店`。
+所以每个设置块标题旁必须有一个范围徽标:「全局」/「本店」。
+(2026-11-27 起徽标图标从 emoji 换成线性 SVG —— 断言同时接受两种写法,
+只要"图标 + 文案"这个组合在。)
 
 另外图片目录有个反直觉的点:它是个**全局覆盖项**,一旦填了可写路径,
 所有门店的值班照片会混进同一个目录 —— 与「照片按店隔离」正好相反。
@@ -28,6 +30,23 @@ INDEX_HTML = REPO / "MeterStats" / "index.html"
 STORES_JS = REPO / "MeterStats" / "js" / "modules" / "stores.js"
 STYLE_CSS = REPO / "MeterStats" / "style.css"
 
+# 徽标 = 一个带 scope-badge 的 span,内容是「图标 + 文案」。
+# 图标 2026-11-27 起从 emoji 换成线性 SVG(<svg class="icon"><use href="#i-store"/></svg>),
+# 所以这里只断言"span 里同时有图标引用和文案",不锁死图标的具体形态。
+BADGE_SPAN = re.compile(r'class="badge-status [a-z]+ scope-badge"[^>]*>(.*?)</span>', re.S)
+ICON_REF = re.compile(r'<use href="#i-[a-z-]+"></use>|icon\([\'"]' + r"[a-z-]+" + r'[\'"]\)')
+
+
+def badges_with(html: str, text: str) -> list:
+    """返回内容里同时含图标引用与指定文案的 scope-badge 数量(不含图标也算不通过)。"""
+    return [body for body in BADGE_SPAN.findall(html)
+            if text in body and ICON_REF.search(body)]
+
+
+def has_badge(src: str, text: str) -> bool:
+    """宽松版:用于 JS 拼出来的徽标(icon('globe') + ' 全局')。"""
+    return bool(re.search(r'icon\([\'"](?:globe|store)[\'"]\)', src) and text in src)
+
 
 class TestScopeBadges(unittest.TestCase):
     def setUp(self) -> None:
@@ -45,29 +64,32 @@ class TestScopeBadges(unittest.TestCase):
     def test_meter_page_marks_all_three_blocks_as_store_scoped(self) -> None:
         """电表设置页三块(表集合 / 计费单价 / 水电倍率)全部按店。"""
         seg = self._section("section-settings-meter", "section-settings-data")
-        self.assertEqual(seg.count("🏪 本店"), 3,
-                         "电表设置页应有 3 个「本店」徽标,实际 %d 个" % seg.count("🏪 本店"))
-        for title in ("📝 电表设置", "💰 计费单价", "🔢 水电表倍率"):
-            block = seg[seg.index(title):]
-            block = block[:block.index("</div>") + 6]
-            self.assertIn("🏪 本店", block, "%s 这块没标范围" % title)
+        n = len(badges_with(seg, "本店"))
+        self.assertEqual(n, 3, "电表设置页应有 3 个「本店」徽标(图标+文案),实际 %d 个" % n)
+        # 每个徽标都必须挂在某个块标题容器里,而不是孤立飘在页面上
+        for m in BADGE_SPAN.finditer(seg):
+            if "本店" not in m.group(1):
+                continue
+            head = seg[max(0, m.start() - 240):m.start()]
+            self.assertRegex(head, r'class="[a-z-]*(?:card|block)-title"',
+                             "有一个「本店」徽标没挂在块标题上,会被看漏")
 
     def test_data_page_marks_everything_global(self) -> None:
         seg = self._section("section-settings-data", "section-settings-roles")
-        self.assertEqual(seg.count("🌐 全局"), 5,
-                         "数据管理页应标 5 处全局,实际 %d 处" % seg.count("🌐 全局"))
+        n = len(badges_with(seg, "全局"))
+        self.assertEqual(n, 5, "数据管理页应标 5 处全局(图标+文案),实际 %d 处" % n)
         for title in ("备份与恢复", "自动备份", "图片目录", "从 NAS 同步", "备份列表"):
             idx = seg.index(title)
             block = seg[idx:idx + 400]
-            self.assertIn("🌐 全局", block, "%s 这块没标全局" % title)
+            self.assertTrue(badges_with(block, "全局"), "%s 这块没标全局" % title)
 
     def test_users_page_marks_global(self) -> None:
         seg = self._section("section-settings-users", "section-settings-meter")
-        self.assertIn("🌐 全局", seg, "用户管理是全局设置,没标注")
+        self.assertTrue(badges_with(seg, "全局"), "用户管理是全局设置,没标注")
 
     def test_stores_page_marks_global(self) -> None:
         src = STORES_JS.read_text(encoding="utf-8")
-        self.assertIn("🌐 全局", src, "门店管理页是全局设置,没标注")
+        self.assertTrue(has_badge(src, "全局"), "门店管理页是全局设置,没标注")
 
     def test_badges_explain_themselves(self) -> None:
         """徽标要有 tooltip —— 光有图标,第一次看的人不知道该不该改这里。"""

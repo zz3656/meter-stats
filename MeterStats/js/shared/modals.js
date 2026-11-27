@@ -40,7 +40,7 @@ function showModal(opts) {
         imgBox.style.cssText = 'display:none;margin-top:10px;';
         imgBox.innerHTML =
           '<div id="modal-checkbox-image-preview" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;"></div>' +
-          '<button type="button" class="btn btn-secondary btn-sm" id="modal-checkbox-image-btn">📷 传图片</button>' +
+          '<button type="button" class="btn btn-secondary btn-sm" id="modal-checkbox-image-btn">' + icon('camera') + ' 传图片</button>' +
           '<input type="file" id="modal-checkbox-image-file" accept="image/*" style="display:none;" />';
         body.appendChild(imgBox);
         imgPreview = imgBox.querySelector('#modal-checkbox-image-preview');

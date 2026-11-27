@@ -85,7 +85,7 @@ function renderStoresPage() {
 
     host.innerHTML =
         '<div class="card">' +
-            '<div class="card-header"><h2>🏪 门店管理 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">🌐 全局</span></h2>' +
+            '<div class="card-header"><h2>' + icon('store') + ' 门店管理 <span class="badge-status info scope-badge" title="全站生效:所有门店共用这一个设置">' + icon('globe') + ' 全局</span></h2>' +
             (canManage
                 ? '<button type="button" class="btn btn-primary btn-sm" data-store-action="new">+ 新增门店</button>'
                 : '') +

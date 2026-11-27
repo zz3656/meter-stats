@@ -2,6 +2,46 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.12] — 2026-11-27
+
+### 改进(UI:emoji → 统一线性图标)
+
+接上一版的「安静化」。用户反馈的第二类噪音是**颜色太杂**,清点后确认:常驻界面上有
+**405 处 emoji**(其中 39 种出现在侧栏/标题/按钮/状态栏里)。emoji 有三个硬伤:
+不同系统渲染差异大、自带颜色不受主题控制、无法跟随 hover/active 变色。
+
+- 新增内联 SVG sprite(`index.html` 的 `#icon-sprite`,**43 个 symbol**,24×24 / stroke 1.6 /
+  `currentColor`),零构建、零网络请求;配套 `js/shared/icons.js` 提供 `icon(name)` 与 `fillIcons()`
+- `index.html` 替换 **120 处** chrome emoji;JS 渲染的标题/按钮再替换 10 处
+  (`theme.js` 主题按钮、`accessibility.js` 大字按钮、`reports.js` 年报小标题 3 处、
+  `stores.js` 门店页标题与全局徽标、`modals.js` 传图片、`admin.js` 下载/删除/权限勾选)
+- 常驻界面 emoji 残留 **0**(文案类 `⚠️` 提示前缀保留 —— 那是文字不是图标)
+- 顺手改进 3 个在 14–16px 下辨识度不足的图标几何(droplet / coins / scroll)
+
+### 改进(配色 token 化)
+
+清出**「第三套紫」**:12 处 `rgba(113,112,255,α)`(#7170ff)—— 既不是 `--primary` 也不是
+`--primary-bg`,而且在暗色主题下不会跟着变(写死了亮色紫)。同一个界面出现三种紫,
+正是"颜色太杂"的实物证据。
+
+- 12 处收敛到 `--tint-*(2/3/4/5)` / `--tint-border` / `--focus-ring`,**两主题自动跟随**
+- 另 8 处 `rgba(99,102,241,α)`(等于 `#6366f1`)同步收敛;`var(--primary, #6366f1)` 的冗余兜底去掉
+- 新增两个语义 token:`--info` / `--info-soft`(.tag-rehearsal、处理记录行此前是裸 `rgba(37,99,235,…)`)
+
+### 新增护栏
+
+- `tests/test_icon_system.py`(5 项):图标名必须存在、不许有死图标、`icons.js` 必须在消费者之前加载、
+  常驻界面与 JS 标题里不许有 emoji
+- `tests/test_contrast.py` 增 2 项:组件规则里**不许再出现品牌色裸值**(`#6366f1`/`#818cf8`/`#7170ff`/
+  `rgba(113,112,255,…)`);两主题必须定义 `--primary`/`--tint-*`/`--info*`
+- `test_scope_badges.py` 断言改为「徽标 span 里同时有图标引用 + 文案」,不再锁死 emoji 形态
+- `test_stores_frontend.py` 的 node 沙箱补 `icon()` 桩(它只加载 stores.js,没有 sprite)
+
+### 文档
+
+- `DESIGN.md` 新增 Icons 章节(规格、用法、为什么不用 emoji、以及"表计 emoji 有意保留"的理由:
+  那是 `store.json` 里的数据,且要出现在 canvas 图表图例里)
+
 ## [0.5.11] — 2026-11-27
 
 ### 改进(UI:降低长时间观看的视觉疲劳)

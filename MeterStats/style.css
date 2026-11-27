@@ -31,6 +31,8 @@
     --danger: #dc2626;          /* 警告红(浅色背景需更深)*/
     --warn: #d97706;
     --success: #059669;
+    --info: #2563eb;            /* 信息蓝(标签/处理记录行)*/
+    --info-soft: rgba(37,99,235,0.12);   /* 信息蓝浅底 */
     --danger-soft: rgba(220,38,38,0.2);      /* 危险色浅底(错误框/徽标) */
     --danger-border: rgba(220,38,38,0.35);   /* 危险色描边 */
 
@@ -279,9 +281,9 @@
 
   /* active 状态:加左侧高亮条 + 更明显的背景 */
   .sidebar-item.active {
-    background: rgba(99, 102, 241, 0.12);
+    background: var(--tint-5);
     color: var(--primary);
-    border-color: rgba(99, 102, 241, 0.22);
+    border-color: var(--tint-border);
     font-weight: 510;
   }
   .sidebar-item.active::before {
@@ -620,7 +622,7 @@
   .field-control:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(113, 112, 255, 0.15);
+    box-shadow: var(--focus-ring);
     background: var(--bg-surface);
   }
   /* select 下拉项在系统菜单里的颜色(部分浏览器支持) */
@@ -822,8 +824,8 @@
     border-bottom: 1px solid var(--border);
   }
   .history-table tr:hover { background: var(--bg-hover); }
-  .history-table tr.edit-row { background: rgba(113, 112, 255, 0.08); }
-  .history-table tr.edit-row:hover { background: rgba(113, 112, 255, 0.12); }
+  .history-table tr.edit-row { background: var(--tint-3); }
+  .history-table tr.edit-row:hover { background: var(--tint-5); }
   .history-table tr.edit-row td { padding: 4px 6px; }
   /* 处理记录行 — 浅蓝色背景区分于报修记录 */
   .history-table tr.handle-row {
@@ -833,7 +835,7 @@
     background: var(--bg-hover);
   }
   [data-theme="dark"] .history-table tr.handle-row {
-    background: rgba(37, 99, 235, 0.12);
+    background: var(--info-soft);
   }
   /* 编辑行 input 固定宽度 — 行内编辑降级时使用(modal 编辑不需要此样式) */
   .history-table tr.edit-row .cell-input { width: 60px; }
@@ -858,7 +860,7 @@
   }
   .history-table .cell-input:focus {
     outline: none;
-    box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.2);
+    box-shadow: 0 0 0 2px var(--tint-border);
   }
   .history-table .edit-btn {
     background: none;
@@ -870,7 +872,7 @@
     font-size: 12px;
     font-family: inherit;
   }
-  .history-table .edit-btn:hover { background: rgba(113, 112, 255, 0.1); }
+  .history-table .edit-btn:hover { background: var(--tint-4); }
   /* 表格删除按钮（物品/借还记录/申购/工作记录通用，此前一直漏定义样式） */
   .del-btn {
     background: transparent;
@@ -963,8 +965,8 @@
     letter-spacing: 0.3px;
   }
   .tag-rehearsal {
-    background: rgba(37, 99, 235, 0.12);
-    color: #2563eb;
+    background: var(--info-soft);
+    color: var(--info);
   }
   .tag-programming {
     background: rgba(168, 85, 245, 0.12);
@@ -1053,7 +1055,7 @@
     margin-bottom: 16px;
   }
   .modal-icon.warn { background: rgba(251, 191, 36, 0.12); color: var(--warn); }
-  .modal-icon.info { background: rgba(113, 112, 255, 0.12); color: var(--primary); }
+  .modal-icon.info { background: var(--tint-5); color: var(--primary); }
   .modal-title {
     font-size: 16px;
     font-weight: 510;
@@ -1132,7 +1134,7 @@
     color: #fff;
   }
   .toast-content.info {
-    background: rgba(99, 102, 241, 0.92);
+    background: var(--primary-bg);
     color: #fff;
   }
 
@@ -1246,7 +1248,7 @@
   font-weight: 700;
   font-size: 15px;
   color: var(--primary);
-  border-top: 1px solid rgba(99,102,241,0.3);
+  border-top: 1px solid var(--tint-border);
   margin-top: 4px;
   padding-top: 6px;
 }
@@ -1292,8 +1294,8 @@
   margin-top: 12px;
   padding: 12px 14px;
   background: var(--bg-surface);
-  border: 1px solid rgba(99,102,241,0.25);
-  border-left: 4px solid var(--primary, #6366f1);
+  border: 1px solid var(--tint-border);
+  border-left: 4px solid var(--primary);
   border-radius: 8px;
   display: flex;
   flex-wrap: wrap;
@@ -1305,9 +1307,9 @@
 .meter-trend-overall-label { color: var(--text-muted); font-size: 12px; }
 .meter-trend-overall-value { font-size: 14px; }
 .tab-btn.active {
-  background: rgba(99, 102, 241, 0.10);
+  background: var(--tint-4);
   color: var(--primary);
-  border-color: rgba(99, 102, 241, 0.25);
+  border-color: var(--tint-border);
 }
 .tab-btn.active::after {
   content: '';
@@ -1344,9 +1346,9 @@
 
 /* 录入卡内切换小 Tab(抄表 / 充值) */
 .entry-tab.active {
-  background: rgba(99, 102, 241, 0.10);
+  background: var(--tint-4);
   color: var(--primary);
-  border-color: rgba(99, 102, 241, 0.25);
+  border-color: var(--tint-border);
 }
 /* 旧 entry-row 规则已废弃 — 现在使用侧栏 + section 显隐 */
 .card-header {
@@ -1472,8 +1474,8 @@
 }
 .b-type-manual {
   color: var(--primary);
-  background: rgba(113, 112, 255, 0.1);
-  border: 1px solid rgba(113, 112, 255, 0.25);
+  background: var(--tint-4);
+  border: 1px solid var(--tint-border);
 }
 .b-type-auto {
   color: var(--text-muted);
@@ -1522,7 +1524,7 @@
 .meter-input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(113, 112, 255, 0.15);
+  box-shadow: 0 0 0 2px var(--tint-border);
 }
 /* 电表设置:单表参数格 */
 .meter-cell {
@@ -1552,8 +1554,8 @@
 .meter-cell-row .meter-input { flex: 1; min-width: 0; }
 .field-control:focus {
   outline: none;
-  border-color: rgba(99, 102, 241, 0.5);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
 }
 /* 双饼图对比并排 */
 @media (max-width: 720px) {
@@ -1609,6 +1611,8 @@
     --danger: #f87171;
     --warn: #fbbf24;
     --success: #34d399;
+    --info: #60a5fa;
+    --info-soft: rgba(96,165,250,0.15);
     --danger-soft: rgba(248,113,113,0.25);
     --danger-border: rgba(248,113,113,0.45);
 
@@ -2203,7 +2207,7 @@ a:hover {
 [data-accessibility="on"] .form-row select:focus,
 [data-accessibility="on"] .field-control:focus {
   border-width: 2.5px !important;
-  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25) !important;
+  box-shadow: 0 0 0 4px var(--tint-border) !important;
 }
 
 /* 大字模式：按钮 */
@@ -2745,7 +2749,7 @@ a:hover {
 }
 .yearly-total-row td {
   font-weight: 700;
-  background: rgba(113, 112, 255, 0.07);
+  background: var(--tint-2);
   border-top: 2px solid var(--border);
 }
 
@@ -2821,7 +2825,7 @@ a:hover {
   white-space: nowrap;
 }
 .role-badge.role-admin {
-  background: rgba(113, 112, 255, .12);
+  background: var(--tint-5);
   color: var(--primary);
 }
 .role-badge.role-supervisor {
@@ -2899,7 +2903,7 @@ a:hover {
 }
 .weekly-total-row td {
   font-weight: 700;
-  background: rgba(113, 112, 255, 0.06);
+  background: var(--tint-2);
   border-top: 2px solid var(--border);
 }
 
@@ -3213,3 +3217,25 @@ a:hover {
 
 /* 4 张表的色条:3px 饱和 → 2px,色相不变(仍能一眼区分哪块表) */
 .stat-card { border-left-width: 2px; }
+
+
+/* ── 线性图标(替代 emoji)────────────────────────────────────────────────
+   尺寸跟随字号(1.05em),颜色跟随 currentColor → 两套主题自动一致。
+   不设固定宽高,避免与既有 .item-icon / 按钮行高打架。 */
+.icon {
+  width: 1.05em;
+  height: 1.05em;
+  display: inline-block;
+  vertical-align: -0.14em;
+  flex-shrink: 0;
+  pointer-events: none;
+}
+.item-icon .icon, .group-icon .icon { width: 1.15em; height: 1.15em; vertical-align: -0.18em; }
+h1 .icon, h2 .icon { width: 1em; height: 1em; }
+.btn .icon, .header-backup-btn .icon { margin-right: 1px; }
+
+/* 标签页 / 按钮 / 徽标里的图标:比正文行内略大,读起来更稳 */
+.record-tab .icon, .btn .icon, .btn-sm .icon,
+.header-backup-btn .icon, .store-switcher-label .icon { width: 1.15em; height: 1.15em; }
+.record-tab .icon { margin-right: 2px; vertical-align: -0.16em; }
+.status-item .icon { width: 1.1em; height: 1.1em; opacity: .85; }

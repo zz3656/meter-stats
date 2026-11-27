@@ -698,9 +698,9 @@ function renderBackupList(backups) {
             <span class="b-meta">${b.created_at}</span>
           </div>
           <div class="b-actions">
-            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">⬇️ 下载</button>` : ''}
+            ${isZip ? `<button class="btn btn-primary btn-xs" onclick="downloadBackup('${b.zip_name}')">' + icon('download') + ' 下载</button>` : ''}
             <button class="btn btn-danger btn-xs" onclick="restoreBackup('${b.zip_name}')">↩️ 恢复</button>
-            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">🗑️ 删除</button>` : ''}
+            ${isZip ? `<button class="btn btn-danger btn-xs" onclick="deleteBackup('${b.zip_name}')">' + icon('trash') + ' 删除</button>` : ''}
           </div>
         </div>`;
       });
@@ -948,10 +948,10 @@ function loadRolesInfo() {
   tbody.innerHTML = permConfig.map(p => `
     <tr>
       <td style="font-weight:510;">${p.name}</td>
-      <td class="ta-center">${p.read ? '✅' : '—'}</td>
-      <td class="ta-center">${p.edit ? '✅' : '—'}</td>
-      <td class="ta-center">${p.delete ? '✅' : '—'}</td>
-      <td class="ta-center">${p.manage ? '✅' : '—'}</td>
+      <td class="ta-center">${p.read ? icon('check') : '—'}</td>
+      <td class="ta-center">${p.edit ? icon('check') : '—'}</td>
+      <td class="ta-center">${p.delete ? icon('check') : '—'}</td>
+      <td class="ta-center">${p.manage ? icon('check') : '—'}</td>
     </tr>
   `).join('');
 }

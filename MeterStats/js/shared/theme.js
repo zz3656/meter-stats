@@ -1,7 +1,7 @@
 // ===== 主题管理 =====
 const THEME_KEY = 'meter_theme_mode';
 const THEMES = ['dark', 'light', 'auto'];
-const ICONS = { dark: '🌙', light: '☀️', auto: '💻' };
+const ICONS = { dark: 'moon', light: 'sun', auto: 'monitor' };   // 图标名,见 index.html 的 #icon-sprite
 
 function getPreferredTheme() {
   return localStorage.getItem(THEME_KEY) || 'auto';
@@ -19,11 +19,11 @@ function applyTheme() {
   updateThemeIcon();
 }
 function updateThemeIcon() {
-  const icon = ICONS[getPreferredTheme()] || ICONS.auto;
+  const name = ICONS[getPreferredTheme()] || ICONS.auto;
   const btn = document.getElementById('theme-btn');
-  if (btn) btn.textContent = icon;
+  if (btn) btn.innerHTML = icon(name);
   const loginBtn = document.getElementById('login-theme-btn');
-  if (loginBtn) loginBtn.textContent = icon;
+  if (loginBtn) loginBtn.innerHTML = icon(name);
 }
 function setTheme(mode) {
   localStorage.setItem(THEME_KEY, mode);
