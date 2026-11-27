@@ -3239,3 +3239,40 @@ h1 .icon, h2 .icon { width: 1em; height: 1em; }
 .header-backup-btn .icon, .store-switcher-label .icon { width: 1.15em; height: 1.15em; }
 .record-tab .icon { margin-right: 2px; vertical-align: -0.16em; }
 .status-item .icon { width: 1.1em; height: 1.1em; opacity: .85; }
+
+/* ── 表计图标选择器(替代原来的 emoji 文本框)────────────────────────────── */
+.meter-cell-icons .meter-icon-picker-wrap { flex: 1; min-width: 0; }
+.meter-icon-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+.meter-icon-choice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+.meter-icon-choice .icon { width: 18px; height: 18px; }
+.meter-icon-choice:hover { background: var(--bg-hover); color: var(--text); }
+.meter-icon-choice.active {
+  background: var(--tint-3);
+  border-color: var(--tint-border);
+  color: var(--primary);
+}
+.meter-icon-choice:active { transform: translateY(0.5px); }
+@media (max-width: 768px) {
+  .meter-icon-choice { min-height: 44px; }
+  .meter-icon-choice .icon { width: 20px; height: 20px; }
+}
+/* 标题/卡片里的表计图标:略大一点,与文字基线对齐 */
+.icon.meter-icon { width: 1.15em; height: 1.15em; vertical-align: -0.16em; }
+.meter-icon-text { font-size: 1.05em; }

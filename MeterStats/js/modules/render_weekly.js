@@ -146,7 +146,7 @@ function loadWeeklyReport() {
         const chg = pp == null
           ? (d.t > 0 ? '▲ 新增' : '—')
           : ((dd > 0 ? '▲ ' : dd < 0 ? '▼ ' : '') + Math.abs(pp).toFixed(1) + '%');
-        return '<tr><td>' + METER_META(d.key).icon + ' ' + METER_META(d.key).label + '</td>' +
+        return '<tr><td>' + meterIconHtml(METER_META(d.key).icon) + ' ' + METER_META(d.key).label + '</td>' +
                '<td>' + fmt(d.p) + '</td><td>' + fmt(d.t) + '</td>' +
                '<td style="color:' + col + ';font-weight:600;">' + chg + '</td></tr>';
       }).join('') +
@@ -204,7 +204,7 @@ function copyWeeklyReport() {
     } else if (t.kwh > 0) {
       change = ' ↑新增';
     }
-    lines.push(`  ${METER_META(k).icon} ${METER_META(k).label}: 上周${t.kwh.toFixed(1)} / 上上周${p.kwh.toFixed(1)}${change}`);
+    lines.push(`  ${METER_META(k).label}: 上周${t.kwh.toFixed(1)} / 上上周${p.kwh.toFixed(1)}${change}`);
   }
   lines.push('');
 

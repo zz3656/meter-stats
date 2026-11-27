@@ -47,10 +47,22 @@ def _indirect_refs() -> Set[str]:
     目前只有 theme.js 的 `const ICONS = { dark: 'moon', light: 'sun', auto: 'monitor' }`
     —— 静态扫描抓不到 `icon(name)` 里的具体名字,所以直接读那张表。
     """
+    names: Set[str] = set()
+    # ①theme.js 的主题按钮映射表
     src = (MS / "js" / "shared" / "theme.js").read_text(encoding="utf-8")
     m = re.search(r"const ICONS = \{([^}]*)\}", src)
     assert m, "theme.js 里的 ICONS 映射表找不到了(改结构要同步这条测试)"
-    return set(re.findall(r"[\"']([a-z0-9-]+)[\"']", m.group(1)))
+    names |= set(re.findall(r"[\"']([a-z0-9-]+)[\"']", m.group(1)))
+
+    # ②icons.js 的表计图标库 + 旧 emoji 兼容映射
+    src = (MS / "js" / "shared" / "icons.js").read_text(encoding="utf-8")
+    lib = re.search(r"var METER_ICON_LIB = \[(.*?)\];", src, re.S)
+    assert lib, "icons.js 里的 METER_ICON_LIB 找不到了"
+    names |= set(re.findall(r"name:\s*'([a-z0-9-]+)'", lib.group(1)))
+    legacy = re.search(r"var LEGACY_EMOJI_ICON = \{(.*?)\};", src, re.S)
+    assert legacy, "icons.js 里的 LEGACY_EMOJI_ICON 找不到了"
+    names |= set(re.findall(r":\s*'([a-z0-9-]+)'", legacy.group(1)))
+    return names
 
 
 class TestIconReferences(unittest.TestCase):

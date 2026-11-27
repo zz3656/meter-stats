@@ -232,7 +232,7 @@
       return '' +
         '<div class="meter-cell" data-meter-key="' + _escAttr(key) + '">' +
           '<div class="meter-cell-title">' +
-            _esc(icon + ' ' + (i + 1) + '#' + (label || key)) +
+            meterIconHtml(icon) + ' ' + _esc((i + 1) + '#' + (label || key)) +
             (canDelete
               ? '<button type="button" class="meter-del-btn" data-remove-key="' + _escAttr(key) + '" ' +
                 'title="删除这块表" style="float:right;color:var(--danger);background:none;' +
@@ -245,11 +245,22 @@
           '<div class="meter-cell-row"><label>倍率</label>' +
             '<input type="number" class="meter-input" data-key="' + _escAttr(key) + '" data-field="multiplier" ' +
             'min="1" step="1" value="' + _escAttr(mult) + '"></div>' +
-          '<div class="meter-cell-row"><label>图标</label>' +
-            '<input type="text" class="meter-input" data-key="' + _escAttr(key) + '" data-field="icon" ' +
-            'value="' + _escAttr(icon) + '" maxlength="4"></div>' +
+          '<div class="meter-cell-row meter-cell-icons"><label>图标</label>' +
+            '<div class="meter-icon-picker-wrap">' + meterIconPickerHtml(icon) + '</div></div>' +
         '</div>';
     }).join('');
+
+    if (form.querySelectorAll) {
+      form.querySelectorAll('.meter-icon-picker').forEach(function (picker) {
+        picker.addEventListener('click', function (ev) {
+          var btn = ev.target && ev.target.closest ? ev.target.closest('.meter-icon-choice') : null;
+          if (!btn || !picker.contains(btn)) return;
+          picker.querySelectorAll('.meter-icon-choice').forEach(function (b) {
+            b.classList.toggle('active', b === btn);
+          });
+        });
+      });
+    }
 
     // 事件委托式绑定 —— 不用内联 onclick,省掉把 key 拼进 JS 字符串(XSS 面)
     if (typeof onDelete === 'function' && form.querySelectorAll) {
@@ -267,10 +278,12 @@
     if (!form || !form.querySelectorAll) return out;
     form.querySelectorAll('.meter-cell').forEach(function (cell) {
       var item = { key: cell.getAttribute('data-meter-key') || '', label: '', icon: '', multiplier: NaN };
+      var picked = cell.querySelector('.meter-icon-picker .meter-icon-choice.active');
+      if (picked) item.icon = picked.getAttribute('data-icon-value') || '';
       cell.querySelectorAll('.meter-input').forEach(function (inp) {
         var f = inp.getAttribute('data-field');
         if (f === 'label') item.label = inp.value;
-        else if (f === 'icon') item.icon = inp.value;
+        // 图标不再走文本输入(改图标选择器,见上),所以这里不再处理 icon 字段
         // 刻意不兜底成 1:非法值原样交给后端拒绝,而不是替用户静默改掉
         else if (f === 'multiplier') item.multiplier = parseInt(inp.value, 10);
       });

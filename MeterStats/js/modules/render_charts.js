@@ -82,7 +82,7 @@ function copyDayUsage() {
   let yTotal = 0, yHas = false, mTotal = 0, mHas = false;
   for (const m of CHARGE_METERS) {
     const p = usage.per[m.key];
-    if (p == null) { lines.push(`${m.icon} ${m.label}: —`); continue; }
+    if (p == null) { lines.push(`${m.label}: —`); continue; }
     hasData = true;
     // 较昨日:前一天(day-1)的均摊日均
     let vsY = '';
@@ -108,7 +108,7 @@ function copyDayUsage() {
       vsM = ` 较本月日均${arrow}${Math.abs(pct).toFixed(1)}%`;
       mTotal += avg.daily; mHas = true;
     }
-    lines.push(`${m.icon} ${m.label}: ${p.kwh.toFixed(1)} 度,¥${p.cost.toFixed(2)}${vsY}${vsM}`);
+    lines.push(`${m.label}: ${p.kwh.toFixed(1)} 度,¥${p.cost.toFixed(2)}${vsY}${vsM}`);
   }
   if (!hasData) { showAlert(`${date} 没有可计算的用电数据`, 'error'); return; }
   // 合计行:总度数/金额 + 较昨日 + 较本月日均

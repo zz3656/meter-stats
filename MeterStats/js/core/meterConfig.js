@@ -7,10 +7,10 @@
 //
 // 默认 4 表与后端 constants.DEFAULT_TABLES / store.json 的 DEFAULT_METERS 同源。
 const DEFAULT_METER_CONFIG = {
-  hall:   { label: '大厅',   icon: '🎤', multiplier: 160, color: '#2563eb' },
-  fire:   { label: '消防',   icon: '🧯', multiplier: 1,   color: '#dc2626' },
-  private_room: { label: '包厢', icon: '🛋️', multiplier: 160, color: '#059669' },
-  ac:     { label: '空调',   icon: '❄️', multiplier: 160, color: '#d97706' },
+  hall:   { label: '大厅',   icon: 'mic', multiplier: 160, color: '#2563eb' },
+  fire:   { label: '消防',   icon: 'fire-ext', multiplier: 1,   color: '#dc2626' },
+  private_room: { label: '包厢', icon: 'sofa', multiplier: 160, color: '#059669' },
+  ac:     { label: '空调',   icon: 'snowflake', multiplier: 160, color: '#d97706' },
 };
 const DEFAULT_METER_KEYS = ['hall', 'fire', 'private_room', 'ac'];
 

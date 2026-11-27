@@ -103,6 +103,16 @@ function makeSandbox() {
   els['meter-settings-form'] = mk('meter-settings-form');
 
   const sandbox = {
+  // 图标助手:被加载的文件会调 meterIconHtml()/icon();这里给桩,
+  // 断言只关心"这里本该有个图标",不关心 SVG 长什么样。
+  icon: (name) => '<svg class="icon" data-icon="' + name + '"></svg>',
+  // 与真实 meterIconHtml 的契约一致:未知值走「转义后的纯文本」,绝不原样插入 HTML
+  meterIconHtml: (value) => '<svg class="icon" data-meter-icon="' +
+    String(value == null ? '' : value).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]) + '"></svg>',
+  meterIconName: (value) => String(value || ''),
+  meterIconPickerHtml: (cur) => '<div class="meter-icon-picker" data-field="icon">' +
+    '<button class="meter-icon-choice" data-icon-value="mic"></button></div>',
     console, JSON, Object, Array, String, Number, Math, isNaN, parseInt,
     document: { getElementById: id => (els[id] || null) },
     window: null,

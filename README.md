@@ -35,7 +35,7 @@
 | 数据隔离 | 每店独立目录 `stores/<store_id>/`(抄表/充值/物品/申购/值班/门店配置/**照片**)。门店 ID `[A-Za-z0-9_-]{1,32}`,区分大小写,路径穿越一律拒绝 |
 | 门店管理 | 管理员新增/编辑门店(名称/编码/地址/启停);默认店 `main` 不可删除 |
 | 门店切换器 | 侧栏顶部切换当前门店;总部账号(`all_stores=true`)可见全部,单店员工自动隐藏 |
-| 每店表计与电价 | 表数量/名称/图标/倍率、电价水价、水电倍率**都按店配置**(`stores/<id>/store.json`),改 A 店不影响 B 店 |
+| 每店表计与电价 | 表数量/名称/**图标(从 18 格图标库选)**/倍率、电价水价、水电倍率**都按店配置**(`stores/<id>/store.json`),改 A 店不影响 B 店 |
 | 门店总览 | 横向对比各店的用电与费用(各店按自己的表集合与电价汇总;合计 = 各行之和) |
 | 用户授权 | 分店员工绑定门店;越权 403、门店不存在 404、**查不到用户记录也 403**(fail-closed——账号被删但会话未过期时绝不回退成"权限还在") |
 | 备份范围 | 备份/恢复/NAS 同步覆盖 `stores/` 子树并按调用方门店范围过滤:分店主管**不能**导出别家门店的数据 |
@@ -225,7 +225,7 @@ docker compose pull && docker compose up -d
 │   ├── tests.yml                # push/PR → 跑全量单元测试(Python 3.9 + 3.11)
 │   ├── sync-readme-to-dockerhub.yml  # push README → 同步到 DockerHub 描述
 │   └── build-dmg.yml            # push tag v* → 自动打包 macOS DMG
-├── tests/                       # 单元测试(820 项)
+├── tests/                       # 单元测试(834 项)
 ├── docs/                        # 架构与设计文档
 │   ├── ARCHITECTURE.md          # 模块/算法/安全模型/接口权限速查
 │   ├── ui-optimization-plan.md  # UI 待办清单
@@ -275,7 +275,7 @@ docker compose pull && docker compose up -d
 📐 **架构文档**：[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — 模块清单、关键算法、安全模型、扩展指南、常见坑。
 
 ```bash
-# 单元测试(820 项,约 30 秒;CI 在 push/PR 时跑 Python 3.9 与 3.11 双版本)
+# 单元测试(834 项,约 30 秒;CI 在 push/PR 时跑 Python 3.9 与 3.11 双版本)
 python3 -m unittest discover -s tests -v
 
 # Docker 开发(本地重建镜像)

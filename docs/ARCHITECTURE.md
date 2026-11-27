@@ -609,4 +609,4 @@ MeterStats 以桌面端为主,移动端需支持「在会议室/仓库现场快�
 - `AGENTS.md` — 给 AI 协作代理的项目约定与坑位清单
 - `docs/superpowers/specs/2026-11-25-multi-store-design.md` — 多门店改造的设计规格
 - `docs/ui-optimization-plan.md` — UI 层待办(未完成项)
-- `tests/` — **820 项**单元测试,覆盖算法/权限/备份/前端静态护栏
+- `tests/` — **834 项**单元测试,覆盖算法/权限/备份/前端静态护栏

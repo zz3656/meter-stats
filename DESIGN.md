@@ -70,8 +70,10 @@
 **为什么不用 emoji**:①同一条侧栏在 Win/mac/Android 渲染差异很大;②emoji 自带颜色,
 不受 `currentColor` 与主题控制 —— 这是"颜色太杂"的主要来源;③emoji 无法跟随 hover/active 变色。
 
-**例外(有意保留 emoji)**:表计图标(🎤🧯🛋️❄️)是 `store.json` 里的**数据**、用户可改,
-且会出现在 **canvas 图表图例**里(canvas 画不了 SVG)。数据里的 emoji 保持不变。
+**表计图标(2026-11-27 起也可选库)**:设置页从 18 格图标库里点选(`METER_ICON_LIB`),
+值是图标名;旧数据里的 emoji 通过 `LEGACY_EMOJI_ICON` 照旧渲染(不迁移数据)。
+`meterIconHtml()` 解析不出图标名时退回"转义后的原文",所以用户手敲的字符不会被吞。
+**canvas 图例不画图标**(canvas 画不了 SVG),改用标签 + 线条颜色区分。
 
 护栏:`tests/test_icon_system.py` 校验「引用的名字都存在 / 没有定义了没人用的图标 /
 icons.js 在消费者之前加载 / 常驻界面与 JS 标题里没有 emoji」。

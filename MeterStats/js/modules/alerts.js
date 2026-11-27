@@ -58,7 +58,7 @@ function renderChargeAlert(readings, charges) {
         : '';
       return `
         <div class="stat-card ${cls} alert-stat-${level}">
-          <div class="label">${m.icon} ${m.label} ${multiplierHint}</div>
+          <div class="label">${meterIconHtml(m.icon)} ${m.label} ${multiplierHint}</div>
           <div class="value">${remaining == null ? '—' : remaining.toFixed(0)}<small>度</small></div>
           ${creditHint}
           <div class="sub" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
