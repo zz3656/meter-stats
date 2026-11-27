@@ -39,7 +39,10 @@ function resetReportView() {
     var reportEmpty = document.getElementById('report-empty');
     if (reportEmpty) {
         reportEmpty.style.display = 'block';
-        reportEmpty.textContent = '该门店该月暂无抄表数据';
+        reportEmpty.innerHTML = emptyStateHtml({
+            icon: 'chart-bar', title: '该门店该月还没有抄表数据',
+            hint: '先到「用电记录」录入读数,报表会自动汇总',
+        });
     }
     var grid = document.getElementById('monthly-stat-grid');
     if (grid) { grid.innerHTML = ''; grid.style.display = 'none'; }

@@ -209,6 +209,14 @@ const charts = [];
 function FakeChart(ctx, cfg) { charts.push(cfg); this.destroy = () => {}; }
 
 const sandbox = {
+  // 空态/骨架助手:被加载的模块会调它们;这里给最小实现(断言不关心外观)
+  emptyStateHtml: (o) => '<div class="empty-state">' + String((o && o.title) || '') + '</div>',
+  emptyRowHtml: (n, o) => '<tr class="empty-row"><td colspan="' + n + '">' +
+    String((o && o.title) || '') + '</td></tr>',
+  skeletonRowsHtml: (r, c) => '<tr class="skeleton-row"><td>' + r + 'x' + c + '</td></tr>',
+  skeletonCardsHtml: (n) => '<div class="skeleton-card"></div>',
+  showBootSkeletons: () => {},
+  clearSkeletons: () => {},
   document: {
     getElementById: (id) => D.reg[id] || null,
     querySelector: () => null, querySelectorAll: () => [],
@@ -296,6 +304,14 @@ const D = makeRegistry();
 
 const state = { readings: [], charges: [], water: [] };
 const sandbox = {
+  // 空态/骨架助手:被加载的模块会调它们;这里给最小实现(断言不关心外观)
+  emptyStateHtml: (o) => '<div class="empty-state">' + String((o && o.title) || '') + '</div>',
+  emptyRowHtml: (n, o) => '<tr class="empty-row"><td colspan="' + n + '">' +
+    String((o && o.title) || '') + '</td></tr>',
+  skeletonRowsHtml: (r, c) => '<tr class="skeleton-row"><td>' + r + 'x' + c + '</td></tr>',
+  skeletonCardsHtml: (n) => '<div class="skeleton-card"></div>',
+  showBootSkeletons: () => {},
+  clearSkeletons: () => {},
   document: {
     getElementById: (id) => D.reg[id] || null,
     querySelector: (sel) => {

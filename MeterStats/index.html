@@ -355,7 +355,7 @@
               <tbody></tbody>
             </table>
           </div>
-          <div id="history-empty" class="empty">还没有录入抄表数据</div>
+          <div id="history-empty" class="empty"></div>
         </div>
 
         <!-- 充值 -->
@@ -368,7 +368,7 @@
               <tbody></tbody>
             </table>
           </div>
-          <div id="charge-list-empty" class="empty">还没有充值记录</div>
+          <div id="charge-list-empty" class="empty"></div>
           <div class="charge-summary" id="charge-summary" style="display:none;">
             <div class="summary-item">
               <div class="summary-label">本月充值次数</div>
@@ -402,7 +402,7 @@
               <tbody></tbody>
             </table>
           </div>
-          <div id="water-history-empty" class="empty">还没有录入水电表底数据</div>
+          <div id="water-history-empty" class="empty"></div>
         </div>
       </div>
 
@@ -534,7 +534,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div id="lend-history-empty" class="empty">还没有借出 / 归还记录</div>
+        <div id="lend-history-empty" class="empty"></div>
       </div>
     </section>
 
@@ -662,7 +662,7 @@
             <tbody></tbody>
           </table>
         </div>
-        <div id="duty-list-empty" class="empty">还没有工作记录</div>
+        <div id="duty-list-empty" class="empty"></div>
       </div>
     </section>
 
@@ -732,7 +732,7 @@
              绝不能用 innerHTML 覆盖容器把 canvas 删掉（删掉后就再也回不来了）。 -->
         <div class="chart-wrap" id="trend-chart-wrap">
           <canvas id="chart-trend"></canvas>
-          <div id="trend-empty" class="empty" style="display:none;">录入抄表数据后查看每日用电</div>
+          <div id="trend-empty" class="empty" style="display:none;"></div>
         </div>
 
         <!-- 当日明细：左文字右饼图 -->
@@ -1559,6 +1559,7 @@
   <script src="js/core/meterForm.js"></script>
   <script src="js/core/storeContext.js"></script>
   <script src="js/shared/icons.js"></script>
+  <script src="js/shared/states.js"></script>
   <script src="js/core/api.js"></script>
   <script src="js/core/state.js"></script>
   <script src="js/core/navigation.js"></script>

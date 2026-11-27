@@ -70,7 +70,10 @@ function renderPurchaseTable(purchases) {
     var tbody = document.querySelector('#purchase-table tbody');
     if (!tbody) return;
     if (!purchases || purchases.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">还没有申购记录,点击左侧「申购」添加</td></tr>';
+        tbody.innerHTML = emptyRowHtml(8, {
+            icon: 'cart', title: '还没有申购记录',
+            hint: '申购 → 确认购买 → 自动入库,三步走完流程',
+        });
         return;
     }
 

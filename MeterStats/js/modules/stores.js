@@ -80,7 +80,7 @@ function renderStoresPage() {
 
     if (!rows) {
         rows = '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:20px;">' +
-            escapeHtml(STORE_LOAD_ERROR || '暂无门店') + '</td></tr>';
+            escapeHtml(STORE_LOAD_ERROR || '门店列表加载失败,请稍后重试') + '</td></tr>';
     }
 
     host.innerHTML =

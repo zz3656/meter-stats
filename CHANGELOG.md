@@ -2,6 +2,40 @@
 
 本项目的所有重要变更都记录在这里。格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.5.14] — 2026-11-27
+
+### 改进(UI:空态与加载态)
+
+此前**空态就是一行灰字**("还没有物品"/"暂无抄表记录"),**加载时什么提示都没有**:
+用户盯着空白表格,既分不清"是空的"还是"没加载出来",也不知道下一步该做什么。
+这是体验短板里最明显的一块。
+
+- 新增 `js/shared/states.js`:
+  - `emptyStateHtml({icon,title,hint,action})` —— 图标 + 说明 + **下一步做什么**
+  - `emptyRowHtml(colspan, …)` —— 表格内空态,自动包 `<tr><td colspan>`
+  - `skeletonRowsHtml(rows, cols)` —— 骨架行占位(不是居中转圈),列宽按首列窄/数值列宽
+  - `showBootSkeletons()` / `clearSkeletons()` —— 首屏铺骨架 + 渲染后兜底清理
+- 首屏:7 张主表(抄表/充值/水电/物品/借还/申购/值班)在**发起请求前**铺骨架,
+  数据到达原地替换 → 布局不跳动
+- 空态组件化 10 处:抄表 / 充值 / 水电 / 物品 / 申购 / 余量预警 / 月报 / 每日趋势 /
+  门店列表 / 借还记录;文案一律带上"下一步"指引
+- 骨架呼吸动画在 `prefers-reduced-motion: reduce` 下关闭(只留静态灰条)
+
+### 新增测试
+
+`tests/test_states.py`(**10 项**):
+- 三档助手契约:空态结构(图标/标题/提示/可选按钮)、**自由文本必须转义**、
+  `emptyRowHtml` 的 colspan、骨架行列数(传 0 也要给出可用最小骨架)
+- 渲染函数里**不许再出现裸的空态句子**(`textContent = '还没有…'` 直接红)
+- 骨架必须铺在**第一次 await 之前**,且必须有 `clearSkeletons()` 兜底
+- `states.js` 必须在消费者之前加载;CSS 里空态/骨架样式齐全,
+  且骨架动画在 reduced-motion 下关闭
+
+### 工程
+
+`test_report_store_switch.py` / `test_frontend_refresh.py` 的 node 沙箱补了空态/骨架桩
+(它们加载 readings.js,而 readings.js 现在会调这些助手)
+
 ## [0.5.13] — 2026-11-27
 
 ### 改进(UI:表计图标改为从图标库选择)

@@ -12,7 +12,10 @@ function renderChargeAlert(readings, charges) {
   const renderInto = (container) => {
     if (!container) return;
     if (!readings || readings.length === 0) {
-      container.innerHTML = '<div class="empty" style="padding:20px;">录入抄表数据后开始监控 4 块表的余额。</div>';
+      container.innerHTML = '<div class="empty-grid">' + emptyStateHtml({
+        icon: 'zap', title: '还没有可监控的读数',
+        hint: '录入抄表后,这里会按日均用电推算剩余天数与建议充值金额',
+      }) + '</div>';
       return;
     }
 
@@ -104,7 +107,10 @@ function renderStats(readings, charges) {
   // 当月抄表数据
   const monthData = readings.filter(r => r.date.startsWith(monthKey));
   if (monthData.length === 0) {
-    grid.innerHTML = `<div class="empty" style="grid-column: 1/-1;">${monthKey} 当月暂无抄表数据</div>`;
+    grid.innerHTML = `<div class="empty-grid">${emptyStateHtml({
+        icon: 'zap', title: `${monthKey} 当月还没有抄表数据`,
+        hint: '录入读数后这里会按日均推算剩余天数与建议充值金额',
+    })}</div>`;
     return;
   }
   // 找当月第一/最后一条

@@ -72,7 +72,10 @@ function renderItemTable(items) {
     var tbody = document.querySelector('#item-table tbody');
     if (!tbody) return;
     if (!items || items.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="empty">还没有物品,点击上方表单添加</td></tr>';
+        tbody.innerHTML = emptyRowHtml(7, {
+            icon: 'package', title: '还没有物品记录',
+            hint: '在上方表单登记工具 / 耗材,登记后可以借出与归还',
+        });
         return;
     }
     if (typeof initHoverPreview === 'function') initHoverPreview();

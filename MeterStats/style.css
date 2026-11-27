@@ -3276,3 +3276,69 @@ h1 .icon, h2 .icon { width: 1em; height: 1em; }
 /* 标题/卡片里的表计图标:略大一点,与文字基线对齐 */
 .icon.meter-icon { width: 1.15em; height: 1.15em; vertical-align: -0.16em; }
 .meter-icon-text { font-size: 1.05em; }
+
+/* ── 空态(2026-11-27)─────────────────────────────────────────────────────
+   此前空态是一行灰字(「还没有物品」):用户既不知道"是空的"还是"没加载出来",
+   也不知道下一步该做什么。现在每个空态 = 图标 + 一句说明 + 一句"下一步"。 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--text-muted);
+}
+.empty-state .empty-icon {
+  width: 30px; height: 30px;
+  color: var(--text-faint);
+  margin-bottom: 2px;
+}
+.empty-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.empty-hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-width: 34ch;
+  color: var(--text-muted);
+}
+.empty-action { margin-top: 8px; }
+/* 表格里的空态:去掉单元格的右对齐与边框,让它看起来不是一个"格子" */
+.history-table tr.empty-row td {
+  text-align: center;
+  border-bottom: none;
+  padding: 0;
+}
+.empty-grid { grid-column: 1 / -1; }
+/* 旧的 .empty 仍然保留(个别地方是纯提示行),统一观感 */
+.empty { color: var(--text-muted); font-size: 12.5px; }
+
+/* ── 加载态骨架(替代白屏/转圈)───────────────────────────────────────────
+   保持在布局里占位 → 数据到达时不会跳动;首列窄、数值列宽,接近真实表格。 */
+.skeleton {
+  display: inline-block;
+  height: 11px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--bg-surface) 0%, var(--bg-subtle) 50%, var(--bg-surface) 100%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.skeleton-lg { height: 18px; }
+.skeleton-row td { border-bottom: 1px solid var(--border-subtle); }
+.skeleton-card {
+  display: flex; flex-direction: column; gap: 10px;
+  border-left-color: var(--border) !important;
+}
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+/* 系统开了「减少动态效果」→ 骨架不动(不闪),只留静态灰条 */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; background: var(--bg-surface); }
+}

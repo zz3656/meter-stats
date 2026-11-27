@@ -173,7 +173,10 @@ function renderTrendChart(readings, charges) {
     emptyEl = document.createElement('div');
     emptyEl.id = 'trend-empty';
     emptyEl.className = 'empty';
-    emptyEl.textContent = '录入抄表数据后查看每日用电';
+    emptyEl.innerHTML = emptyStateHtml({
+      icon: 'trend-up', title: '还没有每日用电趋势',
+      hint: '录入至少两天的抄表读数,这里就会出现曲线',
+    });
     wrap.appendChild(emptyEl);
   }
   const ctx = canvas.getContext('2d');

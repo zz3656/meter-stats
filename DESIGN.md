@@ -78,6 +78,22 @@
 护栏:`tests/test_icon_system.py` 校验「引用的名字都存在 / 没有定义了没人用的图标 /
 icons.js 在消费者之前加载 / 常驻界面与 JS 标题里没有 emoji」。
 
+
+## Empty & Loading States
+
+**空态要教界面,加载态要有占位**(product register 的硬要求)。
+
+- 空态 = `emptyStateHtml({icon, title, hint, action})` → 图标 + 一句说明 +
+  **一句「下一步做什么」**(例:"点右上角「+ 抄表」录入今天的读数")。
+  表格内用 `emptyRowHtml(colspan, …)` 自动包 `<tr><td colspan>`。
+- 加载态 = 骨架行 `skeletonRowsHtml(rows, cols)`,**不用居中转圈**:
+  骨架保持表格行高与列宽,数据到达时原地替换,布局不跳动。
+  首屏由 `renderAll()` 在**发起请求前**调用 `showBootSkeletons()`,
+  渲染后 `clearSkeletons()` 兜底(避免没被覆盖的骨架留在页面上)。
+- 骨架呼吸动画在 `prefers-reduced-motion: reduce` 下关闭(只留静态灰条)。
+
+**禁止**:裸文本当空态(`textContent = '还没有物品'`)。`tests/test_states.py` 会报错。
+
 ## Motion
 
 - 150–180ms,`ease-out`;**只用于状态反馈**(hover / 展开 / 载入),不做入场编排。

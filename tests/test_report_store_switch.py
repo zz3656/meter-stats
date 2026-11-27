@@ -76,6 +76,14 @@ function mk(id) { return { id: id, innerHTML: '', textContent: '', style: {} }; 
 let resetCalls = 0;
 
 const sandbox = {
+  // 空态/骨架助手:被加载的模块会调它们;这里给最小实现(断言不关心外观)
+  emptyStateHtml: (o) => '<div class="empty-state">' + String((o && o.title) || '') + '</div>',
+  emptyRowHtml: (n, o) => '<tr class="empty-row"><td colspan="' + n + '">' +
+    String((o && o.title) || '') + '</td></tr>',
+  skeletonRowsHtml: (r, c) => '<tr class="skeleton-row"><td>' + r + 'x' + c + '</td></tr>',
+  skeletonCardsHtml: (n) => '<div class="skeleton-card"></div>',
+  showBootSkeletons: () => {},
+  clearSkeletons: () => {},
   console, JSON, Object, Array, String, Number, Math, Date, isNaN, parseInt, parseFloat,
   document: { getElementById: id => (els[id] || null), querySelectorAll: () => [], querySelector: () => null },
   window: null,

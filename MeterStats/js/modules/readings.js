@@ -84,7 +84,10 @@ function renderReadingTable(readings) {
     if (!filtered || filtered.length === 0) {
         readTbody.innerHTML = '';
         readEmpty.style.display = 'block';
-        readEmpty.textContent = (month ? month : '全部') + ' 暂无抄表记录';
+        readEmpty.innerHTML = emptyStateHtml({
+            icon: 'notebook', title: (month ? month : '全部') + ' 还没有抄表记录',
+            hint: '点右上角「+ 抄表」录入今天的读数',
+        });
         return;
     }
     readEmpty.style.display = 'none';
@@ -155,7 +158,10 @@ function renderWaterTable() {
     if (!waterFiltered || waterFiltered.length === 0) {
         waterTbody.innerHTML = '';
         waterEmpty.style.display = 'block';
-        waterEmpty.textContent = (waterMonth ? waterMonth : '全部') + ' 暂无水电表底记录';
+        waterEmpty.innerHTML = emptyStateHtml({
+            icon: 'droplet', title: (waterMonth ? waterMonth : '全部') + ' 还没有水电表底记录',
+            hint: '在「水电」标签页录入总表 / 分表 / 水表读数',
+        });
         return;
     }
     waterEmpty.style.display = 'none';
@@ -402,7 +408,10 @@ function renderChargeTable(charges) {
     if (!charges || charges.length === 0 || filtered.length === 0) {
         tbody.innerHTML = '';
         empty.style.display = 'block';
-        empty.textContent = month ? (month + ' 暂无充值记录') : '还没有充值记录';
+        empty.innerHTML = emptyStateHtml({
+            icon: 'coins', title: month ? (month + ' 还没有充值记录') : '还没有充值记录',
+            hint: '充值是报表口径的依据,到账后记得补录',
+        });
         summary.style.display = 'none';
         return;
     }
@@ -632,6 +641,9 @@ function refreshAndRenderTables() {
  * 替代旧版 app.js 中的 renderAll()，供 init.js、nas_sync.js、toast.js、admin.js 调用。
  */
 async function renderAll() {
+    // 0. 先把主要表格铺上骨架 —— 首屏不必盯着空白表格等网络
+    if (typeof showBootSkeletons === 'function') showBootSkeletons();
+
     // 1. 从后端获取全部数据（snapshot 接口一次拉所有）
     try {
         var data = await Api.reports.snapshot({});
@@ -676,6 +688,9 @@ async function renderAll() {
     if (typeof populateWeeklyWeekSelector === 'function') {
         populateWeeklyWeekSelector();
     }
+
+    // 3d. 兜底:渲染结束后清掉没被任何渲染函数覆盖的骨架
+    if (typeof clearSkeletons === 'function') clearSkeletons();
 
     // 4. 触发饼图（如果可见）
     if (typeof triggerVisiblePie === 'function') triggerVisiblePie();
